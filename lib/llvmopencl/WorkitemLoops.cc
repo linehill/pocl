@@ -130,7 +130,7 @@ private:
 
   bool processFunction(llvm::Function &F);
 
-  void fixMultiRegionVariables(ParallelRegion *Region);
+  void fixMultiRegionVariables();
   void addContextSaveRestore(llvm::Instruction *instruction);
   void releaseParallelRegions();
 
@@ -495,15 +495,7 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
     RegionEntryCounts[Region->entryBB()]++;
   }
 
-  for (ParallelRegion::ParallelRegionVector::iterator
-           PRI = OriginalParallelRegions.begin(),
-           PRE = OriginalParallelRegions.end();
-       PRI != PRE; ++PRI) {
-    ParallelRegion *Region = (*PRI);
-    LLVM_DEBUG(dbgs() << "#### Adding context save/restore for PR:\n");
-    LLVM_DEBUG(Region->dumpNames());
-    fixMultiRegionVariables(Region);
-  }
+  fixMultiRegionVariables();
 
 #if 0
   std::cerr << "### After context code addition:" << std::endl;
@@ -690,51 +682,52 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
 
 /// Add context save/restore code to variables that are defined in
 /// the given region and are used outside the region.
-void WorkitemLoopsImpl::fixMultiRegionVariables(ParallelRegion *Region) {
+void WorkitemLoopsImpl::fixMultiRegionVariables() {
 
-  InstructionIndex InstructionsInRegion;
   InstructionVec ValuesToContextSave;
+  for (ParallelRegion::ParallelRegionVector::iterator
+           PRI = OriginalParallelRegions.begin(),
+           PRE = OriginalParallelRegions.end();
+       PRI != PRE; ++PRI) {
+    ParallelRegion *PRegion = (*PRI);
 
-  // Construct an index of the region's instructions so it's fast to figure
-  // out if the variable uses are all in the region.
-  for (BasicBlockVector::iterator I = Region->begin(); I != Region->end();
-       ++I) {
-    for (llvm::BasicBlock::iterator Instr = (*I)->begin(); Instr != (*I)->end();
-         ++Instr) {
-      InstructionsInRegion.insert(&*Instr);
+    InstructionIndex InstructionsInRegion;
+
+    // Construct an index of the region's instructions so it's fast to figure
+    // out if the variable uses are all in the region.
+    for (BasicBlockVector::iterator I = PRegion->begin(); I != PRegion->end();
+         ++I) {
+      for (llvm::BasicBlock::iterator Instr = (*I)->begin();
+           Instr != (*I)->end(); ++Instr) {
+        InstructionsInRegion.insert(&*Instr);
+      }
     }
-  }
 
-  // Find all the instructions that define new values and check if they need
-  // to be context saved.
-  for (BasicBlockVector::iterator R = Region->begin(); R != Region->end();
-       ++R) {
-    for (llvm::BasicBlock::iterator I = (*R)->begin(); I != (*R)->end(); ++I) {
+    // Find all the instructions that define new values and check if they need
+    // to be context saved.
+    for (BasicBlockVector::iterator R = PRegion->begin(); R != PRegion->end();
+         ++R) {
+      for (llvm::BasicBlock::iterator I = (*R)->begin(); I != (*R)->end();
+           ++I) {
 
-      llvm::Instruction *Instr = &*I;
+        llvm::Instruction *Instr = &*I;
 
-      if (shouldNotBeContextSaved(&*Instr)) continue;
-
-      for (Instruction::use_iterator UI = Instr->use_begin(),
-             UE = Instr->use_end();
-           UI != UE; ++UI) {
-        llvm::Instruction *User = dyn_cast<Instruction>(UI->getUser());
-
-        if (User == NULL)
+        if (shouldNotBeContextSaved(&*Instr))
           continue;
 
-        // Allocas (originating from OpenCL C private arrays) should be
-        // privatized always. Otherwise we end up reading the same array,
-        // but replicating only the GEP pointing to it.
-        if (isa<AllocaInst>(Instr) ||
-            // If the instruction is used also inside another region (not
-            // in a regionless BB like the B-loop construct BBs), we need
-            // to context save it to pass the private data over.
-            (InstructionsInRegion.find(User) ==
-             InstructionsInRegion.end() &&
-             regionOfBlock(User->getParent()) != NULL)) {
-          ValuesToContextSave.push_back(Instr);
-          break;
+        for (Instruction::use_iterator UI = Instr->use_begin(),
+                                       UE = Instr->use_end();
+             UI != UE; ++UI) {
+          llvm::Instruction *User = dyn_cast<Instruction>(UI->getUser());
+
+          if (User == NULL)
+            continue;
+
+          if ((InstructionsInRegion.find(User) == InstructionsInRegion.end() &&
+               regionOfBlock(User->getParent()) != NULL)) {
+            ValuesToContextSave.push_back(Instr);
+            break;
+          }
         }
       }
     }
@@ -1250,6 +1243,13 @@ bool WorkitemLoopsImpl::shouldNotBeContextSaved(llvm::Instruction *Instr) {
 
   if (isa<BranchInst>(Instr)) return true;
 
+  if (AllocaInst *Alloca = dyn_cast<AllocaInst>(Instr)) {
+    // Some of the variables such as B-loop iterators must not be
+    // replicated for correctness.
+    if (isPureUniformAlloca(Alloca))
+      return true;
+  }
+
   // The local memory allocation call is uniform, the same pointer to the
   // work-group shared memory area is returned to all work-items. It must
   // not be replicated.
@@ -1360,7 +1360,6 @@ llvm::PreservedAnalyses WorkitemLoops::run(llvm::Function &F,
 
 bool WorkitemLoops::canHandleKernel(llvm::Function &K,
                                     llvm::FunctionAnalysisManager &AM) {
-
   // Do not handle kernels with barriers inside loops which have early exits
   // or continues.
   // It would require additional complexity that is unlikely worth it since

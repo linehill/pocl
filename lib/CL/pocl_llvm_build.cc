@@ -358,6 +358,7 @@ int pocl_llvm_build_program(cl_program program,
   std::stringstream ss;
   std::stringstream ss_build_log;
 
+  ss << "-O0 ";
   // add device specific switches, if any
   // TODO this currently passes NULL as device tmpdir
   cl_device_id device = program->devices[device_i];

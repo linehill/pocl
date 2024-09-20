@@ -172,7 +172,7 @@ void VariableUniformityAnalysisResult::analyzeBBDivergence(
     llvm::BasicBlock *PreviousUniformBB, llvm::PostDominatorTree &PDT) {
 
 #ifdef DEBUG_UNIFORMITY_ANALYSIS
-  std::cerr << "### Analyzing BB divergence (bb=" << BB->getName().str()
+  std::cerr << "### Analyzing BB divergence (BB=" << BB->getName().str()
             << ", prevUniform=" << PreviousUniformBB->getName().str() << ")"
             << std::endl;
 #endif

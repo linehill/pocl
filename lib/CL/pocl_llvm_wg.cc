@@ -471,7 +471,6 @@ static void addStage1PassesToPipeline(cl_device_id Dev,
 
   addPass(Passes, "handle-samplers");
   addPass(Passes, "infer-address-spaces");
-  addPass(Passes, "mem2reg");
   addAnalysis(Passes, "domtree");
   addAnalysis(Passes, "workitem-handler-chooser");
 
@@ -497,13 +496,6 @@ static void addStage1PassesToPipeline(cl_device_id Dev,
   // must come AFTER flatten-globals & always-inline
   addPass(Passes, "optimize-wi-gvars");
 
-  // It should be now safe to run -O3 over the single work-item kernel
-  // as the barrier has the attributes preventing illegal motions and
-  // duplication. Let's do it to clean up the code for later Passes.
-  // Especially the WI context structures get needlessly bloated in case there
-  // is dead code lying around.
-  // the optimization for new PM is handled separately
-  // addPass(Passes, "STANDARD_OPTS");
 }
 
 // add the second part of the PoCL passes (after 1st, up to 2nd optimization in old PM)
@@ -524,18 +516,23 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
 
     // required for OLD PM
     addAnalysis(Passes, "workitem-handler-chooser");
+
+    // VariableUniformityAnalysis relies on mem2reg for dataflow analysis.
+    // addPass(Passes, "mem2reg");
+
+    // TO DEBUG: Running this before VUA breaks test_shuffle_double_loopvec.
+    // addPass(Passes, "canon-barriers");
+
     addAnalysis(Passes, "pocl-vua");
 
-    // Run lcssa explicitly to ensure it has generated its lcssa phis before
-    // we break them in phistoallocas. This is an intermediate solution while
-    // working towards processing unoptimized Clang output.
-    addPass(Passes, "lcssa");
-    addPass(Passes, "phistoallocas");
-    addPass(Passes, "isolate-regions");
+    // not needed anymore with -O0 input.
+    // addPass(Passes, "isolate-regions");
 
     // NEW PM requires WIH & VUA analyses here,
     // but they should not be invalidated by previous passes
     addPass(Passes, "implicit-loop-barriers", PassType::Loop);
+
+    addPass(Passes, "canon-barriers");
 
     // implicit-cond-barriers handles barriers inside conditional
     // basic blocks (basically if...elses). It tries to minimize the
@@ -545,6 +542,8 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     // to minimize the impact of "work-item peeling" (* to describe).
     addPass(Passes, "implicit-cond-barriers");
 
+    addPass(Passes, "canon-barriers");
+
     // loop-barriers adds implicit barriers to handle b-loops by isolating the
     // loop body from the loop construct. It also tries to make non b-loops
     // "isolated" in a way to produce the wiloop strictly around it, making
@@ -552,9 +551,16 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     // loopvec at least).
     addPass(Passes, "loop-barriers", PassType::Loop);
 
-    addPass(Passes, "barriertails");
     addPass(Passes, "canon-barriers");
-    addPass(Passes, "isolate-regions");
+
+    // replicates tails of barrier containing control flow graphs to ensure
+    // there are not branches in the middle of the produced parallel regions
+    addPass(Passes, "barriertails");
+
+    addPass(Passes, "canon-barriers");
+
+    // Not needed anymore with -O0 input.
+    // addPass(Passes, "isolate-regions");
 
     // required for OLD PM
     addAnalysis(Passes, "wi-aa");
@@ -580,6 +586,13 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     // Remove the (pseudo) barriers.   They have no use anymore due to the
     // work-item loop control taking care of them.
     addPass(Passes, "remove-barriers");
+
+  } else {
+    // Attempt to move all allocas to the entry block to avoid the need for
+    // dynamic stack which is problematic for some architectures.
+
+    // Likely not needed anymore with -O0 input.
+    addPass(Passes, "allocastoentry");
   }
 
   // verify & print the module
@@ -602,16 +615,22 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
 
   // Attempt to move all allocas to the entry block to avoid the need for
   // dynamic stack which is problematic for some architectures.
-  addPass(Passes, "allocastoentry");
+
+  // Likely not needed anymore with -O0 input.
+  // addPass(Passes, "allocastoentry");
 
   // Convert variables back to PHIs to clean up loop structures to enable the
   // LLVM standard loop analysis.
-  addPass(Passes, "mem2reg");
+  // Not needed anymore with -O0 input. The standard opt passes which are
+  // executed after do this.
+  // addPass(Passes, "mem2reg");
 
   // Later passes might get confused (and expose possible bugs in them) due to
   // UNREACHABLE blocks left by repl. So let's clean up the CFG before running
   // the standard LLVM optimizations.
-  addPass(Passes, "simplifycfg");
+  // Not needed anymore with -O0 input. The standard opt passes which are
+  // executed after do this.
+  // addPass(Passes, "simplifycfg");
 
   // the optimization for new PM is handled separately
   // addPass(Passes, "STANDARD_OPTS");
@@ -619,6 +638,7 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
   // Due to unfortunate phase-ordering problems with store sinking,
   // loop deletion does not always apply when executing -O3 only
   // once. Cherry pick the optimization to rerun here.
+  // Not needed anymore with -O0 input.
   // addPass(Passes, "loop-deletion");
   // addPass(Passes, "remove-barriers");
 }
@@ -647,7 +667,7 @@ static bool runKernelCompilerPasses(cl_device_id Device, llvm::Module &Mod,
   addStage2PassesToPipeline(Device, Passes2);
   std::string P2 = convertPassesToPipelineString(Passes2);
 
-  Error E = PM.build(Device, P1, Optimize ? 1 : 0, 0, P2, Optimize ? 3 : 0, 0);
+  Error E = PM.build(Device, P1, 0, 0, P2, Optimize ? 3 : 0, 0);
   if (E) {
     std::cerr << "LLVM: failed to create compilation pipeline";
     return false;
