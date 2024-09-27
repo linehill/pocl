@@ -66,11 +66,26 @@ static bool canonicalizeBarriers(Function &F, WorkitemHandlerType Handler) {
   // The function entry node should be a pure barrier.
   // It should start a parallel region.
   BasicBlock *Entry = &F.getEntryBlock();
-  if (!Barrier::hasOnlyBarrier(Entry)) {
+  // The function entry node should be a pure barrier at this point.
+  // It should start the first parallel region.
+
+  // Ensure the basic block before the first barrier is a forced uniform basic
+  // block/ where we can push context array allocas and other code that needs to
+  // be run only once per WG function.
+  if (!isRequiredUniformBlock(Entry)) {
+    SplitBlock(Entry, &(Entry->front()));
+    Entry = &F.getEntryBlock();
+    markAsRequiredUniformBlock(Entry, "wg-function entry");
+    Entry->setName("wg-func-entry");
+  }
+
+  BasicBlock *FirstPRStart = F.getEntryBlock().getSingleSuccessor();
+  if (!Barrier::hasOnlyBarrier(FirstPRStart)) {
 #ifdef DEBUG_CANON_BARRIERS
     std::cerr << "CanonBar: hasOnlyBarrier(entry)\n";
 #endif
-    BasicBlock *EffectiveEntry = SplitBlock(Entry, &(Entry->front()));
+    BasicBlock *EffectiveEntry =
+        SplitBlock(FirstPRStart, &(FirstPRStart->front()));
 
     EffectiveEntry->takeName(Entry);
     Entry->setName("entry.barrier");
