@@ -288,7 +288,7 @@ if(HAVE_LTTNG_UST)
 endif()
 
 if(MSVC)
-  set_source_files_properties( ${POCL_LIB_SOURCES} PROPERTIES LANGUAGE CXX )
+  set_source_files_properties( ${POCL_LIB_SOURCES} PROPERTIES LANGUAGE C )
 endif(MSVC)
 
 # this is so that we don't compile twice when building both libpocl and libOpenCL

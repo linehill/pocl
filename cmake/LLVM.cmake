@@ -137,6 +137,7 @@ run_llvm_config(LLVM_ASSERTS_BUILD --assertion-mode)
 if(MSVC)
   string(REPLACE "-L${LLVM_LIBDIR}" "" LLVM_LDFLAGS "${LLVM_LDFLAGS}")
   string(STRIP "${LLVM_LDFLAGS}" LLVM_LDFLAGS)
+  file(TO_CMAKE_PATH "${LLVM_LDFLAGS}" LLVM_LDFLAGS)
 endif()
 
 if(LLVM_BUILD_MODE MATCHES "Debug")
@@ -188,6 +189,7 @@ endif()
 unset(LLVM_LIBS)
 run_llvm_config(LLVM_LIBS --libs ${LLVM_LIB_MODE})
 string(STRIP "${LLVM_LIBS}" LLVM_LIBS)
+file(TO_CMAKE_PATH "${LLVM_LIBS}" LLVM_LIBS)
 if(NOT LLVM_LIBS)
   message(FATAL_ERROR "llvm-config --libs did not return anything, perhaps wrong setting of STATIC_LLVM ?")
 endif()
@@ -222,6 +224,13 @@ if(MINGW)
   set(LLVM_SYSLIBS "${LLVM_SYSLIBS} -lversion" CACHE STRING "llvm's syslibs" FORCE)
 endif()
 
+string(REPLACE " " ";" LLVM_SYSLIBS "${LLVM_SYSLIBS}")
+
+if(MSVC)
+  # Clang-19 depends on this system library.
+  list(APPEND LLVM_SYSLIBS version.lib)
+endif()
+
 ####################################################################
 
 if(STATIC_LLVM)
@@ -247,7 +256,6 @@ else()
 endif()
 
 foreach(LIBNAME ${CLANG_LIBNAMES})
-  list(APPEND CLANG_LIBS "-l${LIBNAME}")
   find_library(C_LIBFILE_${LIBNAME} NAMES "${LIBNAME}" HINTS "${LLVM_LIBDIR}")
   if(NOT C_LIBFILE_${LIBNAME})
     message(FATAL_ERROR "Could not find Clang library ${LIBNAME}, perhaps wrong setting of STATIC_LLVM ?")
@@ -672,7 +680,7 @@ if(NOT LLVM_LINK_TEST)
   try_compile(LLVM_LINK_TEST ${CMAKE_BINARY_DIR} "${LLVM_LINK_TEST_FILENAME}"
               CMAKE_FLAGS "-DINCLUDE_DIRECTORIES:STRING=${LLVM_INCLUDE_DIRS}"
               CMAKE_FLAGS "-DLINK_DIRECTORIES:STRING=${LLVM_LIBDIR}"
-              LINK_LIBRARIES "${LLVM_LDFLAGS} ${LLVM_LIBS} ${LLVM_SYSLIBS}"
+              LINK_LIBRARIES "${LLVM_LDFLAGS}" "${LLVM_LIBS}" "${LLVM_SYSLIBS}"
               COMPILE_DEFINITIONS "${CMAKE_CXX_FLAGS} ${LLVM_CXXFLAGS}"
               OUTPUT_VARIABLE _TRY_COMPILE_OUTPUT)
 
@@ -699,8 +707,10 @@ if(NOT CLANG_LINK_TEST)
   try_compile(CLANG_LINK_TEST ${CMAKE_BINARY_DIR} "${CLANG_LINK_TEST_FILENAME}"
               CMAKE_FLAGS "-DINCLUDE_DIRECTORIES:STRING=${LLVM_INCLUDE_DIRS}"
               CMAKE_FLAGS "-DLINK_DIRECTORIES:STRING=${LLVM_LIBDIR}"
-              LINK_LIBRARIES "${LLVM_LDFLAGS} ${CLANG_LIBS} ${LLVM_LIBS} ${LLVM_SYSLIBS}"
-              COMPILE_DEFINITIONS "${CMAKE_CXX_FLAGS} ${LLVM_CXXFLAGS} -DLLVM_MAJOR=${LLVM_VERSION_MAJOR}"
+              LINK_LIBRARIES ${LLVM_LDFLAGS} ${CLANG_LIBFILES} ${LLVM_LIBS}
+              ${LLVM_SYSLIBS}
+              COMPILE_DEFINITIONS ${CMAKE_CXX_FLAGS}
+              ${LLVM_CXXFLAGS} -DLLVM_MAJOR=${LLVM_VERSION_MAJOR}
               OUTPUT_VARIABLE _TRY_COMPILE_OUTPUT)
 
   if(CLANG_LINK_TEST)
