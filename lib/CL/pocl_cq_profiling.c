@@ -26,9 +26,6 @@
 #include "pocl_cl.h"
 #include "pocl_util.h"
 
-/* for bzero */
-#include <strings.h>
-
 /* Maximum number of events collected. */
 #define POCL_CQ_PROFILING_MAX_EVENTS 1000000
 #define POCL_CQ_PROFILING_MAX_KERNELS 1000
@@ -62,7 +59,8 @@ pocl_atexit ()
   unsigned long total_commands = 0;
   unsigned long different_kernels = 0;
 
-  struct kernel_stats kernel_statistics[cq_events_collected];
+  struct kernel_stats *kernel_statistics = alloca(cq_events_collected *
+						  sizeof(struct kernel_stats));
   bzero_s (&kernel_statistics, sizeof (kernel_statistics));
 
   /* First statistics computation round. */

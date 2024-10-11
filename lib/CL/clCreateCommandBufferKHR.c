@@ -63,6 +63,7 @@ POname (clCreateCommandBufferKHR) (
     }
 
   cl_uint num_properties = 0;
+  cl_command_buffer_properties_khr *seen_keys = NULL;
   if (properties != NULL)
     {
       const cl_command_buffer_properties_khr *key = 0;
@@ -73,7 +74,17 @@ POname (clCreateCommandBufferKHR) (
         "Properties != NULL, but zero properties in array\n");
 
       unsigned i = 0;
-      cl_command_buffer_properties_khr seen_keys[num_properties];
+      seen_keys = malloc (sizeof(cl_command_buffer_properties_khr) *
+			  num_properties);
+      
+/* #ifdef _MS_VER */
+/*       /\* MSVC C does not support VLAs.  *\/ */
+/*       /\* TODO: *\/ */
+/*       assert(num_properties < 64 && "Buffer overflow!"); */
+/*       cl_command_buffer_properties_khr seen_keys[64]; */
+/* #else */
+/*       cl_command_buffer_properties_khr seen_keys[num_properties]; */
+/* #endif */
       for (i = 0; i < num_properties; ++i)
         seen_keys[i] = 0;
 
@@ -114,6 +125,8 @@ POname (clCreateCommandBufferKHR) (
         }
     }
 
+  POCL_MEM_FREE (seen_keys);
+  
   cmdbuf = calloc (1, sizeof (struct _cl_command_buffer_khr));
   if (cmdbuf == NULL)
     {
@@ -150,6 +163,7 @@ POname (clCreateCommandBufferKHR) (
   return cmdbuf;
 
 ERROR:
+  POCL_MEM_FREE (seen_keys);
   if (cmdbuf)
     {
       POCL_MEM_FREE (cmdbuf->queues);

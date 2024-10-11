@@ -53,7 +53,7 @@
 #include <CL/cl_egl.h>
 #include <CL/opencl.h>
 
-#if __STDC_VERSION__ < 199901L
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ < 199901L
 # if __GNUC__ >= 2
 #  define __func__ __PRETTY_FUNCTION__
 # else
@@ -99,10 +99,23 @@
 #define VG_ASSOC_COND_VAR(var, mutex) (void)0
 #endif
 
-#ifdef __linux__
-#define ALIGN_CACHE(x) x __attribute__ ((aligned (HOST_CPU_CACHELINE_SIZE)))
+#if __cplusplus >= 201103L
+#  define POCL_ALIGNAS(x) alignas(x)
+#elif __STDC_VERSION__ >= 201112L /* C11 */
+#  define POCL_ALIGNAS(x) _Alignas(x)
+#elif defined(_MSC_VER)
+#  define POCL_ALIGNAS(x) __declspec(align(x))
+#elif defined(__clang__) || defined(__GNUC__)
+#  define POCL_ALIGNAS(x) __attribute__ ((aligned (x)))
 #else
-#define ALIGN_CACHE(x) x
+/* Must be emitted as error for potential correctness issues.  */
+#  error "Don't know alignas/aligned/align counterpart for this compiler!"
+#endif
+
+#ifdef __linux__
+#define ALIGN_FOR_CACHE(x) POCL_ALIGNAS(HOST_CPU_CACHELINE_SIZE)
+#else
+#define ALIGN_FOR_CACHE(x)
 #endif
 
 //############################################################################
@@ -124,12 +137,12 @@
       (__OBJ__)->magic_2 = POCL_MAGIC_2;
 #define UNSET_VALIDITY_MARKERS(__OBJ__)                                       \
       (__OBJ__)->magic_1 = 0;                                                 \
-      (__OBJ__)->magic_2 = 0;
+      (__OBJ__)->magic_2 = 0
 #else
 #define IS_CL_OBJECT_VALID(__OBJ__)   ((__OBJ__) != NULL)
-#define CHECK_VALIDITY_MARKERS(__OBJ__)
-#define SET_VALIDITY_MARKERS(__OBJ__)
-#define UNSET_VALIDITY_MARKERS(__OBJ__)
+#define CHECK_VALIDITY_MARKERS(__OBJ__) do {} while(0)
+#define SET_VALIDITY_MARKERS(__OBJ__) do {} while(0)
+#define UNSET_VALIDITY_MARKERS(__OBJ__) do {} while(0)
 #endif
 
 #define POCL_LOCK_OBJ(__OBJ__)                                                \
@@ -1500,7 +1513,7 @@ struct _cl_command_queue {
 
 struct _cl_command_buffer_khr
 {
-  POCL_ICD_OBJECT;
+  POCL_ICD_OBJECT
   POCL_OBJECT;
   pocl_lock_t mutex;
 
@@ -1529,6 +1542,9 @@ struct _cl_mutable_command_khr
 {
   /* Unused in cl_khr_command_buffer but required in public API and used by
    * follow-up extensions. */
+
+  /* Conformant C code must have at least one member in structures. */
+  char dummy;
 };
 
 #define POCL_ON_SUB_MISALIGN(mem, que, operation)                             \

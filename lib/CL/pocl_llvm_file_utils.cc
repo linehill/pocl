@@ -32,14 +32,16 @@
 
 #include "config.h"
 
-#if !defined(_WIN32) && (defined(HAVE_FDATASYNC) || defined(HAVE_FSYNC))
+#if !defined(WIN32) && (defined(HAVE_FDATASYNC) || defined(HAVE_FSYNC))
 #define _GNU_SOURCE
 #define _DEFAULT_SOURCE
 #define _BSD_SOURCE
 #include <unistd.h>
 #endif
 
-#if defined(_WIN32)
+#if defined(WIN32)
+#define NOMINMAX
+#include <windows.h>
 #include <fileapi.h>
 #endif
 

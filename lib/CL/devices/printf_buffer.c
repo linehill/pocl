@@ -33,7 +33,9 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 #if 0
 
@@ -117,7 +119,7 @@ DEFINE_PRINT_INTS (ulong, int64_t, uint64_t)
         if (d != 0)                                                           \
           __pocl_printf_putcf (p, ',');                                       \
         memcpy (&val, vals, sizeof (FLOAT_TYPE));                             \
-        vals += sizeof (FLOAT_TYPE);                                          \
+	vals = (char *)vals + sizeof (FLOAT_TYPE);			      \
         const char *other = NULL;                                             \
         if (val != val)                                                       \
           other = NANs[p->flags.uc ? 1 : 0];                                  \
@@ -759,7 +761,11 @@ __printf_flush_buffer (char *buffer, uint32_t buffer_size)
 
   if (p.printf_buffer_index > 0)
     {
+#ifdef _MSC_VER
+      write (_fileno(stdout), p.printf_buffer, p.printf_buffer_index);
+#else
       write (STDOUT_FILENO, p.printf_buffer, p.printf_buffer_index);
+#endif
     }
 }
 

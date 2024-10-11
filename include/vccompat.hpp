@@ -25,12 +25,15 @@
    THE SOFTWARE.
 */
 
-#ifndef VCCOMPAT_HPP
+#if !defined(VCCOMPAT_HPP) && defined(_WIN32)
 #define VCCOMPAT_HPP
 
+/* Suppress min/max macros in windows.h.  They wreck havoc on C++ code.  */
+#ifndef NOMINMAX
+#  define NOMINMAX
+#endif
 #include <windows.h>
 #define __restrict__ __restrict
-#define restrict __restrict
 
 #include <intrin.h>
 #define __builtin_popcount __popcnt
@@ -39,7 +42,12 @@
 #undef ERROR
 
 // if this causes linking problems, use inline function below...
-#define snprintf _snprintf
+//#ifndef __cplusplus
+// MSVC: This appears for C code: "error C1189: #error: Macro
+// definition of snprintf conflicts with Standard Library function
+// declaration". Assuming this macro is meant for C++.
+//#  define snprintf _snprintf
+//#endif
 
 /*
 static inline int snprintf(char *str, size_t size, const char *format, ...) {
@@ -78,21 +86,6 @@ static inline int setenv(const char *name, const char *value, int overwrite) {
 #define RTLD_NOW 1
 #define RTLD_LOCAL 1
 
-/**
- * dl compatibility functions
- */
-
-static inline void* dlopen(const char* filename, int flags) {
-  return (void*)LoadLibrary(filename);
-}
-
-static inline int dlerror(void) {
-  return GetLastError();
-}
-
-static inline void *dlsym(void* handle, const char *symbol) {
-  return GetProcAddress((HMODULE)handle, symbol);
-}
 #endif
 
 /**

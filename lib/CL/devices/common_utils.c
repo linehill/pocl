@@ -426,8 +426,8 @@ pocl_setup_kernel_arg_array_with_locals (void **arguments, void **arguments2,
                 }
               POCL_ABORT (
                   "PoCL detected an OpenCL program error: "
-                  "%d automatic local buffer(s) with total size %lu "
-                  "bytes doesn't fit to the local memory of size %lu\n",
+                  "%d automatic local buffer(s) with total size %zu "
+                  "bytes doesn't fit to the local memory of size %zu\n",
                   meta->num_locals, total_auto_local_size, local_mem_size);
             }
           start += size;

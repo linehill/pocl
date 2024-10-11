@@ -25,7 +25,9 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 #include "config.h"
 #include "common.h"
