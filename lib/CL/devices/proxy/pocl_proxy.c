@@ -83,15 +83,15 @@ typedef struct proxy_device_data_s
 typedef struct proxy_queue_data_s
 {
   // lock
-  ALIGN_CACHE (pocl_lock_t wq_lock);
+  ALIGN_FOR_CACHE pocl_lock_t wq_lock;
   // ready to launch queue
   _cl_command_node *work_queue;
 
   // for user threads that are waiting on clFinish
-  ALIGN_CACHE (pocl_cond_t wait_cond);
+  ALIGN_FOR_CACHE pocl_cond_t wait_cond;
 
   // for waking up the queue thread
-  ALIGN_CACHE (pocl_cond_t wakeup_cond);
+  ALIGN_FOR_CACHE pocl_cond_t wakeup_cond;
 
   // backend queue id
   cl_command_queue proxied_id;

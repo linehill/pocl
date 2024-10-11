@@ -63,9 +63,9 @@ typedef struct remote_device_data_s
   _cl_command_node *finished_list;
 
   /* driver wake + lock */
-  ALIGN_CACHE (pocl_lock_t wq_lock);
-  ALIGN_CACHE (pocl_cond_t wakeup_cond);
-  ALIGN_CACHE (pocl_lock_t mem_lock);
+  ALIGN_FOR_CACHE pocl_lock_t wq_lock;
+  ALIGN_FOR_CACHE pocl_cond_t wakeup_cond;
+  ALIGN_FOR_CACHE pocl_lock_t mem_lock;
 
   /* device pthread */
   pocl_thread_t driver_thread_id;

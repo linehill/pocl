@@ -33,6 +33,9 @@ CL_API_ENTRY cl_int CL_API_CALL POname (clGetGLContextInfoKHR) (
 {
   POCL_RETURN_ERROR_COND ((properties == NULL), CL_INVALID_OPERATION);
 
+  /* TODO: needs adjustments for MSVC (undeclared identifier
+     __ATOMIC_SEQ_CST).  */
+#ifndef _MSC_VER
   switch (param_name)
     {
 
@@ -90,7 +93,7 @@ CL_API_ENTRY cl_int CL_API_CALL POname (clGetGLContextInfoKHR) (
           }
       }
     }
-
+#endif /* _MSC_VER */
   return CL_INVALID_VALUE;
 }
 POsym (clGetGLContextInfoKHR)

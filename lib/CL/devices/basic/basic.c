@@ -39,7 +39,9 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <utlist.h>
 
 #include "pocl_cache.h"
@@ -666,7 +668,7 @@ cl_int pocl_basic_write_image_rect (  void *data,
 
   const void *__restrict__ ptr
       = src_host_ptr ? src_host_ptr : src_mem_id->mem_ptr;
-  ptr += src_offset;
+  ptr = (char *)ptr + src_offset;
   const size_t zero_origin[3] = { 0 };
   size_t px = dst_image->image_elem_size * dst_image->image_channels;
   if (src_row_pitch == 0)
@@ -710,7 +712,7 @@ cl_int pocl_basic_read_image_rect(  void *data,
       dst_row_pitch, dst_slice_pitch, dst_offset);
 
   void *__restrict__ ptr = dst_host_ptr ? dst_host_ptr : dst_mem_id->mem_ptr;
-  ptr += dst_offset;
+  ptr = (char *)ptr + dst_offset;
   const size_t zero_origin[3] = { 0 };
   size_t px = src_image->image_elem_size * src_image->image_channels;
   if (dst_row_pitch == 0)

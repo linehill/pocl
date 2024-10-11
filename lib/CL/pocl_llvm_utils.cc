@@ -72,7 +72,9 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "pocl_llvm_api.h"
 #include "pocl_runtime_config.h"
 
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 using namespace llvm;
 

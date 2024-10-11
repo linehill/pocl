@@ -35,7 +35,9 @@
 #include "pocl_rdma.h"
 #endif
 
+#ifndef _MSC_VER
 #include <unistd.h>
+#endif
 
 extern unsigned cl_context_count;
 extern pocl_lock_t pocl_context_handling_lock;
@@ -138,7 +140,9 @@ pocl_check_uninit_devices ()
   if (!do_uninit)
     return;
 
+#ifndef _MSC_VER
   usleep (100000);
+#endif
 
   POCL_LOCK (pocl_context_handling_lock);
   if (cl_context_count == 0)
