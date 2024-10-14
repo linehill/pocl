@@ -203,15 +203,17 @@ foreach(LIBFLAG ${LLVM_LIBS})
   list(APPEND LLVM_LIBNAMES "${LIB_NAME}")
 endforeach()
 
-foreach(LIBNAME ${LLVM_LIBNAMES})
-  find_library(L_LIBFILE_${LIBNAME} NAMES "${LIBNAME}" HINTS "${LLVM_LIBDIR}")
-  if(NOT L_LIBFILE_${LIBNAME})
-    message(FATAL_ERROR "Could not find LLVM library ${LIBNAME}, perhaps wrong setting of STATIC_LLVM ?")
-  endif()
-  list(APPEND LLVM_LIBFILES "${L_LIBFILE_${LIBNAME}}")
-endforeach()
+# FIXME: needs adjustments for non-dynamic LLVM. llvm-config.exe --libs returns absolute paths. Not sure if this is a windows specific right now. 
+# foreach(LIBNAME ${LLVM_LIBNAMES})
+#   find_library(L_LIBFILE_${LIBNAME} NAMES "${LIBNAME}" HINTS "${LLVM_LIBDIR}")
+#   if(NOT L_LIBFILE_${LIBNAME})
+#     message(FATAL_ERROR "Could not find LLVM library ${LIBNAME}, perhaps wrong setting of STATIC_LLVM ?")
+#   endif()
+#   list(APPEND LLVM_LIBFILES "${L_LIBFILE_${LIBNAME}}")
+# endforeach()
 
-set(POCL_LLVM_LIBS ${LLVM_LIBFILES})
+#set(POCL_LLVM_LIBS ${LLVM_LIBFILES})
+set(POCL_LLVM_LIBS ${LLVM_LIBNAMES})
 
 ####################################################################
 
