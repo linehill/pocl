@@ -130,6 +130,26 @@ bool isLocalMemFunctionArg(llvm::Function *Func, unsigned ArgIndex);
 // if it has empty name, sets it to __anonymous_global_as.XYZ
 bool isProgramScopeVariable(llvm::GlobalVariable &GVar, unsigned DeviceLocalAS);
 
+/// Checks if the basic block should be executed by a "single thread" that is,
+/// it only has uniform code which accesses only variables which must not be
+/// replicated.
+///
+/// These currently include B-loop-structure blocks (headers, latches), but
+/// could later also include other blocks for optimizing the execution of
+/// purely uniform code. Note that marking a BB as required uniform implicitly
+/// marks all of the variables it accessess uniform as well, so take care!
+bool isPureUniformBlock(llvm::BasicBlock *BB);
+
+/// Marks a basic block as a pure uniform block.
+///
+/// \param BB The basic block to mark.
+/// \param Reason A human readable comment/reason.
+void markAsPureUniformBlock(llvm::BasicBlock *BB, std::string Reason);
+
+/// Returns true in case the Alloca is accessed in a pure uniform block,
+/// meaning it must be a forced uniform variable.
+bool isPureUniformAlloca(llvm::AllocaInst *Alloca);
+
 // Sets the address space metadata of the given function argument.
 // Note: The address space ids must be SPIR ids. If it encounters
 // argument indices without address space ids in the list, sets

@@ -37,6 +37,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "Barrier.h"
 #include "DebugHelpers.h"
 #include "Kernel.h"
+#include "KernelCompilerUtils.h"
 #include "LLVMUtils.h"
 
 #include "pocl.h"
@@ -51,14 +52,23 @@ using namespace pocl;
 
 static void addPredecessors(SmallVectorImpl<BasicBlock *> &V, BasicBlock *BB);
 
-void Kernel::getExitBlocks(SmallVectorImpl<llvm::BasicBlock *> &B) {
+/// Finds the exit blocks of parallel regions.
+///
+/// Exit blocks are function exit nodes, barriers or forced uniform blocks.
+void Kernel::getRegionExitBlocks(SmallVectorImpl<llvm::BasicBlock *> &B) {
   for (iterator i = begin(), e = end(); i != e; ++i) {
     auto t = i->getTerminator();
+    llvm::BasicBlock *BB = cast<BasicBlock>(i);
     if (t->getNumSuccessors() == 0) {
       // All exits must be barrier blocks.
-      llvm::BasicBlock *BB = cast<BasicBlock>(i);
+      // TO CLEAN: This should not be needed any more since CanonicalizeBarriers
+      // adds them.
       if (!Barrier::hasBarrier(BB))
         Barrier::createAtEnd(BB);
+      B.push_back(BB);
+    } else if (Barrier::hasBarrier(BB)) {
+      B.push_back(BB);
+    } else if (isPureUniformBlock(BB)) {
       B.push_back(BB);
     }
   }
@@ -104,6 +114,15 @@ ParallelRegion *Kernel::createParallelRegionBefore(llvm::BasicBlock *B) {
         RegionEntryBarrier = Current;
 #ifdef DEBUG_PR_CREATION
       std::cerr << "### it's a barrier!" << std::endl;
+#endif
+      continue;
+    }
+
+    if (isPureUniformBlock(Current)) {
+#ifdef DEBUG_PR_CREATION
+      std::cerr << "### reached a required uniform block, not including it"
+                << std::endl;
+      Current->dump();
 #endif
       continue;
     }
@@ -190,39 +209,42 @@ static void addPredecessors(SmallVectorImpl<BasicBlock *> &V, BasicBlock *BB) {
   }
 }
 
-/**
- * The main entry to the "parallel region formation" which searches for regions
- * of basic blocks between barriers that can be freely parallelized across
- * work-items in the work-group.
- */
+/// The main entry to the "parallel region formation" which searches for regions
+/// of basic blocks between barriers that can be freely parallelized across
+/// work-items in the work-group.
 void Kernel::getParallelRegions(
-    llvm::LoopInfo &LI,
-    ParallelRegion::ParallelRegionVector *ParallelRegions) {
+    llvm::LoopInfo &LI, ParallelRegion::ParallelRegionVector *ParallelRegions) {
 
-  SmallVector<BasicBlock *, 4> exit_blocks;
-  getExitBlocks(exit_blocks);
+  SmallVector<BasicBlock *, 4> RegionExitBlocks;
+  getRegionExitBlocks(RegionExitBlocks);
 
   // We need to keep track of traversed barriers to detect back edges.
-  SmallPtrSet<BasicBlock *, 8> found_barriers;
+  SmallPtrSet<BasicBlock *, 8> HandledExits;
 
   // First find all the ParallelRegions in the Function.
-  while (!exit_blocks.empty()) {
+  while (!RegionExitBlocks.empty()) {
+
     // We start on an exit block and process the parallel regions upwards
     // (finding an execution trace).
-    BasicBlock *exit = exit_blocks.back();
-    exit_blocks.pop_back();
+    BasicBlock *RegionExitBlock = RegionExitBlocks.back();
+    assert(RegionExitBlock != nullptr);
+    RegionExitBlocks.pop_back();
 
-    // already handled
-    if (found_barriers.count(exit) != 0)
+    ParallelRegion *PR = createParallelRegionBefore(RegionExitBlock);
+    // We can get empty PRs due to successive barriers.
+    if (PR == nullptr)
       continue;
-
-    while (ParallelRegion *PR = createParallelRegionBefore(exit)) {
+    ParallelRegions->push_back(PR);
+  }
+#if 0
+    while (ParallelRegion *PR = createParallelRegionBefore(RegionExitBlock)) {
       assert(PR != NULL && !PR->empty() &&
              "Empty parallel region in kernel (contiguous barriers)!");
 
-      found_barriers.insert(exit);
-      exit = NULL;
+      HandledExits.insert(RegionExitBlock);
+      RegionExitBlock = NULL;
       ParallelRegions->push_back(PR);
+
       BasicBlock *Entry = PR->entryBB();
       int found_predecessors = 0;
       BasicBlock *loop_barrier = NULL;
@@ -232,7 +254,6 @@ void Kernel::getParallelRegions(
         // Check if we have found barriers that start new parallel regions.
         if (!found_barriers.count(Barrier))
           exit_blocks.push_back(Barrier);
-#if 0
         // This should be now obsolete thanks to the dedicated entry block
         // added always to the beginning of the parallel region. It should
         // never be a k-loop entry block.
@@ -269,10 +290,8 @@ void Kernel::getParallelRegions(
             }
           ++found_predecessors;
         }
-#endif
       }
 
-#if 0
       if (loop_barrier != NULL)
         {
           /* The secondary barrier to process in case it was a loop
@@ -284,7 +303,6 @@ void Kernel::getParallelRegions(
             exit = loop_barrier;
           loop_barrier = NULL;
         }
-#endif
 
 #ifdef DEBUG_PR_CREATION
       std::cout << "### created a ParallelRegion:" << std::endl;
@@ -304,6 +322,7 @@ void Kernel::getParallelRegions(
       assert ((exit != NULL) && "Parallel region without entry barrier!");
     }
   }
+#endif
 
 #ifdef DEBUG_PR_CREATION
   pocl::dumpCFG(*this, this->getName().str() + ".pregions.dot", nullptr,

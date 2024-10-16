@@ -73,13 +73,15 @@ static void printBasicBlock(
   //      if (!Barrier::hasBarrier(b)) continue;
   s << getDotBasicBlockID(b);
   s << "[shape=rect,style=";
-  if (Barrier::hasBarrier(b))
-    s << "dotted";
+  if (Barrier::hasBarrier(b) || isPureUniformBlock(b))
+      s << "dotted";
   else
     s << "solid";
 
   if (highlighted) {
     s << ",color=red,style=filled";
+  } else if (isPureUniformBlock(b)) {
+    s << ",color=grey,style=filled";
   }
   s << ",label=\"" << b->getName().str() << ":\\n";
 

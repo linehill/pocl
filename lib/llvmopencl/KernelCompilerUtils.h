@@ -97,12 +97,19 @@
 #endif
 
 namespace PoCLMDKind {
+
 /// Metadata used by WILoops:
-static constexpr const char RequiredUniformBlock[] = "pocl.bb.required_uniform";
+
+/// If the basic block's branch has this metadata attached to it, the BB
+/// is a "pure uniform" basic block meaning that it _should_ be executed
+/// only once, without the parallel loops.
+static constexpr const char PureUniformBasicBlock[] = "pocl.bb.pure_uniform";
+
 /// Metadata used by CBS:
 static constexpr const char Arrayified[] = "pocl.arrayified";
 static constexpr const char InnerLoop[] = "pocl.loop.inner";
 static constexpr const char WorkItemLoop[] = "pocl.loop.workitem";
+
 }; // namespace PoCLMDKind
 
 #endif

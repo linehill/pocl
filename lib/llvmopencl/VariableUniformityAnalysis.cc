@@ -268,7 +268,7 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
   }
 
   if (llvm::BasicBlock *BB = dyn_cast<llvm::BasicBlock>(V)) {
-    if (BB == &F->getEntryBlock()) {
+    if (BB == &F->getEntryBlock() || isPureUniformBlock(BB)) {
       setUniform(F, V, true);
       return true;
     }
@@ -291,27 +291,55 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
   }
 
   if (isa<llvm::AllocaInst>(V)) {
-    /* Allocas might or might not be divergent. These are produced 
-       from work-item private arrays or the PHIsToAllocas. It depends
-       what is written to them whether they are really divergent. 
-       
-       We need to figure out if any of the stores to the alloca contain 
-       work-item id dependent data. Take a white listing approach that
-       detects the ex-phi allocas of loop iteration variables of non-diverging
-       loops. 
+    llvm::AllocaInst *Alloca = dyn_cast<llvm::AllocaInst>(V);
 
-       Currently the following case is white listed:
-       a) are scalars, and
+    /* Allocas might or might not be divergent. These are produced
+       from work-item private arrays or the PHIsToAllocas. It depends
+       what is written to them whether they are really divergent.
+
+       We need to figure out if any of the stores to the alloca contain
+       work-item id dependent data. We take a white-listing approach that
+       detects the ex-phi allocas of loop iteration variables of non-diverging
+       loops.
+
+       Currently the following case is considered uniform:
+       a) contains a scalar type and
        b) are accessed only with load and stores (e.g. address not taken) from
           uniform basic blocks, and
-       c) the stored data is uniform
+       c) the stored data is uniform OR
+       d) the alloca is written to from inside a forced uniform block (B-loop
+          constructs currently)
 
        Because alloca data can be modified in loops and thus be dependent on
-       itself, we need a bit involved mechanism to handle it. First create 
-       a copy of the uniformity cache, then assume the alloca itself is uniform, 
+       itself, we need a bit involved mechanism to handle it. First create
+       a copy of the uniformity cache, then assume the alloca itself is uniform,
        then check if all the stores to the alloca contain uniform data. If
        our initial assumption was wrong, restore the cache from the backup.
     */
+
+    // Check the case d) first.
+    for (Instruction::use_iterator UI = Alloca->use_begin(),
+                                   UE = Alloca->use_end();
+         UI != UE; ++UI) {
+      llvm::StoreInst *Store = dyn_cast<llvm::StoreInst>(UI->getUser());
+      if (Store == nullptr)
+        continue;
+      bool ForcedUniformStoreFound = isPureUniformBlock(Store->getParent());
+      if (ForcedUniformStoreFound) {
+#ifdef DEBUG_UNIFORMITY_ANALYSIS
+        std::cerr << "### alloca was written in a forced-uniform BB"
+                  << std::endl;
+#endif
+        setUniform(F, V);
+        return true;
+      } else {
+#ifdef DEBUG_UNIFORMITY_ANALYSIS
+        std::cerr << "### alloca written in "
+                  << Store->getParent()->getName().str() << std::endl;
+#endif
+      }
+    }
+
     UniformityCache backupCache(uniformityCache_);
     setUniform(F, V);
 
@@ -421,17 +449,8 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
     return IsUniformBuiltin;
   }
 
-  if (isa<llvm::PHINode>(V)) {
-    /* TODO: PHINodes need control flow analysis:
-       even if the values are uniform, the selected
-       value depends on the preceeding basic block which
-       might depend on the ID. Assume they are not uniform
-       for now in general and treat the loop iteration 
-       variable as a special case (set externally from a LoopPass). 
-
-       TODO: PHINodes can depend (indirectly or directly) on itself in loops 
-       so it would need infinite recursion checking.
-    */
+  if (llvm::PHINode *PHI = dyn_cast<llvm::PHINode>(V)) {
+    // Do not try to prove PHIs uniform for now due to recursivity.
     setUniform(F, V, false);
     return false;
   }

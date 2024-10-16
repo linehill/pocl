@@ -72,10 +72,10 @@ static bool canonicalizeBarriers(Function &F, WorkitemHandlerType Handler) {
   // Ensure the basic block before the first barrier is a forced uniform basic
   // block/ where we can push context array allocas and other code that needs to
   // be run only once per WG function.
-  if (!isRequiredUniformBlock(Entry)) {
+  if (!isPureUniformBlock(Entry)) {
     SplitBlock(Entry, &(Entry->front()));
     Entry = &F.getEntryBlock();
-    markAsRequiredUniformBlock(Entry, "wg-function entry");
+    markAsPureUniformBlock(Entry, "wg-function entry");
     Entry->setName("wg-func-entry");
   }
 
@@ -96,6 +96,31 @@ static bool canonicalizeBarriers(Function &F, WorkitemHandlerType Handler) {
   for (Function::iterator i = F.begin(), e = F.end(); i != e; ++i) {
 
     BasicBlock *BB = &*i;
+    if (isPureUniformBlock(BB)) {
+      // Ensure regions of forced uniform blocks are isolated with a barrier
+      // so they start/end parallel regions cleanly.
+      for (pred_iterator i = pred_begin(BB), e = pred_end(BB); i != e; ++i) {
+        BasicBlock *PredBB = *i;
+        if (!isPureUniformBlock(PredBB) && !Barrier::endsWithBarrier(PredBB)) {
+          // Create the barrier to the beginning of the uniform block so
+          // all predecessors can branch to it, in case it's a join point.
+          Barrier::create(BB->getFirstNonPHI());
+          continue;
+        }
+      }
+
+      for (succ_iterator i = succ_begin(BB), e = succ_end(BB); i != e; ++i) {
+        BasicBlock *SuccBB = *i;
+        if (!isPureUniformBlock(SuccBB) &&
+            !Barrier::startsWithBarrier(SuccBB)) {
+          // Create a barrier at the end of the uniform block which can then
+          // potentially start multiple parallel regions.
+          Barrier::create(BB->getTerminator());
+          continue;
+        }
+      }
+    }
+
     auto t = BB->getTerminator();
     const bool isExitNode =
       (t->getNumSuccessors() == 0) && (!Barrier::hasOnlyBarrier(BB));

@@ -1253,6 +1253,8 @@ llvm::Instruction *SubCFGFormation::getLocalIdInRegion(llvm::Instruction *Instr,
   SubCFG *Region = regionOfBlock(Instr->getParent());
 
   std::string VarName = LID_G_NAME(Dim);
+  // Find a load in the region load block to ensure it's defined before the
+  // referred instruction.
   BasicBlock *LoadBB =
       Region != nullptr ? Region->getLoadBB() : Instr->getParent();
   auto *GV = K->getParent()->getOrInsertGlobal(VarName, ST);

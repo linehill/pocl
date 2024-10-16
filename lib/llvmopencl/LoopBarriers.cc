@@ -38,6 +38,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Transforms/Scalar/LoopPassManager.h>
 
 #include "Barrier.h"
+#include "KernelCompilerUtils.h"
 #include "LLVMUtils.h"
 #include "LoopBarriers.h"
 #include "VariableUniformityAnalysis.h"
@@ -94,12 +95,18 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
 #endif
           Barrier::createAtStart(Header);
           Header->setName(Header->getName() + ".phibarrier");
-          // Split the block to  create a replicable region of
-          // the loop contents in case the phi node contains a
-          // branch (that can be to inside the region).
-          //          if (header->getTerminator()->getNumSuccessors() > 1)
-          //    SplitBlock(header, header->getTerminator(), this);
         }
+
+        // TODO: Check that if the header doesn't contain non-uniform
+        // instructions, mark it as pure uniform.
+        // TODO: Mark the increment block as uniform, if there is nothing
+        // else in it. Now we might end up replicating the iteration
+        // variable, which hinders vectorization.
+        // TODO: Might be best to do in a single place once and for all:
+        // Marks blocks that accesses only uniform values as pure uniform. It's
+        // not always a win in case it splits a parallel region with a non-uniform
+        // variable's live range getting split to multiple PRs, causing it to get
+        // context saved.
 
         // Add the barriers on the exiting block and the latches,
         // which might not always be the same if there is computation
@@ -114,8 +121,11 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
         if (Latch != NULL && BrExit != Latch) {
           // This loop has only one latch. Do not check for dominance, we
           // are probably running before BTR.
-          Barrier::createAtEnd(Latch);
-          Latch->setName(Latch->getName() + ".latchbarrier");
+          // Barrier::createAtEnd(Latch);
+          // Latch->setName(Latch->getName() + ".latchbarrier");
+          // TODO: Check that we don't have diverging code in the block
+          // before the loop branch.
+          markAsPureUniformBlock(Latch, "b-loop latch");
           return true;
         }
 
@@ -137,8 +147,11 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
             // (otherwise if might not even belong to this "tail", see
             // forifbarrier1 graph test).
             if (DT.dominates(j->getParent(), Latch2)) {
-              Barrier::createAtEnd(Latch2);
-              Latch2->setName(Latch2->getName() + ".latchbarrier");
+              // Barrier::createAtEnd(Latch2);
+              // Latch2->setName(Latch2->getName() + ".latchbarrier");
+              //  TODO: Check that we don't have diverging code in the block
+              //  before the loop branch.
+              markAsPureUniformBlock(Latch2, "b-loop latch");
             }
           }
         }

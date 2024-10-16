@@ -37,6 +37,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 // include all passes & analysis
 #include "AllocasToEntry.h"
 #include "AutomaticLocals.h"
+#include "Barrier.h"
 #include "BarrierTailReplication.h"
 #include "CanonicalizeBarriers.h"
 #include "DebugHelpers.h"
@@ -49,6 +50,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "InlineKernels.hh"
 #include "IsolateRegions.h"
 #include "KernelCompilerUtils.h"
+#include "LLVMUtils.h"
 #include "LoopBarriers.h"
 #include "MinLegalVecSize.hh"
 #include "OptimizeWorkItemGVars.h"
@@ -64,10 +66,8 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "WorkitemHandlerChooser.h"
 #include "WorkitemLoops.h"
 
-#include "LLVMUtils.h"
 POP_COMPILER_DIAGS
 
-#include "Barrier.h"
 
 #include "pocl_llvm_api.h"
 #include "pocl_spir.h"
@@ -435,6 +435,39 @@ END:
 
 #endif
   return retval;
+}
+
+bool isPureUniformBlock(BasicBlock *BB) {
+  return BB->getTerminator()->hasMetadata(PoCLMDKind::PureUniformBasicBlock);
+}
+
+void markAsPureUniformBlock(BasicBlock *BB, std::string Reason) {
+  BB->getTerminator()->setMetadata(
+      PoCLMDKind::PureUniformBasicBlock,
+      llvm::MDNode::get(BB->getContext(),
+                        {llvm::MDString::get(BB->getContext(), Reason)}));
+}
+
+bool isPureUniformAlloca(llvm::AllocaInst *Alloca) {
+  bool PureUniformAccessesFound = false;
+  size_t NonPUWriteCount = 0;
+  for (Instruction::use_iterator UI = Alloca->use_begin(),
+                                 UE = Alloca->use_end();
+       UI != UE; ++UI) {
+    llvm::StoreInst *Store = dyn_cast<llvm::StoreInst>(UI->getUser());
+    llvm::LoadInst *Load = dyn_cast<llvm::LoadInst>(UI->getUser());
+
+    if (Store == nullptr && Load == nullptr)
+      continue;
+    bool PureUniformBlock = isPureUniformBlock(
+      Store == nullptr ? Load->getParent() : Store->getParent());
+
+    PureUniformAccessesFound |= PureUniformBlock;
+
+    if (!PureUniformBlock && Store != nullptr)
+      NonPUWriteCount++;
+  }
+  return PureUniformAccessesFound && NonPUWriteCount == 0;
 }
 
 void setFuncArgAddressSpaceMD(llvm::Function *F, unsigned ArgIndex,
