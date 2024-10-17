@@ -21,11 +21,17 @@
    THE SOFTWARE.
 */
 
+#ifdef _MSC_VER
+int main() {
+  printf("Skipping: the test has not been ported to MSVC yet.\n");
+  return 77;
+}
+#else
+
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-
 #include <pthread.h>
 
 #include "poclu.h"
@@ -167,3 +173,5 @@ int main()
   printf ("OK\n");
   return EXIT_SUCCESS;
 }
+
+#endif /* !defined(MSC_VER) */
