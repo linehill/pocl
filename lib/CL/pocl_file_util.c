@@ -26,19 +26,20 @@
 */
 
 #ifndef _WIN32
-#define _GNU_SOURCE
-#define _DEFAULT_SOURCE
-#define _BSD_SOURCE
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
+#  define _GNU_SOURCE
+#  define _DEFAULT_SOURCE
+#  define _BSD_SOURCE
+#  include <unistd.h>
+#  include <fcntl.h>
+#  include <dirent.h>
+#  include <libgen.h>
 #else
-#include "vccompat.hpp"
-#ifdef __MINGW32__
-#include <dirent.h>
-#include <fcntl.h>
-#include <unistd.h>
-#endif
+#  include "vccompat.hpp"
+#  ifdef __MINGW32__
+#    include <dirent.h>
+#    include <fcntl.h>
+#    include <unistd.h>
+#  endif
 #endif
 
 #include <sys/types.h>
@@ -420,4 +421,82 @@ pocl_write_tempfile (char *output_path,
   err = close (fd);
 
   return err ? -2 : 0;
+}
+
+char *pocl_parent_path (char *path) {
+  return dirname(path);
+}
+
+pocl_file_type pocl_get_file_type(const char *path) {
+  struct stat st;
+  if (stat (path, &st) != 0)
+    return POCL_FS_STATUS_ERROR;
+
+  if (S_ISREG (st.st_mode))
+    return POCL_FS_REGULAR;
+
+  if (S_ISDIR (st.st_mode))
+    return POCL_FS_DIRECTORY;
+
+  assert(!"TODO: mapping of a non-file/-directory.");
+  return POCL_FS_STATUS_ERROR;
+}
+
+typedef struct dirent_handle_s {
+  DIR* dir;
+  struct dirent *entry;
+} dirent_handle;
+
+int pocl_dir_iterator(const char *path, pocl_dir_iter *iter) {
+  /* pocl_dir_iter variant: iter->handle == NULL || ((dirent_handle *)
+   * iter->handle)->dir != NULL. */
+
+  DIR *d = opendir (path);
+  if (d == NULL) {
+    iter->handle = NULL;
+    return -1;
+  }
+
+  dirent_handle *handle_impl = calloc (1, sizeof(dirent_handle));
+  if (handle_impl == NULL)
+    return -1;
+
+  handle_impl->dir = d;
+  iter->handle = handle_impl;
+  return 1;
+}
+
+int pocl_dir_next_entry(pocl_dir_iter iter) {
+  assert(iter.handle != NULL && "Must call pocl_dir_iterator() first!");
+  dirent_handle *handle_impl = iter.handle;
+  assert(handle_impl->dir != NULL && "Broken invariant!");
+
+  while ((handle_impl->entry = readdir (handle_impl->dir))) {
+    if (strcmp (handle_impl->entry->d_name, ".") == 0) continue;
+    if (strcmp (handle_impl->entry->d_name, "..") == 0) continue;
+    return 0;
+  }
+
+  return -1;
+}
+
+const char *pocl_dir_iter_get_path(pocl_dir_iter iter) {
+  assert(iter.handle != NULL && "Must call pocl_dir_iterator() first!");
+  dirent_handle *handle_impl = iter.handle;
+  assert(handle_impl->entry && "Must call pocl_dir_next_entry() first!");
+  return handle_impl->entry->d_name;
+}
+
+void pocl_release_dir_iterator(pocl_dir_iter *iter) {
+  assert(!iter && "Invalid pocl_dir_iter handle!");
+
+  if (iter->handle == NULL)
+    return;
+
+  dirent_handle *handle_impl = iter->handle;
+  assert(handle_impl->dir != NULL && "Broken invariant!");
+  closedir (handle_impl->dir);
+  free (handle_impl);
+
+  iter->handle = NULL;
 }

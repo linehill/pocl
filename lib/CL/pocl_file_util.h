@@ -24,10 +24,24 @@
 #ifndef POCL_FILE_UTIL_H
 #define POCL_FILE_UTIL_H
 
+#include "pocl_export.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef enum pocl_file_type_e {
+  POCL_FS_STATUS_ERROR = 0,
+  POCL_FS_NOT_FOUND,
+  POCL_FS_REGULAR,
+  POCL_FS_DIRECTORY,
+  /* TODO: Add more when needed. */
+  POCL_FS_UNKNOWN,
+} pocl_file_type;
+
+typedef struct pocl_dir_iter_s {
+  void *handle;
+} pocl_dir_iter;
 
 /* Remove a directory, recursively */
 int pocl_rm_rf(const char* path);
@@ -74,6 +88,42 @@ POCL_EXPORT
 int pocl_mk_tempname (char *output, const char *prefix, const char *suffix,
                       int *ret_fd);
 
+/* Gives parent directory.
+ *
+ * This method follows the behavior of C++
+ * std::filesystem::path::parent_path().
+ *
+ * The given path is modified as well as returned.
+ */
+char *pocl_parent_path (char *path);
+  
+/* Returns the type of the given file.
+ *
+ * On an error returns POCL_FS_STATUS_ERROR.  */
+pocl_file_type pocl_get_file_type(const char *path);
+  
+/* Create object for iterating contents of the given directory path.
+ *
+ * Returns non-zero on an error. Otherwise, returns 0.
+ */
+int pocl_dir_iterator(const char *path, pocl_dir_iter *iter);
+
+/* Gets the next directory entry (or the first one on newly created
+ * iterator). Returns zero if there are no entries left and,
+ * otherwise, non-zero. */
+int pocl_dir_next_entry(pocl_dir_iter iter);
+
+/* Returns the path of the currently pointed directory entry.
+ *
+ * pocl_dir_next_entry() must be called successfully prior calling
+ * this function.  The returned pointer is invalidated on the next
+ * pocl_dir_next_entry() call.  */
+const char *pocl_dir_iter_get_path(pocl_dir_iter iter);
+  
+/* Releases resources allocated for the iterator.  The iterator must have
+ * been created with pocl_dir_iterator() successfully. */
+void pocl_release_dir_iterator(pocl_dir_iter *iter);
+  
 #ifdef __cplusplus
 }
 #endif
