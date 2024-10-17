@@ -64,7 +64,8 @@ struct _pocl_thread_t {
 };
 
 static _pocl_lock_t pocl_init_lock_m;
-pocl_lock_t pocl_init_lock = &pocl_init_lock_m;
+// extern "C" is needed because MSVC seems to mangle global variables.
+extern "C" pocl_lock_t pocl_init_lock = &pocl_init_lock_m;
 
 static std::map<std::thread::id, pocl_thread_t> PoclThreadMap;
 
