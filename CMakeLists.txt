@@ -903,10 +903,22 @@ endif()
 #
 # no-jump-tables is to avoid LLVM optimization passes introducing switch tables,
 # which the variable uniformity analysis cannot analyze
-set(DEFAULT_KERNEL_CL_FLAGS  "-xcl -fno-stack-protector -fPIC -fno-jump-tables ${OPAQUE_PTR_FLAGS}")
-set(DEFAULT_KERNEL_C_FLAGS "-xc -std=c11 -D__CBUILD__ -fno-math-errno -fno-stack-protector -fPIC -fno-jump-tables ${OPAQUE_PTR_FLAGS}")
-set(DEFAULT_KERNEL_CXX_FLAGS "-xc++ -std=c++11 -fno-stack-protector -fPIC -fno-jump-tables ${OPAQUE_PTR_FLAGS}")
 
+# FIXME: match "msvc" environment component in the LLC_TRIPLE. Now assuming
+#        MSVC implies target triple that invokes MSVC toolchain in Clang.
+if (MSVC) 
+  set(DEFAULT_KERNEL_CL_FLAGS  "-xcl -fno-stack-protector ${OPAQUE_PTR_FLAGS}")
+  set(DEFAULT_KERNEL_C_FLAGS "-xc -std=c11 -D__CBUILD__ -fno-math-errno -fno-stack-protector ${OPAQUE_PTR_FLAGS}")
+  set(DEFAULT_KERNEL_CXX_FLAGS "-xc++ -std=c++11 -fno-stack-protector ${OPAQUE_PTR_FLAGS}")
+else()
+  # TODO: is this ok for mingw?
+  set(DEFAULT_KERNEL_CL_FLAGS  "-xcl -fno-stack-protector -fPIC -fno-jump-tables ${OPAQUE_PTR_FLAGS}")
+  set(DEFAULT_KERNEL_C_FLAGS "-xc -std=c11 -D__CBUILD__ -fno-math-errno -fno-stack-protector -fPIC -fno-jump-tables ${OPAQUE_PTR_FLAGS}")
+  set(DEFAULT_KERNEL_CXX_FLAGS "-xc++ -std=c++11 -fno-stack-protector -fPIC -fno-jump-tables ${OPAQUE_PTR_FLAGS}")
+endif()
+
+# TODO: add simple kernel compilation and link tests to expose easy
+#       mistakes of adding unsupported options.
 
 set(EXTRA_KERNEL_FLAGS "" CACHE STRING "Extra arguments to all kernel compilation commands (defaults to empty)")
 set(EXTRA_KERNEL_CL_FLAGS "" CACHE STRING "Extra arguments to kernel CL compiler (defaults to empty)")
@@ -933,7 +945,8 @@ if(UNIX)
   endif()
   set(LIBMATH "-lm")
 elseif(WIN32)
-  if(MINGW)
+  if(MINGW OR MSVC)
+    # For MSVC it is assumed that Clang is used as the linker driver.
     set(DEFAULT_HOST_LD_FLAGS "--shared -nostartfiles")
   endif()
   set(LIBMATH)
