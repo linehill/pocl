@@ -47,8 +47,12 @@ extern const size_t _global_id_z;
 
 /* We generate the global id in WorkitemLoops using the loop iterator to make
    the life easier for loopvec. This will be inlined and removed. */
-size_t
-_Z13get_global_idj (unsigned dim)
+#if _MSC_VER
+/* __identifier is a bit hack as it should only take in C/C++ keywords.  */
+size_t __identifier("?get_global_id@@$$J0YAKI@Z")(unsigned dim)
+#else
+size_t _Z13get_global_idj (unsigned dim)
+#endif
 {
   switch (dim)
     {
