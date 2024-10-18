@@ -173,7 +173,12 @@ endif()
 # yet support mangling for extended vector types (with llvm 3.5)
 # so for now hardcode LLVM_HOST_TARGET to be x86_64-pc with windows
 if(WIN32 AND (NOT MINGW))
-  set(LLVM_HOST_TARGET "x86_64-pc")
+  # Using the following target causes clang to invoke gcc for linking
+  # instead of MSVC's link.exe.
+  # TODO: lower LLVM version condition until the above issue is hit.
+  if (NOT MSVC OR LLVM_VERSION_MAJOR LESS 19)
+    set(LLVM_HOST_TARGET "x86_64-pc")
+  endif()
 endif()
 
 #############################################################
