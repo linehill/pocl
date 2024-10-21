@@ -27,10 +27,8 @@
 #include <sched.h>
 #endif
 
-#include <pthread.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 
 #include "common.h"
 #include "common_driver.h"
@@ -50,7 +48,7 @@ static void* pocl_pthread_driver_thread (void *p);
 
 struct pool_thread_data
 {
-  pocl_thread_t thread __attribute__ ((aligned (HOST_CPU_CACHELINE_SIZE)));
+  pocl_thread_t POCL_ALIGNAS(HOST_CPU_CACHELINE_SIZE) thread;
 
   unsigned long executed_commands;
   /* per-CU (= per-thread) local memory */
@@ -64,14 +62,13 @@ struct pool_thread_data
   unsigned index;
   /* printf buffer*/
   void *printf_buffer;
-} __attribute__ ((aligned (HOST_CPU_CACHELINE_SIZE)));
+};
 
 typedef struct scheduler_data_
 {
-  pocl_cond_t wake_pool __attribute__ ((aligned (HOST_CPU_CACHELINE_SIZE)));
-  pocl_lock_t wq_lock_fast __attribute__ ((aligned (HOST_CPU_CACHELINE_SIZE)));
-  _cl_command_node *work_queue
-      __attribute__ ((aligned (HOST_CPU_CACHELINE_SIZE)));
+  pocl_cond_t POCL_ALIGNAS(HOST_CPU_CACHELINE_SIZE) wake_pool;
+  pocl_lock_t POCL_ALIGNAS(HOST_CPU_CACHELINE_SIZE) wq_lock_fast;
+  _cl_command_node POCL_ALIGNAS(HOST_CPU_CACHELINE_SIZE) *work_queue;
 
   unsigned num_threads;
   unsigned printf_buf_size;
@@ -85,9 +82,8 @@ typedef struct scheduler_data_
   kernel_run_command *kernel_queue;
 #endif
 
-  pocl_barrier_t init_barrier
-    __attribute__ ((aligned (HOST_CPU_CACHELINE_SIZE)));
-} scheduler_data __attribute__ ((aligned (HOST_CPU_CACHELINE_SIZE)));
+  pocl_barrier_t POCL_ALIGNAS(HOST_CPU_CACHELINE_SIZE) init_barrier;
+} scheduler_data;
 
 static scheduler_data scheduler;
 
@@ -262,8 +258,10 @@ work_group_scheduler (kernel_run_command *k,
 {
   pocl_kernel_metadata_t *meta = k->kernel->meta;
 
-  void *arguments[meta->num_args + meta->num_locals + 1];
-  void *arguments2[meta->num_args + meta->num_locals + 1];
+  const size_t num_args = meta->num_args + meta->num_locals + 1;
+  void *arguments = alloca(sizeof(void *) * num_args);
+  void *arguments2 = alloca(sizeof(void *) * num_args);
+  
   struct pocl_context pc;
   unsigned i;
   unsigned start_index;
@@ -717,7 +715,7 @@ pocl_pthread_driver_thread (void *p)
         {
           pocl_aligned_free (td->printf_buffer);
           pocl_aligned_free (td->local_mem);
-          pthread_exit (NULL);
+          return NULL;
         }
     }
 }
