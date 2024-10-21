@@ -31,7 +31,7 @@
 #define POCL_CQ_PROFILING_MAX_KERNELS 1000
 
 int pocl_cq_profiling_enabled = 0;
-static unsigned cq_events_collected = 0;
+static uint64_t cq_events_collected = 0;
 static cl_event *profiled_cq_events = NULL;
 
 struct kernel_stats
@@ -53,7 +53,7 @@ order_by_time (const void *a, const void *b)
 }
 
 static void
-pocl_atexit ()
+pocl_atexit (void)
 {
   unsigned long total_time = 0;
   unsigned long total_commands = 0;
