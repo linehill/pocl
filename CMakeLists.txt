@@ -48,12 +48,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(MSVC)
-  # Enable __VA_ARGS__ for C++ on MSVC. For some reason the feature, conformant
-  # since C++11, is not enabled by default.
-  
-  # TODO: Currently doesn't work because the variable gets messed up
-  #       somewhere causing compile/link checks to fail.
-  #set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} /Zc:preprocessor)
+  # Enables __VA_ARGS__ for C++ on MSVC. For some reason the feature, conformant
+  # since C++11, is not enabled by default in the MSVC compiler.
+  add_compile_options(/Zc:preprocessor)
 endif()
 
 # if variable FEATURE_X isn't defined, sets it to DEFAULT_FEATURE_X;
