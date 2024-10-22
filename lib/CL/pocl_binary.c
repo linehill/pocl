@@ -342,7 +342,7 @@ recursively_serialize_path (char* path,
   switch (pocl_get_file_type(path))
     {
     default:
-      POCL_MSG_WARN ("Skipping non-file/-directory for binary serialization: '%s'", path);
+      POCL_MSG_WARN ("Skipping non-file/-directory for binary serialization: '%s'\n", path);
       return buffer;
     case POCL_FS_REGULAR:
       return serialize_file (path, basedir_offset, buffer);
@@ -356,7 +356,7 @@ recursively_serialize_path (char* path,
 	pocl_dir_iter d;
 	if (pocl_dir_iterator(path, &d))
 	  {
-	    POCL_MSG_WARN("Failed to scan directory: %s", path);
+	    POCL_MSG_WARN("Failed to scan directory: '%s'\n", path);
 	    return buffer;
 	  }
 	while (pocl_dir_next_entry(d))
