@@ -440,7 +440,7 @@ const char *pocl_dir_iter_get_path(pocl_dir_iter iter) {
 }
 
 void pocl_release_dir_iterator(pocl_dir_iter *iter) {
-  assert(!iter && "Invalid pocl_dir_iter handle!");
+  assert(iter && "Invalid pocl_dir_iter handle!");
   if (!iter->handle)
     return;
   delete static_cast<DirIteratorHandle *>(iter->handle);
