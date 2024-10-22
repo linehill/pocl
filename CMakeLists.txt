@@ -942,9 +942,12 @@ if(UNIX)
   endif()
   set(LIBMATH "-lm")
 elseif(WIN32)
-  if(MINGW OR MSVC)
-    # For MSVC it is assumed that Clang is used as the linker driver.
+  if(MINGW)
     set(DEFAULT_HOST_LD_FLAGS "--shared -nostartfiles")
+  elseif (MSVC)
+    # -nostartfiles triggers the following error during final linking:
+    # error LNK2001: unresolved external symbol _DllMainCRTStartup
+    set(DEFAULT_HOST_LD_FLAGS "--shared")
   endif()
   set(LIBMATH)
 endif()
