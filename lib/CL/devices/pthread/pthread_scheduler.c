@@ -259,9 +259,9 @@ work_group_scheduler (kernel_run_command *k,
   pocl_kernel_metadata_t *meta = k->kernel->meta;
 
   const size_t num_args = meta->num_args + meta->num_locals + 1;
-  void *arguments = alloca(sizeof(void *) * num_args);
-  void *arguments2 = alloca(sizeof(void *) * num_args);
-  
+  void **arguments = alloca(sizeof(void *) * num_args);
+  void **arguments2 = alloca(sizeof(void *) * num_args);
+
   struct pocl_context pc;
   unsigned i;
   unsigned start_index;
@@ -275,7 +275,7 @@ work_group_scheduler (kernel_run_command *k,
   assert (end_index >= start_index);
 
   pocl_setup_kernel_arg_array_with_locals (
-      (void **)&arguments, (void **)&arguments2, k, thread_data->local_mem,
+      (void **)arguments, (void **)arguments2, k, thread_data->local_mem,
       scheduler.local_mem_size);
   memcpy (&pc, &k->pc, sizeof (struct pocl_context));
 
@@ -331,7 +331,7 @@ work_group_scheduler (kernel_run_command *k,
   pocl_write_printf_buffer ((char *)pc.printf_buffer, position);
 #endif
 
-  pocl_free_kernel_arg_array_with_locals ((void **)&arguments, (void **)&arguments2,
+  pocl_free_kernel_arg_array_with_locals ((void **)arguments, (void **)arguments2,
                                      k);
 
   return 1;
