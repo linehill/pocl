@@ -29,11 +29,13 @@ extern const size_t _num_groups_x;
 extern const size_t _num_groups_y;
 extern const size_t _num_groups_z;
 
-size_t _CL_OVERLOADABLE _CL_READNONE _CL_OPTNONE
+size_t
 #if _MSC_VER
 /* __identifier is a bit hack as it should only take in C/C++ keywords.  */
+ _CL_READNONE _CL_OPTNONE
  __identifier("?get_global_size@@$$J0YAKI@Z")(unsigned int dimindx)
 #else
+ _CL_OVERLOADABLE _CL_READNONE _CL_OPTNONE
 get_global_size (unsigned int dimindx)
 #endif
 {

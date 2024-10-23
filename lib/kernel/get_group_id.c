@@ -26,11 +26,13 @@ extern const size_t _group_id_x;
 extern const size_t _group_id_y;
 extern const size_t _group_id_z;
 
-size_t _CL_OVERLOADABLE _CL_READNONE _CL_OPTNONE
+size_t
 #if _MSC_VER
 /* __identifier is a bit hack as it should only take in C/C++ keywords.  */
+ _CL_READNONE _CL_OPTNONE
  __identifier("?get_group_id@@$$J0YAKI@Z")(unsigned int dimindx)
 #else
+ _CL_OVERLOADABLE _CL_READNONE _CL_OPTNONE
 get_group_id (unsigned int dimindx)
 #endif
 {

@@ -26,8 +26,14 @@ extern const size_t _local_id_x;
 extern const size_t _local_id_y;
 extern const size_t _local_id_z;
 
-size_t _CL_OVERLOADABLE _CL_READNONE _CL_OPTNONE
+size_t
+#ifdef _MSC_VER
+_CL_READNONE _CL_OPTNONE
+__identifier("?get_local_id@@$$J0YAKI@Z")(unsigned int dimindx)
+#else
+_CL_OVERLOADABLE _CL_READNONE _CL_OPTNONE
 get_local_id (unsigned int dimindx)
+#endif
 {
   switch(dimindx)
     {
