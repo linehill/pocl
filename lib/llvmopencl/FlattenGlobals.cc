@@ -42,6 +42,7 @@ POP_COMPILER_DIAGS
 #include <string>
 
 #include "pocl_llvm_api.h"
+#include "KernelCompilerUtils.h"
 
 //#define DEBUG_FLATTEN
 
@@ -102,7 +103,7 @@ static bool flattenGlobals(Module &M) {
     markFunctionAlwaysInline(F);
   }
 
-  StringRef barrier("_Z7barrierj");
+  StringRef barrier(BARRIER_BUILTIN_NAME);
   for (llvm::Module::iterator i = M.begin(), e = M.end(); i != e; ++i) {
     llvm::Function *f = &*i;
     if (f->isDeclaration())

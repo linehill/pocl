@@ -903,10 +903,11 @@ endif()
 
 # FIXME: match "msvc" environment component in the LLC_TRIPLE. Now assuming
 #        MSVC implies target triple that invokes MSVC toolchain in Clang.
-if (MSVC) 
+if (MSVC)
   set(DEFAULT_KERNEL_CL_FLAGS  "-xcl -fno-stack-protector ${OPAQUE_PTR_FLAGS}")
   set(DEFAULT_KERNEL_C_FLAGS "-xc -std=c11 -D__CBUILD__ -fno-math-errno -fno-stack-protector ${OPAQUE_PTR_FLAGS}")
   set(DEFAULT_KERNEL_CXX_FLAGS "-xc++ -std=c++11 -fno-stack-protector ${OPAQUE_PTR_FLAGS}")
+  set(KERNEL_TRIPLE_TARGETS_MSVC_TOOLCHAIN 1)
 else()
   # TODO: is this ok for mingw?
   set(DEFAULT_KERNEL_CL_FLAGS  "-xcl -fno-stack-protector -fPIC -fno-jump-tables ${OPAQUE_PTR_FLAGS}")

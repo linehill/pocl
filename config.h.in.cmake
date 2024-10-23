@@ -287,4 +287,6 @@
 
 #cmakedefine RENAME_POCL
 
+#cmakedefine KERNEL_TRIPLE_TARGETS_MSVC_TOOLCHAIN
+
 #endif
