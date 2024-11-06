@@ -170,22 +170,18 @@ append_to_build_log (cl_program program, unsigned device_i, const char *format,
  * modded_options[size] + link_options are preallocated outputs
  */
 static cl_int
-process_options (const char *options, char *modded_options, char *link_options,
-                 cl_program program, int compiling, int linking,
-                 int *create_library, unsigned *flush_denorms,
-                 int *requires_correctly_rounded_sqrt_div, int *spir_build,
-                 cl_version *cl_c_version, size_t size)
+process_options (const char *options,
+                 char *link_options,
+                 cl_program program,
+                 int compiling,
+                 int linking,
+
+                 size_t size)
 {
   cl_int error;
   char *token = NULL;
   char *saveptr = NULL;
-
-  *create_library = 0;
-  *flush_denorms = 0;
-  *cl_c_version = 0;
-  *requires_correctly_rounded_sqrt_div = 0;
-  *spir_build = 0;
-  int enable_link_options = 0;
+  char *modded_options = program->compiler_options;
   link_options[0] = 0;
   modded_options[0] = 0;
   int ret_error = (linking ? (compiling ? CL_INVALID_BUILD_OPTIONS
@@ -195,6 +191,8 @@ process_options (const char *options, char *modded_options, char *link_options,
   assert (options);
   assert (modded_options);
   assert (compiling || linking);
+  pocl_compile_options_t *parsed = &program->parsed_options;
+  memset (parsed, 0, sizeof (pocl_compile_options_t));
 
   char replace_me = 0;
 
@@ -216,6 +214,7 @@ process_options (const char *options, char *modded_options, char *link_options,
     {
       /* check if parameter is supported compiler parameter */
       if (strncmp (token, "-cl", 3) == 0 || strncmp (token, "-w", 2) == 0
+          || strncmp (token, "-g", 2) == 0
           || strncmp (token, "-Werror", 7) == 0)
         {
           if (strstr (cl_program_link_options, token))
@@ -224,7 +223,7 @@ process_options (const char *options, char *modded_options, char *link_options,
                * and only with -enable-link-options */
               if (linking && (!compiling))
                 {
-                  if (!enable_link_options)
+                  if (!parsed->enable_link_options)
                     {
                       APPEND_TO_OPTION_BUILD_LOG (
                           "Not compiling but link options were not enabled, "
@@ -237,34 +236,102 @@ process_options (const char *options, char *modded_options, char *link_options,
                 }
               if (strstr (token, "-cl-denorms-are-zero"))
                 {
-                  *flush_denorms = 1;
+                  parsed->cl_denorms_are_zero = 1;
                 }
               if (strstr (token, "-cl-fp32-correctly-rounded-divide-sqrt"))
                 {
-                  *requires_correctly_rounded_sqrt_div = 1;
+                  parsed->cl_fp32_correctly_rounded_divide_sqrt = 1;
                 }
             }
 
           if (strstr (cl_parameters, token))
             {
               /* the LLVM API call pushes the parameters directly to the
-                 frontend without using -Xclang */
+               * frontend without using -Xclang; parse the option but leave
+               * token untouched */
+              if (strcmp (token, "-cl-single-precision-constant") == 0)
+                {
+                  parsed->cl_single_precision_constant = 1;
+                }
+              if (strcmp (token, "-cl-fp32-correctly-rounded-divide-sqrt")
+                  == 0)
+                {
+                  parsed->cl_fp32_correctly_rounded_divide_sqrt = 1;
+                }
+              if (strcmp (token, "-cl-opt-disable") == 0)
+                {
+                  parsed->cl_opt_disable = 1;
+                }
+              if (strcmp (token, "-cl-mad-enable") == 0)
+                {
+                  parsed->cl_mad_enable = 1;
+                }
+              if (strcmp (token, "-cl-unsafe-math-optimizations") == 0)
+                {
+                  parsed->cl_unsafe_math_optimizations = 1;
+                }
+              if (strcmp (token, "-cl-finite-math-only") == 0)
+                {
+                  parsed->cl_finite_math_only = 1;
+                }
+              if (strcmp (token, "-cl-fast-relaxed-math") == 0)
+                {
+                  parsed->cl_fast_relaxed_math = 1;
+                }
+              if (strcmp (token, "-cl-kernel-arg-info") == 0)
+                {
+                  parsed->cl_kernel_arg_info = 1;
+                }
+              if (strcmp (token, "-cl-strict-aliasing") == 0)
+                {
+                  parsed->cl_strict_aliasing = 1;
+                }
+              if (strcmp (token, "-cl-denorms-are-zero") == 0)
+                {
+                  // LLVM 11 has removed "-cl-denorms-are-zero" option
+                  // https://reviews.llvm.org/D69878
+                  parsed->cl_denorms_are_zero = 1;
+                  token = "-fdenormal-fp-math=positive-zero";
+                }
+              if (strcmp (token, "-cl-no-signed-zeros") == 0)
+                {
+                  parsed->cl_no_signed_zeros = 1;
+                }
+              if (strcmp (token, "-w") == 0)
+                {
+                  parsed->warn = 1;
+                }
+              if (strcmp (token, "-g") == 0)
+                {
+                  parsed->debug = 1;
+                }
+              if (strcmp (token, "-Werror") == 0)
+                {
+                  parsed->Werror = 1;
+                }
 
-            // LLVM 11 has removed "-cl-denorms-are-zero" option
-            // https://reviews.llvm.org/D69878
-            if (strncmp(token, "-cl-denorms-are-zero", 20) == 0) {
-                token = "-fdenormal-fp-math=positive-zero";
-            }
-
-            if (strncmp (token, "-cl-std=CL", 10) == 0)
-            {
-                unsigned major = token[10] - '0';
-                unsigned minor = token[12] - '0';
-                *cl_c_version = CL_MAKE_VERSION (major, minor, 0);
-            }
+              if (strncmp (token, "-cl-std=CL", 10) == 0)
+                {
+                  unsigned major = token[10] - '0';
+                  unsigned minor = token[12] - '0';
+                  parsed->cl_c_version = CL_MAKE_VERSION (major, minor, 0);
+                }
             }
           else if (strstr (cl_parameters_not_yet_supported_by_clang, token))
             {
+              if (strcmp (token, "-cl-uniform-work-group-size") == 0)
+                {
+                  parsed->cl_uniform_work_group_size = 1;
+                }
+              if (strcmp (token, "-cl-no-subgroup-ifp") == 0)
+                {
+                  parsed->cl_no_subgroup_ifp = 1;
+                }
+              if (strcmp (token, "-cl-intel-no-prera-scheduling") == 0)
+                {
+                  parsed->cl_intel_no_prera_scheduling = 1;
+                };
+
               APPEND_TO_OPTION_BUILD_LOG (
                   "This build option is not yet supported by clang: %s\n",
                   token);
@@ -278,17 +345,14 @@ process_options (const char *options, char *modded_options, char *link_options,
               goto ERROR;
             }
         }
-      else if (strncmp (token, "-g", 2) == 0)
-        {
-          APPEND_TOKEN ();
-        }
       else if (strncmp (token, "-D", 2) == 0 || strncmp (token, "-I", 2) == 0)
         {
           APPEND_TOKEN();
-          /* if there is a space in between, then next token is part
-             of the option */
+          /* if there is a space in between, then next token is part of the
+           * option */
           if (strlen (token) == 2)
             token = strtok_r (NULL, " ", &saveptr);
+            // continue with default action - append token
           else
             {
               token = strtok_r (NULL, " ", &saveptr);
@@ -315,7 +379,8 @@ process_options (const char *options, char *modded_options, char *link_options,
               goto ERROR;
             }
           else
-            *spir_build = 1;
+            parsed->Xspir = 1;
+          // start parsing next token without appending this one
           token = strtok_r (NULL, " ", &saveptr);
           continue;
         }
@@ -330,7 +395,8 @@ process_options (const char *options, char *modded_options, char *link_options,
               goto ERROR;
             }
           else
-            *spir_build = 1;
+            parsed->Xspir = 1;
+          // start parsing next token without appending this one
           token = strtok_r (NULL, " ", &saveptr);
           continue;
         }
@@ -343,7 +409,8 @@ process_options (const char *options, char *modded_options, char *link_options,
               error = ret_error;
               goto ERROR;
             }
-          *create_library = 1;
+          parsed->create_library = 1;
+          // start parsing next token without appending this one
           token = strtok_r (NULL, " ", &saveptr);
           continue;
         }
@@ -356,7 +423,7 @@ process_options (const char *options, char *modded_options, char *link_options,
               error = ret_error;
               goto ERROR;
             }
-          if (!(*create_library))
+          if (!(parsed->create_library))
             {
               APPEND_TO_OPTION_BUILD_LOG ("\"-enable-link-options\" flag is "
                                           "only valid when -create-library "
@@ -364,7 +431,8 @@ process_options (const char *options, char *modded_options, char *link_options,
               error = ret_error;
               goto ERROR;
             }
-          enable_link_options = 1;
+          parsed->enable_link_options = 1;
+          // start parsing next token without appending this one
           token = strtok_r (NULL, " ", &saveptr);
           continue;
         }
@@ -460,6 +528,7 @@ clean_program_on_rebuild (cl_program program, int from_error)
   program->num_kernels = 0;
   program->build_status = CL_BUILD_NONE;
   program->binary_type = CL_PROGRAM_BINARY_TYPE_NONE;
+  memset (&program->parsed_options, 0, sizeof (pocl_compile_options_t));
 
   for (i = 0; i < program->num_devices;
        ++i) // TODO associated_num_devices or not ???
@@ -620,6 +689,7 @@ check_device_supports (cl_device_id device, cl_version cl_c_version)
     }
 }
 
+#define OPTION(X) program->parsed_options.X
 cl_int
 compile_and_link_program(int compile_program,
                          int link_program,
@@ -637,12 +707,8 @@ compile_and_link_program(int compile_program,
                          void *user_data)
 {
   char link_options[512];
-  int errcode, error;
-  int create_library = 0;
-  int requires_cr_sqrt_div = 0;
   int spir_build = 0;
-  cl_version cl_c_version = 0;
-  unsigned flush_denorms = 0;
+  int errcode, error;
   cl_device_id *unique_devlist = NULL;
   unsigned device_i = 0, actually_built = 0;
   size_t i;
@@ -713,10 +779,8 @@ compile_and_link_program(int compile_program,
       i = strlen (temp_options);
       size_t size = i + 512; /* add some space for pocl-added options */
       program->compiler_options = (char *)malloc (size);
-      errcode = process_options (
-          temp_options, program->compiler_options, link_options, program,
-          compile_program, link_program, &create_library, &flush_denorms,
-          &requires_cr_sqrt_div, &spir_build, &cl_c_version, size);
+      errcode = process_options (temp_options, link_options, program,
+                                 compile_program, link_program, size);
       if (errcode != CL_SUCCESS)
         goto ERROR_CLEAN_OPTIONS;
     }
@@ -725,12 +789,11 @@ compile_and_link_program(int compile_program,
      When creating a SPIR-V program via clCreateProgramWithIL, it's not
      needed and we just assume if the program_il blob is there, we want
      to also build it. */
-  spir_build = spir_build || program->program_il != NULL;
+  spir_build = OPTION (Xspir) || program->program_il != NULL;
 
   POCL_MSG_PRINT_LLVM ("building program with options %s\n",
                        program->compiler_options);
 
-  program->flush_denorms = flush_denorms;
   clean_program_on_rebuild (program, 0);
 
   /* adjust device list to what we're building for */
@@ -757,7 +820,7 @@ compile_and_link_program(int compile_program,
    * CL_PROGRAM_BINARY_TYPE_LIBRARY.
    */
   program->binary_type = CL_PROGRAM_BINARY_TYPE_EXECUTABLE;
-  if (create_library)
+  if (program->parsed_options.create_library)
     program->binary_type = CL_PROGRAM_BINARY_TYPE_LIBRARY;
   if (compile_program && !link_program)
     program->binary_type = CL_PROGRAM_BINARY_TYPE_COMPILED_OBJECT;
@@ -793,18 +856,19 @@ compile_and_link_program(int compile_program,
     {
       cl_device_id device = program->devices[device_i];
 
-      if (!pocl_get_bool_option ("POCL_IGNORE_CL_STD", 0) && cl_c_version
-          && check_device_supports (device, cl_c_version))
+      if (!pocl_get_bool_option ("POCL_IGNORE_CL_STD", 0)
+          && OPTION (cl_c_version)
+          && check_device_supports (device, OPTION (cl_c_version)))
         {
           APPEND_TO_BUILD_LOG_GOTO (
-              build_error_code,
-              "Build option -cl-std specified OpenCL C version %u.%u,"
-              "but device %s doesn't support that OpenCL C version.\n",
-              CL_VERSION_MAJOR (cl_c_version), CL_VERSION_MINOR (cl_c_version),
-              device->short_name);
+            build_error_code,
+            "Build option -cl-std specified OpenCL C version %u.%u,"
+            "but device %s doesn't support that OpenCL C version.\n",
+            CL_VERSION_MAJOR (OPTION (cl_c_version)),
+            CL_VERSION_MINOR (OPTION (cl_c_version)), device->short_name);
         }
 
-      if (requires_cr_sqrt_div
+      if (OPTION (cl_fp32_correctly_rounded_divide_sqrt)
           && !(device->single_fp_config & CL_FP_CORRECTLY_ROUNDED_DIVIDE_SQRT))
         APPEND_TO_BUILD_LOG_GOTO (build_error_code,
                                   REQUIRES_CR_SQRT_DIV_ERR " %s\n",
@@ -855,9 +919,9 @@ compile_and_link_program(int compile_program,
                                       "not support linking programs\n",
                                       device->long_name);
 
-          error = device->ops->link_program (program, device_i,
-                                             num_input_programs,
-                                             input_programs, create_library);
+          error = device->ops->link_program (
+            program, device_i, num_input_programs, input_programs,
+            OPTION (create_library));
           if (error != CL_SUCCESS)
             APPEND_TO_BUILD_LOG_GOTO (CL_LINK_PROGRAM_FAILURE,
                                       "Device %s failed to link the program\n",
@@ -874,8 +938,9 @@ compile_and_link_program(int compile_program,
                 device->long_name);
 
           error = device->ops->build_source (
-              program, device_i, num_input_headers, input_headers,
-              header_include_names, (create_library ? 0 : link_program));
+            program, device_i, num_input_headers, input_headers,
+            header_include_names,
+            (OPTION (create_library) ? 0 : link_program));
 
           if (error != CL_SUCCESS)
             {
@@ -907,8 +972,8 @@ compile_and_link_program(int compile_program,
                                       device->short_name);
 
           error = device->ops->build_binary (
-              program, device_i, (create_library ? 0 : link_program),
-              spir_build);
+            program, device_i, (OPTION (create_library) ? 0 : link_program),
+            spir_build);
 
           if (error != CL_SUCCESS)
             {

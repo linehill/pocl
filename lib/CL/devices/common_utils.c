@@ -170,7 +170,7 @@ pocl_cpu_setup_rm_and_ftz (cl_device_id dev, cl_program prog)
     = (dev->half_fp_config | dev->single_fp_config | dev->double_fp_config)
       & CL_FP_DENORM;
   if (supports_any_denorms)
-    pocl_set_ftz (prog->flush_denorms);
+    pocl_set_ftz (prog->parsed_options.cl_denorms_are_zero);
   else
     pocl_set_ftz (1);
   /* Rounding mode change is deprecated & only supported by OpenCL 1.0 */

@@ -704,7 +704,7 @@ pocl_binary_serialize(cl_program program, unsigned device_i, size_t *size)
   BUFFER_STORE(POCLCC_VERSION, uint32_t);
   BUFFER_STORE(num_kernels, uint32_t);
   uint64_t flags = POCL_BINARY_HAS_PROG_SCOPE_VARS;
-  if (program->flush_denorms)
+  if (program->parsed_options.cl_denorms_are_zero)
     flags |= POCL_BINARY_FLAG_FLUSH_DENORMS;
   flags |= ((uint64_t)program->binary_type << 32);
   BUFFER_STORE (flags, uint64_t);
@@ -771,7 +771,8 @@ pocl_binary_deserialize(cl_program program, unsigned device_i)
 
   pocl_binary b;
   buffer = read_header(&b, buffer);
-  program->flush_denorms = (b.flags & POCL_BINARY_FLAG_FLUSH_DENORMS);
+  program->parsed_options.cl_denorms_are_zero
+    = (b.flags & POCL_BINARY_FLAG_FLUSH_DENORMS);
   program->binary_type = (b.flags >> 32);
   program->global_var_total_size[device_i] = b.program_scope_var_bytes;
 

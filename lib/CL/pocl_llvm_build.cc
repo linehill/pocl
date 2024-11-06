@@ -198,7 +198,7 @@ static bool generateProgramBC(PoclLLVMContextData *Context, llvm::Module *Mod,
   std::string Opts;
   if (Program->compiler_options)
     Opts.assign(Program->compiler_options);
-  bool DebugRequested = (Opts.find("-g") != std::string::npos);
+  bool DebugRequested = Program->parsed_options.debug != 0;
   if (link(Mod, BuiltinLib, Log, Device, !DebugRequested))
     return true;
 
@@ -367,10 +367,10 @@ int pocl_llvm_build_program(cl_program program,
     }
 
 #if !(defined(__x86_64__) && defined(__GNUC__))
-  if (program->flush_denorms) {
-    POCL_MSG_WARN("flush to zero is currently only implemented for "
-                  "x86-64 & gcc/clang, ignoring flag\n");
-  }
+    if (program->parsed_options.cl_denorms_are_zero) {
+      POCL_MSG_WARN("flush to zero is currently only implemented for "
+                    "x86-64 & gcc/clang, ignoring flag\n");
+    }
 #endif
 
   /* temp dir takes preference */
@@ -410,10 +410,9 @@ int pocl_llvm_build_program(cl_program program,
     fp_contract = "on";
   }
 
-  size_t fastmath_flag = user_options.find("-cl-fast-relaxed-math");
-
-  if (fastmath_flag != std::string::npos) {
+  if (program->parsed_options.cl_fast_relaxed_math) {
 #ifdef ENABLE_CONFORMANCE
+    size_t fastmath_flag = user_options.find("-cl-fast-relaxed-math");
     user_options.replace(fastmath_flag, 21,
                          "-cl-finite-math-only -cl-unsafe-math-optimizations");
 #endif
@@ -421,10 +420,10 @@ int pocl_llvm_build_program(cl_program program,
     fp_contract = "fast";
   }
 
-  size_t unsafemath_flag = user_options.find("-cl-unsafe-math-optimizations");
-
-  if (unsafemath_flag != std::string::npos) {
+  if (program->parsed_options.cl_fast_relaxed_math ||
+      program->parsed_options.cl_unsafe_math_optimizations) {
 #ifdef ENABLE_CONFORMANCE
+    size_t unsafemath_flag = user_options.find("-cl-unsafe-math-optimizations");
     // this should be almost the same but disables -freciprocal-math.
     // required for conformance_math_divide test to pass with OpenCL 3.0
     user_options.replace(unsafemath_flag, 29,

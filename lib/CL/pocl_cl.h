@@ -1892,6 +1892,31 @@ typedef struct pocl_kernel_metadata_s
   void **data;
 } pocl_kernel_metadata_t;
 
+typedef struct pocl_compile_options_s
+{
+  cl_version cl_c_version; // -cl-std=CLx.y
+  char cl_single_precision_constant;
+  char cl_fp32_correctly_rounded_divide_sqrt;
+  char cl_opt_disable;
+  char cl_mad_enable;
+  char cl_unsafe_math_optimizations;
+  char cl_finite_math_only;
+  char cl_fast_relaxed_math;
+  char cl_kernel_arg_info;
+  char cl_strict_aliasing;
+  char cl_denorms_are_zero;
+  char cl_no_signed_zeros;
+  char warn;
+  char debug;
+  char Werror;
+  char Xspir;
+  char create_library;
+  char enable_link_options;
+  char cl_uniform_work_group_size;
+  char cl_no_subgroup_ifp;
+  char cl_intel_no_prera_scheduling;
+} pocl_compile_options_t;
+
 #define MAIN_PROGRAM_LOG_SIZE 6400
 
 struct _cl_program {
@@ -1899,8 +1924,6 @@ struct _cl_program {
   POCL_OBJECT;
   /* queries */
   cl_context context;
-  /* -cl-denorms-are-zero build option */
-  unsigned flush_denorms;
 
   /* list of devices "associated with the program" (quote from Specs)
    * ... IOW for which we *can* build the program.
@@ -1917,6 +1940,8 @@ struct _cl_program {
   char *source;
   /* The options in the last clBuildProgram call for this Program. */
   char *compiler_options;
+  /* Parsed program compile options */
+  pocl_compile_options_t parsed_options;
 
   /* per-device binaries, in device-specific format */
   size_t *binary_sizes;

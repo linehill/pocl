@@ -3821,10 +3821,7 @@ int Level0Device::createSpirvProgram(cl_program Program, cl_uint DeviceI) {
   POCL_MSG_PRINT_LEVEL0("createProgram | using JIT: %s\n",
                         (JITCompilation ? "YES" : "NO"));
 
-  std::string CompilerOptions(
-      Program->compiler_options != nullptr ? Program->compiler_options : "");
-  bool Optimize =
-      (CompilerOptions.find("-cl-disable-opt") == std::string::npos);
+  bool Optimize = Program->parsed_options.cl_opt_disable == 0;
 
   std::string BuildLog;
   Level0Program *ProgramData = Driver->getJobSched().createProgram(
