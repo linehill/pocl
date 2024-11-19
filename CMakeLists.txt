@@ -385,10 +385,6 @@ option(RENAME_POCL "Rename PoCL's OpenCL functions to PO<ocl_function>. Allows a
 
 ##########################################################
 
-if(MSVC AND BUILD_SHARED_LIBS)
-  message(FATAL_ERROR "Building shared libraries are not supported on MSVC yet!")
-endif()
-
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
   set(HOST_DEVICE_ADDRESS_BITS 64)
 elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
@@ -1310,9 +1306,11 @@ else()
         pkg_check_modules(OPENCL OpenCL>=1.2)
       endif()
       if(NOT OPENCL_FOUND)
-        find_library(OPENCL_LIBRARIES OpenCL)
+        message(STATUS "XXX find OpenCL lib.")
+        find_library(OPENCL_LIBRARIES NAMES OpenCL)
         # version check the found library
         if(OPENCL_LIBRARIES)
+	  message(STATUS "XXX check clEnqueueFillImage")
           set(CMAKE_REQUIRED_LIBRARIES "${OPENCL_LIBRARIES}")
           include(CheckFunctionExists)
           unset (OPENCL_FOUND CACHE)
@@ -1345,7 +1343,7 @@ setup_cached_var(ENABLE_ICD "Using an ICD loader"
   "Requested build with icd, but ICD loader not found! some examples will not work.."
   "ICD loader found, but requested build without it")
 
-if(ENABLE_ICD)
+if(ENABLE_ICD) 
   # only meaningful to link tests with ocl-icd
   set(TESTS_USE_ICD ${HAVE_OCL_ICD})
 else()
@@ -2476,7 +2474,6 @@ if (ENABLE_LLVM)
   MESSAGE(STATUS "LLVM_CPPFLAGS: ${LLVM_CPPFLAGS}")
   MESSAGE(STATUS "LLVM_LDFLAGS: ${LLVM_LDFLAGS}")
   MESSAGE(STATUS "LLVM_LIBDIR: ${LLVM_LIBDIR}")
-  MESSAGE(STATUS "LLVM_INCLUDEDIR: ${LLVM_INCLUDEDIR}")
   MESSAGE(STATUS "LLVM_SRC_ROOT: ${LLVM_SRC_ROOT}")
   MESSAGE(STATUS "LLVM_OBJ_ROOT: ${LLVM_OBJ_ROOT}")
   MESSAGE(STATUS "LLVM_INCLUDE_DIRS: ${LLVM_INCLUDE_DIRS}")
