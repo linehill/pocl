@@ -1282,20 +1282,57 @@ const char* dtype2elemtype(cl_tensor_datatype_exp dtype) {
   return nullptr;
 }
 
-const char* layout2str(cl_tensor_layout_ml_type_exp l) {
-  switch (l) {
-    case CL_TENSOR_LAYOUT_ML_C_EXP: return "C";
-    case CL_TENSOR_LAYOUT_ML_NC_EXP: return "NC";
-    case CL_TENSOR_LAYOUT_ML_CN_EXP: return "CN";
-    case CL_TENSOR_LAYOUT_ML_HW_EXP: return "HW";
-    case CL_TENSOR_LAYOUT_ML_WH_EXP: return "WH";
-    case CL_TENSOR_LAYOUT_ML_CHW_EXP: return "CHW";
-    case CL_TENSOR_LAYOUT_ML_NCHW_EXP: return "NCHW";
-    case CL_TENSOR_LAYOUT_ML_NHWC_EXP: return "NHWC";
-    default: return "NULL";
-  }
-}
+const char *layout2str(const cl_tensor_desc_exp &Desc) {
 
+  if (Desc.layout_type == CL_TENSOR_LAYOUT_BLAS_EXP) {
+    auto *BlasLayout =
+        static_cast<const cl_tensor_layout_blas_exp *>(Desc.layout);
+    std::vector<int> LeadingDims(BlasLayout->leading_dims,
+                                 BlasLayout->leading_dims + Desc.rank);
+
+    if (Desc.rank == 1)
+      return "C";
+    if (LeadingDims == std::vector<int>{1})
+      return "NC";
+    if (LeadingDims == std::vector<int>{0})
+      return "CN";
+    if (LeadingDims == std::vector<int>{2, 1})
+      return "CHW";
+    if (LeadingDims == std::vector<int>{3, 2, 1})
+      return "NCHW";
+    if (LeadingDims == std::vector<int>{1, 3, 2})
+      return "NHWC";
+    // TODO: Complete this.
+    return "NULL";
+  }
+
+  if (Desc.layout_type == CL_TENSOR_LAYOUT_ML_EXP) {
+    auto *MLLayout = static_cast<const cl_tensor_layout_ml_exp *>(Desc.layout);
+    switch (MLLayout->ml_type) {
+    case CL_TENSOR_LAYOUT_ML_C_EXP:
+      return "C";
+    case CL_TENSOR_LAYOUT_ML_NC_EXP:
+      return "NC";
+    case CL_TENSOR_LAYOUT_ML_CN_EXP:
+      return "CN";
+    case CL_TENSOR_LAYOUT_ML_HW_EXP:
+      return "HW";
+    case CL_TENSOR_LAYOUT_ML_WH_EXP:
+      return "WH";
+    case CL_TENSOR_LAYOUT_ML_CHW_EXP:
+      return "CHW";
+    case CL_TENSOR_LAYOUT_ML_NCHW_EXP:
+      return "NCHW";
+    case CL_TENSOR_LAYOUT_ML_NHWC_EXP:
+      return "NHWC";
+    default:
+      return "NULL";
+    }
+  }
+
+  assert(!"UNREACHABLE");
+  return "NULL";
+}
 
 /**
  *  @brief Loads a native model from disk cache, or builds an XML+BIN model,

@@ -1041,15 +1041,30 @@ static int pocl_level0_setup_spirv_metadata(cl_device_id Device,
 
 #ifdef ENABLE_NPU
 
-static bool pocl_npu_is_layout_gemm(cl_uint Rank, const void *Layout) {
-  const cl_tensor_layout_ml_exp *Ptr = (cl_tensor_layout_ml_exp *)Layout;
-
+static bool pocl_npu_is_layout_gemm(const cl_tensor_desc_exp &Desc) {
   // supported layouts from openvino compiler plugin / "rankToLegacyLayoutString":
   // C, NC, CHW, NCHW, NCDHW
-  if (Ptr->ml_type == CL_TENSOR_LAYOUT_ML_NC_EXP && Rank == 2)
-    return true;
-  if (Ptr->ml_type == CL_TENSOR_LAYOUT_ML_CHW_EXP && Rank == 3)
-    return true;
+
+  cl_uint Rank = Desc.rank;
+  if (Desc.layout_type == CL_TENSOR_LAYOUT_ML_EXP) {
+    const auto *Ptr = static_cast<const cl_tensor_layout_ml_exp *>(Desc.layout);
+    if (Ptr->ml_type == CL_TENSOR_LAYOUT_ML_NC_EXP && Rank == 2)
+      return true;
+    if (Ptr->ml_type == CL_TENSOR_LAYOUT_ML_CHW_EXP && Rank == 3)
+      return true;
+  } else if (Desc.layout_type == CL_TENSOR_LAYOUT_BLAS_EXP) {
+    auto *BlasLayout =
+      static_cast<const cl_tensor_layout_blas_exp *>(Desc.layout);
+    std::vector<int> LeadingDims(BlasLayout->leading_dims,
+                                 BlasLayout->leading_dims + Rank);
+
+    if (Rank == 2 && LeadingDims == std::vector<int>{1})
+      return true;
+    if (Rank == 3 && LeadingDims == std::vector<int>{2, 1})
+      return true;
+    // TODO: Expand support
+  }
+
   return false;
 }
 
@@ -1099,18 +1114,10 @@ pocl_npu_validate_khr_gemm (cl_bool TransA,
                         "Datatype of C is smaller than A\n");
 
   /* check validity of data layouts of the tensors. */
-  POCL_RETURN_ERROR_ON ((TenA->layout_type != CL_TENSOR_LAYOUT_ML_EXP
-                        || TenB->layout_type != CL_TENSOR_LAYOUT_ML_EXP
-                        || TenCOut->layout_type != CL_TENSOR_LAYOUT_ML_EXP
-                        || (TenCIOpt && TenCIOpt->layout_type != CL_TENSOR_LAYOUT_ML_EXP)),
-                        CL_INVALID_TENSOR_LAYOUT_EXP, "GEMM on NPU device only supports ML layouts\n"
-                        );
-
-  POCL_RETURN_ERROR_ON ((!pocl_npu_is_layout_gemm(TenA->rank, TenA->layout)
-      || !pocl_npu_is_layout_gemm(TenB->rank, TenB->layout)
-      || !pocl_npu_is_layout_gemm(TenCOut->rank, TenCOut->layout)
-      || (TenCIOpt &&
-          !pocl_npu_is_layout_gemm(TenCIOpt->rank, TenCIOpt->layout))),
+  POCL_RETURN_ERROR_ON(
+      (!pocl_npu_is_layout_gemm(*TenA) || !pocl_npu_is_layout_gemm(*TenB) ||
+       !pocl_npu_is_layout_gemm(*TenCOut) ||
+       (TenCIOpt && !pocl_npu_is_layout_gemm(*TenCIOpt))),
       CL_INVALID_TENSOR_LAYOUT_EXP,
       "GEMM on NPU device only supports C, NC, CHW, NCHW, NCDHW layouts\n");
 

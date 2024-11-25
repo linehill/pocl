@@ -92,23 +92,24 @@ bool instantiateTemplateMATMUL(const void* KernelAttrs,
   assert(Attrs->a.shape[1] == Attrs->b.shape[0]);
   ReplaceMap["SHAPE_N"] = std::to_string(Attrs->b.shape[1]);
 
-  assert(Attrs->a.layout_type == CL_TENSOR_LAYOUT_ML_EXP);
+  assert(Attrs->a.layout_type == CL_TENSOR_LAYOUT_ML_EXP ||
+         Attrs->a.layout_type == CL_TENSOR_LAYOUT_BLAS_EXP);
 
   ReplaceMap["INPUT_PREC"] = dtype2precision(Attrs->a.dtype);
   ReplaceMap["OUTPUT_PREC"] = dtype2precision(Attrs->c.dtype);
   ReplaceMap["INPUT_ELEM_TYPE"] = dtype2elemtype(Attrs->a.dtype);
   ReplaceMap["INPUT_ELEM_TYPE"] = dtype2elemtype(Attrs->c.dtype);
 
-  assert(Attrs->a.layout_type == CL_TENSOR_LAYOUT_ML_EXP);
-  assert(Attrs->b.layout_type == CL_TENSOR_LAYOUT_ML_EXP);
-  L = (cl_tensor_layout_ml_exp *)Attrs->a.layout;
-  ReplaceMap["INPUT_LAYOUT"] = layout2str(L->ml_type);
-  L = (cl_tensor_layout_ml_exp *)Attrs->b.layout;
-  ReplaceMap["INPUT_LAYOUT"] = layout2str(L->ml_type);
+  assert(Attrs->a.layout_type == CL_TENSOR_LAYOUT_ML_EXP ||
+         Attrs->a.layout_type == CL_TENSOR_LAYOUT_BLAS_EXP);
+  assert(Attrs->b.layout_type == CL_TENSOR_LAYOUT_ML_EXP ||
+         Attrs->b.layout_type == CL_TENSOR_LAYOUT_BLAS_EXP);
+  ReplaceMap["INPUT_LAYOUT"] = layout2str(Attrs->a);
+  ReplaceMap["INPUT_LAYOUT"] = layout2str(Attrs->b);
 
-  assert(Attrs->c.layout_type == CL_TENSOR_LAYOUT_ML_EXP);
-  L = (cl_tensor_layout_ml_exp *)Attrs->c.layout;
-  ReplaceMap["OUTPUT_LAYOUT"] = layout2str(L->ml_type);
+  assert(Attrs->c.layout_type == CL_TENSOR_LAYOUT_ML_EXP ||
+         Attrs->c.layout_type == CL_TENSOR_LAYOUT_BLAS_EXP);
+  ReplaceMap["OUTPUT_LAYOUT"] = layout2str(Attrs->c);
 
   ReplaceMap["TRANSPOSE_A"] = Attrs->trans_a ? "true" : "false";
   ReplaceMap["TRANSPOSE_B"] = Attrs->trans_b ? "true" : "false";
