@@ -60,128 +60,57 @@ namespace pocl {
 
 using namespace llvm;
 
-/**
- * Adds a barrier to the beginning of the loop body to force its treatment 
- * similarly to a loop with work-group barriers.
- *
- * This allows parallelizing work-items across the work-group per kernel
- * for-loop iteration, potentially leading to easier horizontal vectorization.
- * The idea is similar to loop switching where the work-item loop is 
- * switched with the kernel for-loop.
- *
- * We need to make sure it is legal to add the barrier, though. The
- * OpenCL barrier semantics require either all or none of the WIs to
- * reach the barrier at each iteration. This is satisfied at least when
- *
- * a) loop exit condition does not depend on the WI and 
- * b) all or none of the WIs always enter the loop
- */
-static bool addInnerLoopBarrier(llvm::Loop &L,
-                                VariableUniformityAnalysisResult &VUA) {
+/// Adds barriers to uniform loops without barriers to force horizontal
+/// vectorization across work-items.
+///
+/// Currently adds the barriers whenever analyzed legal without considering
+/// the vectorization benefits.
+bool ImplicitLoopBarriers::addImplicitLoopBarriers(Loop &L) {
 
-  /* Only add barriers to the innermost loops. */
+  if (Barrier::isLoopWithBarrier(L) || !VUA->isUniformLoop(*F, L))
+    return false;
 
+  // Only add barriers to the innermost loops.
   if (L.getSubLoops().size() > 0)
     return false;
 
+  llvm::BasicBlock *ExitingBlock = L.getExitingBlock();
+  llvm::BasicBlock *HeaderBlock = L.getHeader();
+
+  // Isolate the loop body to a parallel region with two barriers.
+  Barrier::create(ExitingBlock->getTerminator());
+  Barrier::create(HeaderBlock->getFirstNonPHI());
+
 #ifdef DEBUG_ILOOP_BARRIERS
-  std::cerr << "### trying to add a loop barrier to force horizontal parallelization" 
+  std::cerr << "### added inner-loop barriers to loop " << L.getName().str()
+            << std::endl
             << std::endl;
+  ExitingBlock->dump();
+  HeaderBlock->dump();
 #endif
 
-  BasicBlock *brexit = L.getExitingBlock();
-  if (brexit == NULL) return false; /* Multiple exit points */
-
-  llvm::BasicBlock *loopEntry = L.getHeader();
-  if (loopEntry == NULL) return false; /* Multiple entries blocks? */
-
-  llvm::Function *f = brexit->getParent();
-
-  /* Check if the whole loop construct is executed by all or none of the
-     work-items. */
-  if (!VUA.isUniform(f, loopEntry)) {
-#ifdef DEBUG_ILOOP_BARRIERS
-    std::cerr << "### the loop is not uniform because loop entry '"
-              << loopEntry->getName().str() << "' is not uniform; LOOP: \n"
-              << std::endl;
-    L.dump();
-#endif
-    return false;
-  }
-
-  /* Check the branch condition predicate. If it is uniform, we know the loop 
-     is  executed the same number of times for all WIs. */
-  llvm::BranchInst *br = dyn_cast<llvm::BranchInst>(brexit->getTerminator());  
-  if (br && br->isConditional() &&
-      VUA.isUniform(f, br->getCondition())) {
-
-    /* Add a barrier both to the beginning of the entry and to the very end
-       to nicely isolate the parallel region. */
-    Barrier::createAtEnd(brexit);
-    Barrier::createAtStart(loopEntry);
-
-#ifdef DEBUG_ILOOP_BARRIERS
-    std::cerr << "### added an inner-loop barrier to the loop" << std::endl << std::endl;
-#endif
-    return true;
-  } else {
-#ifdef DEBUG_ILOOP_BARRIERS
-    if (br && br->isConditional() && !VUA.isUniform(f, br->getCondition())) {
-      std::cerr << "### loop condition not uniform" << std::endl;
-      br->getCondition()->dump();
-    }
-#endif
-
-  }
-
-#ifdef DEBUG_ILOOP_BARRIERS
-  std::cerr << "### cannot add an inner-loop barrier to the loop" << std::endl << std::endl;
-#endif
-  
   return false;
 }
-
-/**
- * Adds a barrier to the first BB of each loop.
- *
- * Note: it's not safe to do this in case the loop is not executed
- * by all work items. Therefore this is not enabled by default.
- */
-static bool implicitLoopBarriers(Loop &L,
-                                 VariableUniformityAnalysisResult &VUA) {
-
-  bool IsBLoop = false;
-  for (Loop::block_iterator LI = L.block_begin(), LE = L.block_end();
-       LI != LE && !IsBLoop; ++LI) {
-    for (BasicBlock::iterator BBI = (*LI)->begin(), BBE = (*LI)->end();
-         BBI != BBE; ++BBI) {
-      if (isa<Barrier>(BBI)) {
-        IsBLoop = true;
-        break;
-      }
-    }
-  }
-  if (IsBLoop)
-    return false;
-
-  return addInnerLoopBarrier(L, VUA);
-}
-
 
 llvm::PreservedAnalyses
 ImplicitLoopBarriers::run(llvm::Loop &L, llvm::LoopAnalysisManager &AM,
                           llvm::LoopStandardAnalysisResults &AR,
                           llvm::LPMUpdater &U) {
 
-  Function *K = L.getHeader()->getParent();
+  F = L.getHeader()->getParent();
 
   auto &FAMP = AM.getResult<FunctionAnalysisManagerLoopProxy>(L, AR);
 
-  if (!isKernelToProcess(*K))
+  if (!isKernelToProcess(*F))
     return PreservedAnalyses::all();
 
-  if (FAMP.cachedResultExists<WorkitemHandlerChooser>(*K)) {
-    auto Res = FAMP.getCachedResult<WorkitemHandlerChooser>(*K);
+#ifdef DEBUG_COND_BARRIERS
+  std::cerr << "### Before ImplicitLoopBarriers " << std::endl;
+  F.dump();
+#endif
+
+  if (FAMP.cachedResultExists<WorkitemHandlerChooser>(*F)) {
+    auto Res = FAMP.getCachedResult<WorkitemHandlerChooser>(*F);
     if (Res->WIH == WorkitemHandlerType::CBS)
       return PreservedAnalyses::all();
   } else {
@@ -189,7 +118,7 @@ ImplicitLoopBarriers::run(llvm::Loop &L, llvm::LoopAnalysisManager &AM,
   }
 
   if (!pocl_get_bool_option("POCL_FORCE_PARALLEL_OUTER_LOOP", 1) &&
-      !hasWorkgroupBarriers(*K)) {
+      !hasWorkgroupBarriers(*F)) {
 #ifdef DEBUG_ILOOP_BARRIERS
     std::cerr
         << "### ILB: The kernel has no barriers, let's not add implicit ones "
@@ -198,17 +127,26 @@ ImplicitLoopBarriers::run(llvm::Loop &L, llvm::LoopAnalysisManager &AM,
     return PreservedAnalyses::all();
   }
 
-  VariableUniformityAnalysisResult *VUA = nullptr;
-  if (FAMP.cachedResultExists<VariableUniformityAnalysis>(*K)) {
-    VUA = FAMP.getCachedResult<VariableUniformityAnalysis>(*K);
+  VUA = nullptr;
+  if (FAMP.cachedResultExists<VariableUniformityAnalysis>(*F)) {
+    VUA = FAMP.getCachedResult<VariableUniformityAnalysis>(*F);
   } else {
-    assert(0 && "missing cached result VUA for ImplicitLoopBarriers");
+    assert(0 && "Missing cached VUA results for ImplicitLoopBarriers");
   }
 
   PreservedAnalyses PAChanged = PreservedAnalyses::none();
   PAChanged.preserve<WorkitemHandlerChooser>();
   PAChanged.preserve<VariableUniformityAnalysis>();
-  return implicitLoopBarriers(L, *VUA) ? PAChanged : PreservedAnalyses::all();
+  bool Changed = addImplicitLoopBarriers(L);
+
+#ifdef DEBUG_COND_BARRIERS
+  if (Changed) {
+    std::cerr << "### After ImplicitLoopBarriers' changes " << std::endl;
+    F.dump();
+  }
+#endif
+
+  return Changed ? PAChanged : PreservedAnalyses::all();
 }
 
 REGISTER_NEW_LPASS(PASS_NAME, PASS_CLASS, PASS_DESC);

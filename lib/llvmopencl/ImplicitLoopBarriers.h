@@ -33,8 +33,10 @@
 #include <llvm/Analysis/LoopAnalysisManager.h>
 #include <llvm/Transforms/Scalar/LoopPassManager.h>
 
-namespace pocl {
+#include "VariableUniformityAnalysis.h"
+#include "VariableUniformityAnalysisResult.hh"
 
+namespace pocl {
 
 class ImplicitLoopBarriers : public llvm::PassInfoMixin<ImplicitLoopBarriers> {
 public:
@@ -43,6 +45,12 @@ public:
                               llvm::LoopStandardAnalysisResults &AR,
                               llvm::LPMUpdater &U);
   static bool isRequired() { return true; }
+
+private:
+  bool addImplicitLoopBarriers(llvm::Loop &L);
+
+  llvm::Function *F;
+  VariableUniformityAnalysisResult *VUA;
 };
 
 } // namespace pocl

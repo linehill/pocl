@@ -53,7 +53,9 @@ public:
 
   bool shouldBePrivatized(llvm::Function *F, llvm::Value *Val);
   bool doFinalization(llvm::Module &M);
-  void markInductionVariables(llvm::Function &F, llvm::Loop &L);
+  void analyzeLoop(llvm::Function &F, llvm::Loop &L,
+                   llvm::PostDominatorTree &PDT);
+  bool isUniformLoop(llvm::Function &F, llvm::Loop &L);
   ~VariableUniformityAnalysisResult() { uniformityCache_.clear(); }
 
   // TODO this could be wrong
@@ -62,10 +64,15 @@ public:
 
 private:
   bool isUniformityAnalyzed(llvm::Function *F, llvm::Value *V) const;
+  void removeUniformityData(llvm::Value &V, int Depth);
+  void removeUniformityDatum(llvm::Function &F, llvm::Value &V);
 
   using UniformityIndex = std::map<llvm::Value *, bool>;
   using UniformityCache = std::map<llvm::Function *, UniformityIndex>;
+  using LoopUniformityIndex = std::map<llvm::Loop *, bool>;
+  using LoopUniformityCache = std::map<llvm::Function *, LoopUniformityIndex>;
   mutable UniformityCache uniformityCache_;
+  mutable LoopUniformityCache LoopUniformityCache_;
 };
 
 } // namespace pocl

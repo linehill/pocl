@@ -58,8 +58,7 @@ namespace pocl {
 
 using namespace llvm;
 
-static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
-                                    VariableUniformityAnalysisResult &VUA) {
+static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT) {
 
   for (Loop::block_iterator i = L.block_begin(), e = L.block_end();
        i != e; ++i) {
@@ -162,11 +161,10 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
   return false;
 }
 
-static bool processLoop(Loop &L, llvm::DominatorTree &DT,
-                        VariableUniformityAnalysisResult &VUA) {
+static bool processLoop(Loop &L, llvm::DominatorTree &DT) {
 
   if (Barrier::isLoopWithBarrier(L))
-    return processLoopWithBarriers(L, DT, VUA);
+    return processLoopWithBarriers(L, DT);
 
   // This is a loop without a barrier. Ensure we have a non-barrier
   // block as a preheader so we can capture the loop as a whole
@@ -225,16 +223,6 @@ llvm::PreservedAnalyses LoopBarriers::run(llvm::Loop &L,
 
   PreservedAnalyses PAChanged = PreservedAnalyses::none();
 
-  VariableUniformityAnalysisResult *VUA = nullptr;
-
-  auto &FAMP = AM.getResult<FunctionAnalysisManagerLoopProxy>(L, AR);
-  if (FAMP.cachedResultExists<VariableUniformityAnalysis>(*K)) {
-    VUA = FAMP.getCachedResult<VariableUniformityAnalysis>(*K);
-  } else {
-    assert(0 && "missing cached result VUA for ImplicitLoopBarriers");
-  }
-
-  return processLoop(L, AR.DT, *VUA) ? PAChanged : PreservedAnalyses::all();
   PreservedAnalyses Ret =
       processLoop(L, AR.DT) ? PAChanged : PreservedAnalyses::all();
 #ifdef DEBUG_LOOP_BARRIERS

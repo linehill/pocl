@@ -69,23 +69,153 @@ namespace pocl {
 
 using namespace llvm;
 
-// Recursively mark the canonical induction variable PHI as uniform.
-// If there's a canonical induction variable in loops, the variable
-// update for each iteration should be uniform. Note: this does not yet
-// imply all the work-items execute the loop same number of times!
-void VariableUniformityAnalysisResult::markInductionVariables(Function &F,
-                                                              llvm::Loop &L) {
+/// Analyzes the loops in the function.
+///
+/// Loops without barriers are analyzed for divergence in order to
+/// enable forced horizontal parallelization via implicit barriers.
+/// For that to be done safely, we must prove that the loop iterations
+/// are executed the same number of times for all work-items.
+///
+/// This holds if
+/// a) The loop entry is not divergent when not considering the back edges:
+/// All work-items either *encounter* the loop or not (but might not enter it),
+/// and
+/// b) the loop branch is not divergent. Currently we detect this
+/// condition by checking if the loop condition values are uniform and
+/// fall-back to treating them as divergent for safety in unhandled
+/// cases such as updating them inside the loop body.
+///
+/// Due to performing these checks on unoptimized input, we might
+/// not detect all safely horizontally parallelizable cases. The
+/// analysis will be improved gradually.
+///
+/// Before this analysis, loop headers have been analyzed with a
+/// top-down acyclic pass, which marks loop headers as uniform in case
+/// the are encountered by all work-items.
+///
+/// After this analysis step, loop headers are considered uniform
+/// only if the loop executes the same number of times for all
+/// work-items.
+void VariableUniformityAnalysisResult::analyzeLoop(
+    Function &F, llvm::Loop &L, llvm::PostDominatorTree &PDT) {
 
-  if (llvm::PHINode *inductionVar = L.getCanonicalInductionVariable()) {
+  LoopUniformityIndex &Cache = LoopUniformityCache_[&F];
+  LoopUniformityIndex::const_iterator I = Cache.find(&L);
+  if (I != Cache.end())
+    return;
+
+  llvm::Loop *ParentLoop = L.getParentLoop();
+  if (ParentLoop != nullptr) {
+    // Ensure we have analyzed the parent loop(s) first because their
+    // uniformity affects the child loops' uniformity.
+    analyzeLoop(F, *ParentLoop, PDT);
+  }
+
+  llvm::BasicBlock *ExitingBlock = L.getExitingBlock();
+  llvm::BasicBlock *HeaderBlock = L.getHeader();
+  llvm::BasicBlock *PredecessorBlock = L.getLoopPredecessor();
+  llvm::BasicBlock *LatchBlock = L.getLoopLatch();
+  llvm::BranchInst *LoopBranch =
+      ExitingBlock == nullptr
+          ? nullptr
+          : dyn_cast<llvm::BranchInst>(ExitingBlock->getTerminator());
+  llvm::BranchInst *LoopEntryBranch =
+      PredecessorBlock != nullptr
+          ? dyn_cast<llvm::BranchInst>(PredecessorBlock->getTerminator())
+          : nullptr;
+
+  // For now, bail out on even a bit more complex loop structures.
+  const bool UnsupportedLoopStructure =
+      ExitingBlock == nullptr || HeaderBlock == nullptr ||
+      LoopBranch == nullptr || LatchBlock == nullptr;
+
+  const bool ParentLoopIsDivergent =
+      ParentLoop != nullptr && !isUniformLoop(F, *ParentLoop);
+
+  // Utilize the precalculated acyclic analysis information: If the header is
+  // not uniform according to it, the loop might not be reached at all by some
+  // of the WIs.
+  const bool LoopNotReachedByAllWIs =
+      LoopEntryBranch == nullptr || !isUniform(&F, PredecessorBlock) ||
+      (LoopEntryBranch->isConditional() &&
+       !isUniform(&F, LoopEntryBranch->getCondition()));
+
 #ifdef DEBUG_UNIFORMITY_ANALYSIS
-    std::cerr << "### canonical induction variable, assuming uniform:";
-    inductionVar->dump();
+  std::cerr << "#### analyzing a loop with ";
+  if (ExitingBlock != nullptr)
+    std::cerr << ExitingBlock->getName().str();
+  std::cerr << ": ";
+  if (UnsupportedLoopStructure)
+    std::cerr << "unsupported loop structure ";
+  if (ParentLoopIsDivergent)
+    std::cerr << "parent loop is divergent ";
+  if (LoopNotReachedByAllWIs)
+    std::cerr << "loop is not reached by all WIs ";
+  std::cerr << "\n";
 #endif
-    setUniform(&F, inductionVar);
+
+  if (UnsupportedLoopStructure || ParentLoopIsDivergent ||
+      LoopNotReachedByAllWIs) {
+    LoopUniformityCache_[&F][&L] = false;
+    return;
   }
-  for (llvm::Loop *Subloop : L.getSubLoops()) {
-    markInductionVariables(F, *Subloop);
+
+  llvm::Value *LoopCondition = LoopBranch->getCondition();
+  // Now the uniformity data can treat the condition as divergent since it is
+  // written in the loop check basic block, which is treated as divergent at
+  // this point, even if the values written to it were uniform. Let's treat the
+  // increment block as uniform and run the check. If the check fails, there
+  // was some another reason for the divergent result.
+
+  setUniform(&F, ExitingBlock);
+  setUniform(&F, LatchBlock);
+
+  removeUniformityData(*LoopCondition, 10);
+
+  bool LoopStructureUniform = LoopUniformityCache_[&F][&L] =
+      isUniform(&F, LoopCondition);
+
+#ifdef DEBUG_UNIFORMITY_ANALYSIS
+  std::cerr << "#### loop detected as "
+            << (LoopStructureUniform ? "uniform" : "divergent") << "\n";
+  std::cerr << "#### loop condition:";
+  LoopCondition->dump();
+#endif
+
+  if (LoopStructureUniform) {
+    // Recompute the uniformity of the loop body's basic blocks.
+    llvm::BasicBlock *BodyStart = nullptr;
+    for (auto &BB : L.getBlocksVector()) {
+      if (ExitingBlock->getTerminator()->getSuccessor(0) == BB ||
+          ExitingBlock->getTerminator()->getSuccessor(1) == BB)
+        BodyStart = BB;
+      removeUniformityDatum(F, *BB);
+    }
+    assert(BodyStart != nullptr);
+    setUniform(&F, ExitingBlock);
+    setUniform(&F, LatchBlock);
+    setUniform(&F, BodyStart);
+
+    // Propagate the uniformity info to the remaining blocks of the loop body.
+    analyzeBBDivergence(&F, BodyStart, BodyStart, PDT);
+  } else {
+    // Mark all basic blocks in the loop divergent because the loop structure
+    // is divergent.
+    for (auto &BB : L.getBlocksVector()) {
+      setUniform(&F, BB, false);
+    }
   }
+}
+
+bool VariableUniformityAnalysisResult::isUniformLoop(llvm::Function &F,
+                                                     llvm::Loop &L) {
+  LoopUniformityIndex &Cache = LoopUniformityCache_[&F];
+  LoopUniformityIndex::const_iterator I = Cache.find(&L);
+  if (I == Cache.end()) {
+    // Assume non-uniform by default.
+    return false;
+  }
+  return Cache[&L];
 }
 
 bool VariableUniformityAnalysisResult::runOnFunction(
@@ -94,23 +224,20 @@ bool VariableUniformityAnalysisResult::runOnFunction(
   if (!isKernelToProcess(F))
     return false;
 
-#ifdef DEBUG_UNIFORMITY_ANALYSIS
-  std::cerr << "### refreshing VUA" << std::endl;
-  dumpCFG(F, F.getName().str() + ".vua.dot");
-  F.dump();
-#endif
-
-  /* Do the actual analysis on-demand except for the basic block
-     divergence analysis. */
+  // Do the actual analysis on-demand except for the basic block
+  // divergence analysis.
   uniformityCache_[&F].clear();
 
+  setUniform(&F, &F.getEntryBlock());
+
+  // Analyze the divergence first with an acyclic downwards pass.
+  analyzeBBDivergence(&F, &F.getEntryBlock(), &F.getEntryBlock(), PDT);
+
+  // Then correct loop divergence information.
   for (llvm::LoopInfo::iterator i = LI.begin(), e = LI.end(); i != e; ++i) {
     llvm::Loop *L = *i;
-    markInductionVariables(F, *L);
+    analyzeLoop(F, *L, PDT);
   }
-
-  setUniform(&F, &F.getEntryBlock());
-  analyzeBBDivergence(&F, &F.getEntryBlock(), &F.getEntryBlock(), PDT);
 
 #ifdef DEBUG_UNIFORMITY_ANALYSIS
   std::cerr << "### refreshed VUA" << std::endl;
@@ -185,7 +312,7 @@ void VariableUniformityAnalysisResult::analyzeBBDivergence(
     llvm::BasicBlock *PreviousUniformBB, llvm::PostDominatorTree &PDT) {
 
 #ifdef DEBUG_UNIFORMITY_ANALYSIS
-  std::cerr << "### Analyzing BB divergence (BB=" << BB->getName().str()
+  std::cerr << "### Analyzing BB divergence (BB=" << StartingBB->getName().str()
             << ", prevUniform=" << PreviousUniformBB->getName().str() << ")"
             << std::endl;
 #endif
@@ -247,6 +374,42 @@ void VariableUniformityAnalysisResult::analyzeBBDivergence(
         analyzeBBDivergence(F, NextBB, UniformBB, PDT);
       }
     }
+  }
+}
+
+/// Removes the uniformity datum for the given value, if found.
+///
+/// \p V can be a basic block.
+void VariableUniformityAnalysisResult::removeUniformityDatum(llvm::Function &F,
+                                                             llvm::Value &V) {
+  UniformityIndex &Cache = uniformityCache_[&F];
+  UniformityIndex::const_iterator I = Cache.find(&V);
+  if (I != Cache.end()) {
+    Cache.erase(I);
+  }
+}
+
+/// Clears the uniformity result cache for the given value and its producers so
+/// the data gets recomputed the next time it's requested.
+///
+/// \p V is the value to start from. Must not be a basic block.
+/// \p Depth the maximum recursion depth.
+void VariableUniformityAnalysisResult::removeUniformityData(llvm::Value &V,
+                                                            int Depth) {
+
+  llvm::Instruction *Instr = dyn_cast<llvm::Instruction>(&V);
+  if (Instr == nullptr)
+    return;
+
+  llvm::Function *F = Instr->getParent()->getParent();
+  removeUniformityDatum(*F, V);
+
+  if (Depth == 0)
+    return;
+
+  for (unsigned OprI = 0; OprI < Instr->getNumOperands(); ++OprI) {
+    llvm::Value &Operand = *Instr->getOperand(OprI);
+    removeUniformityData(Operand, Depth - 1);
   }
 }
 
@@ -357,7 +520,6 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
     setUniform(F, V);
 
     bool isUniformAlloca = true;
-    llvm::Instruction *instruction = dyn_cast<llvm::AllocaInst>(V);
     for (Instruction::use_iterator ui = Alloca->use_begin(),
                                    ue = Alloca->use_end();
          ui != ue; ++ui) {
