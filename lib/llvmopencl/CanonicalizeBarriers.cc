@@ -49,7 +49,7 @@ POP_COMPILER_DIAGS
 #define PASS_CLASS pocl::CanonicalizeBarriers
 #define PASS_DESC "Barrier canonicalization pass"
 
-//#define DEBUG_CANON_BARRIERS
+// #define DEBUG_CANON_BARRIERS
 
 namespace pocl {
 
@@ -61,10 +61,14 @@ static bool processFunction(Function &F, WorkitemHandlerType Handler);
 using InstructionSet = std::set<llvm::Instruction *>;
 
 static bool canonicalizeBarriers(Function &F, WorkitemHandlerType Handler) {
-  bool changed = false;
 
-  // The function entry node should be a pure barrier.
-  // It should start a parallel region.
+#ifdef DEBUG_CANON_BARRIERS
+  std::cerr << "Before CanonicalizeBarriers:\n";
+  F.dump();
+#endif
+
+  bool Changed = false;
+
   BasicBlock *Entry = &F.getEntryBlock();
   // The function entry node should be a pure barrier at this point.
   // It should start the first parallel region.
@@ -94,7 +98,6 @@ static bool canonicalizeBarriers(Function &F, WorkitemHandlerType Handler) {
   }
 
   for (Function::iterator i = F.begin(), e = F.end(); i != e; ++i) {
-
     BasicBlock *BB = &*i;
     if (isPureUniformBlock(BB)) {
       // Ensure regions of forced uniform blocks are isolated with a barrier
@@ -147,21 +150,16 @@ static bool canonicalizeBarriers(Function &F, WorkitemHandlerType Handler) {
         exit = SplitBlock(BB, t);
       exit->setName("exit.barrier");
       Barrier::create(Inst2InsertPt(t));
-      changed |= true;
+      Changed |= true;
     }
   }
 
-  return processFunction(F, Handler) || changed;
+  return processFunction(F, Handler) || Changed;
 }
 
 static bool processFunction(Function &F, WorkitemHandlerType Handler) {
 
   bool changed = false;
-
-#ifdef DEBUG_CANON_BARRIERS
-  std::cerr << "Before CanonicalizeBarriers:\n";
-  F.dump();
-#endif
 
   InstructionSet Barriers;
 
@@ -241,14 +239,14 @@ static bool processFunction(Function &F, WorkitemHandlerType Handler) {
 
         BasicBlock *successor = t->getSuccessor(0);
 
-        if (Barrier::hasOnlyBarrier(successor) && 
+        if (Barrier::hasOnlyBarrier(successor) &&
             successor->getSinglePredecessor() == b) {
-            b->replaceAllUsesWith(successor);
-            b->eraseFromParent();
-            emptyRegionDeleted = true;
-            changed = true;
-            break;
-          }
+          b->replaceAllUsesWith(successor);
+          b->eraseFromParent();
+          emptyRegionDeleted = true;
+          changed = true;
+          break;
+        }
       }
   } while (emptyRegionDeleted);
 

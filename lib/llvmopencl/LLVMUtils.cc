@@ -737,9 +737,6 @@ void registerFunctionAnalyses(llvm::PassBuilder &PB) {
   WorkItemAliasAnalysis::registerWithPB(PB);
 }
 
-/**
- * Returns the size_t for the current target.
- */
 llvm::Type *SizeT(llvm::Module *M) {
   unsigned long AddressBits;
   getModuleIntMetadata(*M, "device_address_bits", AddressBits);

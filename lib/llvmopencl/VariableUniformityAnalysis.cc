@@ -111,6 +111,19 @@ bool VariableUniformityAnalysisResult::runOnFunction(
 
   setUniform(&F, &F.getEntryBlock());
   analyzeBBDivergence(&F, &F.getEntryBlock(), &F.getEntryBlock(), PDT);
+
+#ifdef DEBUG_UNIFORMITY_ANALYSIS
+  std::cerr << "### refreshed VUA" << std::endl;
+  // Highlight the uniform basic blocks in the graph dump.
+  std::set<llvm::BasicBlock *> UniformBBs;
+  for (auto &BB : F) {
+    if (isUniform(&F, &BB))
+      UniformBBs.insert(&BB);
+  }
+  dumpCFG(F, F.getName().str() + "_vua.dot", nullptr, nullptr, &UniformBBs);
+  F.dump();
+#endif
+
   return false;
 }
 
@@ -127,7 +140,7 @@ bool VariableUniformityAnalysisResult::runOnFunction(
 bool VariableUniformityAnalysisResult::shouldBePrivatized(llvm::Function *F,
                                                           llvm::Value *Val) {
   if (!isUniform(F, Val)) return true;
-  
+
   /* Check if the value is stored in stack (is an alloca or writes to an alloca). */
   /* It should be enough to context save the initial alloca and the stores to
      make sure each work-item gets their own stack slot and they are updated.
@@ -141,34 +154,34 @@ bool VariableUniformityAnalysisResult::shouldBePrivatized(llvm::Function *F,
   return false;
 }
 
-/**  
- * BB divergence analysis.
- *
- * Define:
- * Uniform BB. A basic block which is known to be executed by all or none
- * of the work-items, that is, a BB where it's known safe to add a barrier.
- *
- * Divergent/varying BB. A basic block where work-items *might* diverge.
- * That is, it cannot be proven that all work-items execute the BB.
- *
- * Propagate the information from the entry downwards (breadth first). 
- * This avoids infinite recursion with loop back edges and enables
- * to keep book of the "last seen" uniform BB.
- *
- * The conditions to mark a BB 'uniform':
- *
- * a) the function entry, or
- * b) BBs that post-dominate at least one uniform BB (try the previously 
- *    found one), or
- * c) BBs that are branched to directly from a uniform BB using a uniform branch.
- *    Note: This assumes the CFG is well-formed in a way that there cannot be a divergent
- *    branch to the same BB in that case.
- *
- * Otherwise, assume divergent (might not be *proven* to be one!).
- *
- */
+/// Perform basic block divergence analysis from the given basic block
+/// downwards.
+///
+/// Definitions:
+/// Uniform BB: A basic block which is known to be executed by all
+/// or none of the work-items, that is, a BB where it's known safe to add a
+/// barrier.
+///
+/// Divergent/varying BB: A basic block where work-items *might* diverge.
+/// That is, it cannot be proven that all work-items execute the BB.
+///
+/// The function propagates the information from the entry downwards (breadth
+/// first). This avoids infinite recursion with loop back edges and enables
+/// book keeping of the "last seen" uniform BB.
+///
+/// It uses the following conditions to mark a BB 'uniform':
+///
+/// a) the function entry, or
+/// b) BBs that post-dominate at least one uniform BB (try the previously
+///    found one), or
+/// c) BBs that are branched to directly from a uniform BB using a uniform
+/// branch. Note: This assumes the CFG is well-formed in a way that there cannot
+/// be a divergent branch to the same BB in that case.
+///
+/// Otherwise, we assume divergent for safety (it might not be *proven* to be one
+/// though!).
 void VariableUniformityAnalysisResult::analyzeBBDivergence(
-    llvm::Function *F, llvm::BasicBlock *BB,
+    llvm::Function *F, llvm::BasicBlock *StartingBB,
     llvm::BasicBlock *PreviousUniformBB, llvm::PostDominatorTree &PDT) {
 
 #ifdef DEBUG_UNIFORMITY_ANALYSIS
@@ -212,15 +225,15 @@ void VariableUniformityAnalysisResult::analyzeBBDivergence(
 
   // Condition b)
   if (FoundUniforms.size() == 0) {
-    if (PDT.dominates(BB, PreviousUniformBB)) {
-      setUniform(F, BB, true);
-      FoundUniforms.push_back(BB);
+    if (PDT.dominates(StartingBB, PreviousUniformBB)) {
+      setUniform(F, StartingBB, true);
+      FoundUniforms.push_back(StartingBB);
     }
   }
 
-  /* Assume diverging. */
-  if (!isUniformityAnalyzed(F, BB))
-    setUniform(F, BB, false);
+  // Assume diverging.
+  if (!isUniformityAnalyzed(F, StartingBB))
+    setUniform(F, StartingBB, false);
 
   for (auto UniformBB : FoundUniforms) {
 
@@ -345,8 +358,8 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
 
     bool isUniformAlloca = true;
     llvm::Instruction *instruction = dyn_cast<llvm::AllocaInst>(V);
-    for (Instruction::use_iterator ui = instruction->use_begin(),
-           ue = instruction->use_end();
+    for (Instruction::use_iterator ui = Alloca->use_begin(),
+                                   ue = Alloca->use_end();
          ui != ue; ++ui) {
       llvm::Instruction *user = cast<Instruction>(ui->getUser());
       if (user == NULL) continue;
@@ -364,7 +377,7 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
                the loop constructs refer to these allocas and at that point we
                do not yet know if the BB itself is uniform. This leads to not
                being able to detect loop iteration variables as uniform. */
-#endif          
+#endif
           }
           isUniformAlloca = false;
           break;
@@ -445,6 +458,10 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
     bool IsUniformBuiltin = CalleeName == GROUP_ID_BUILTIN_NAME ||
                             CalleeName == GS_BUILTIN_NAME ||
                             CalleeName == LS_BUILTIN_NAME;
+#ifdef DEBUG_UNIFORMITY_ANALYSIS
+    std::cerr << "### VUA: call to " << CalleeName.str() << " is "
+              << (IsUniformBuiltin ? "" : "not ") << "uniform\n";
+#endif
     setUniform(F, V, IsUniformBuiltin);
     return IsUniformBuiltin;
   }
@@ -470,11 +487,15 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
       return false;
   }
 
-  // not computed previously, scan all operands of the instruction
-  // and figure out their uniformity recursively
-  for (unsigned opr = 0; opr < instr->getNumOperands(); ++opr) {    
-    llvm::Value *operand = instr->getOperand(opr);
-    if (!isUniform(F, operand)) {
+  // Not computed previously, scan all operands of the instruction
+  // and figure out their uniformity recursively.
+  for (unsigned opr = 0; opr < instr->getNumOperands(); ++opr) {
+      llvm::Value *operand = instr->getOperand(opr);
+      if (!isUniform(F, operand)) {
+#ifdef DEBUG_UNIFORMITY_ANALYSIS
+      std::cerr << "### operand not uniform" << std::endl;
+      operand->dump();
+#endif
       setUniform(F, V, false);
       return false;
     }

@@ -538,6 +538,9 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     // basic blocks (basically if...elses). It tries to minimize the
     // part ending up in the parallel region that is conditional by
     // isolating the branching condition (which must be uniform,
+    // Handles barriers inside conditional basic blocks (basically if...elses).
+    // It tries to minimize the part ending up in the parallel region that is
+    // conditional by isolating the branching condition (which must be uniform,
     // otherwise the end result is undefined according to barrier rules),
     // to minimize the impact of "work-item peeling" (* to describe).
     addPass(Passes, "implicit-cond-barriers");

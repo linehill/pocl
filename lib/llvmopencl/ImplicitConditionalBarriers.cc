@@ -181,16 +181,19 @@ ImplicitConditionalBarriers::run(llvm::Function &F,
     }
   }
 
-#ifdef DEBUG_COND_BARRIERS
-  std::cerr << "### After implicit conditional barrier handling:" << std::endl;
-  F.dump();
-#endif
-
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
   dumpCFG(F, F.getName().str() + "_after_implicit_cond_barriers.dot", nullptr,
           nullptr);
 #endif
 
+#ifdef DEBUG_COND_BARRIERS
+  if (Changed) {
+    std::cerr << "### After ImplicitConditionalBarriers " << std::endl;
+    F.dump();
+    dumpCFG(F, F.getName().str() + "_after_cond_barriers.dot", nullptr,
+            nullptr);
+  }
+#endif
   return Changed ? PAChanged : PreservedAnalyses::all();
 }
 

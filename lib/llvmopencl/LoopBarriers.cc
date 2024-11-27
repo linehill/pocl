@@ -169,7 +169,8 @@ static bool processLoop(Loop &L, llvm::DominatorTree &DT,
     return processLoopWithBarriers(L, DT, VUA);
 
   // This is a loop without a barrier. Ensure we have a non-barrier
-  // block as a preheader so we can replicate the loop as a whole.
+  // block as a preheader so we can capture the loop as a whole
+  // to the parallel region.
   //
   // If the block has proper instructions after the barrier, it
   // will be split in CanonicalizeBarriers.
@@ -201,12 +202,6 @@ static bool processLoop(Loop &L, llvm::DominatorTree &DT,
       return true;
   }
 
-
-#ifdef DEBUG_LOOP_BARRIERS
-  std::cerr << "After LoopBarriers:" << std::endl;
-  Preheader->getParent()->dump();
-#endif
-
   return false;
 }
 
@@ -218,7 +213,7 @@ llvm::PreservedAnalyses LoopBarriers::run(llvm::Loop &L,
   Function *K = L.getHeader()->getParent();
 
 #ifdef DEBUG_LOOP_BARRIERS
-  std::cerr << "Before LoopBarriers:" << std::endl;
+  std::cerr << "Before LoopBarriers on loop " << L.getName().str() << std::endl;
   K->dump();
 #endif
 
@@ -240,6 +235,13 @@ llvm::PreservedAnalyses LoopBarriers::run(llvm::Loop &L,
   }
 
   return processLoop(L, AR.DT, *VUA) ? PAChanged : PreservedAnalyses::all();
+  PreservedAnalyses Ret =
+      processLoop(L, AR.DT) ? PAChanged : PreservedAnalyses::all();
+#ifdef DEBUG_LOOP_BARRIERS
+  std::cerr << "After LoopBarriers:" << std::endl;
+  K->dump();
+#endif
+  return Ret;
 }
 
 REGISTER_NEW_LPASS(PASS_NAME, PASS_CLASS, PASS_DESC);

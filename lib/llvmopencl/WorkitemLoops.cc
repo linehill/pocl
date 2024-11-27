@@ -888,7 +888,7 @@ llvm::AllocaInst *WorkitemLoopsImpl::getContextArray(llvm::Instruction *Inst,
     Var << TempInstructionIds[Inst];
   }
 
-  Var << ".pocl_context";
+  Var << ".wi_context";
   std::string CArrayName = Var.str();
 
   if (ContextArrays.find(CArrayName) != ContextArrays.end())
@@ -1377,7 +1377,6 @@ bool WorkitemLoops::canHandleKernel(llvm::Function &K,
       return false;
     }
   }
-
   return true;
 }
 

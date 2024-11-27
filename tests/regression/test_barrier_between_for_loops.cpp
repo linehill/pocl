@@ -44,8 +44,7 @@
 
 // increasing the loop counter to 32 produces yet another crash
 
-static char
-kernelSourceCode[] = R"CL(
+static char kernelSourceCode[] = R"CL(
 kernel
 void test_kernel(__global float *input,
                  __global int *result) {

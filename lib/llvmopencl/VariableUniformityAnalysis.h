@@ -46,6 +46,8 @@ class Loop;
  * the CFG is modified. Thus, in case the semantics of the original
  * information does not change, it is safe for passes to set this pass
  * preserved even though new instructions are added or the CFG manipulated.
+ *
+ * TODO: Rename this class to UniformityAnalysis.
  */
 
 namespace pocl {

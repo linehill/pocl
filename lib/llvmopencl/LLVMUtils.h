@@ -194,6 +194,7 @@ void registerPassBuilderPasses(llvm::PassBuilder &PB);
 
 void registerFunctionAnalyses(llvm::PassBuilder &PB);
 
+/// Returns the size_t for the Module's target.
 llvm::Type *SizeT(llvm::Module *M);
 
 } // namespace pocl
