@@ -220,6 +220,46 @@ bool BarrierTailReplicationImpl::ReplicateJoinedSubgraphs(
 
       Term->setSuccessor(i, NewTailEntry);
       Changed = true;
+
+      // Next we'll choose whether the other basic blocks that branched to
+      // the old tail block should keep branching to the original, or
+      // should be switched to branch to the new one.
+
+      // In case of blocks that are dominated by the same barrier, we should
+      // include them in the same parallel region as the new joined one,
+      // otherwise control flow breakage might occur: We might cause the other
+      // side of a diverging branch to go to a separate parallel region.
+      // See test_id_dependent_computation.cpp which reproduces such a case due
+      // to the diverging branch after the barrier both of which share the same
+      // exit barrier with the early exiting branch due to control flow
+      // merging.
+      std::vector<BasicBlock *> IncludedPredecessors;
+      for (pred_iterator PI = pred_begin(OrigTailEntry),
+                         PE = pred_end(OrigTailEntry);
+           PI != PE; ++PI) {
+        llvm::BasicBlock *PredBB = *PI;
+
+        if (!DT.dominates(Dominator, PredBB))
+          continue;
+
+#ifdef DEBUG_BARRIER_REPL
+        std::cerr << "#### " << Dominator->getName().str() << " dominates "
+                  << OrigTailEntry->getName().str() << "\n";
+        std::cerr << "#### fixing it to branch to the new tail\n";
+#endif
+        IncludedPredecessors.push_back(PredBB);
+      }
+
+      for (auto &PredBB : IncludedPredecessors) {
+        auto PredTerm = PredBB->getTerminator();
+        for (int i = 0, e = PredTerm->getNumSuccessors(); i != e; ++i) {
+          BasicBlock *OrigSucc = PredTerm->getSuccessor(i);
+          if (OrigSucc == OrigTailEntry) {
+            PredTerm->setSuccessor(i, NewTailEntry);
+            break;
+          }
+        }
+      }
     }
 
     if (Changed) {

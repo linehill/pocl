@@ -534,10 +534,6 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
 
     addPass(Passes, "canon-barriers");
 
-    // implicit-cond-barriers handles barriers inside conditional
-    // basic blocks (basically if...elses). It tries to minimize the
-    // part ending up in the parallel region that is conditional by
-    // isolating the branching condition (which must be uniform,
     // Handles barriers inside conditional basic blocks (basically if...elses).
     // It tries to minimize the part ending up in the parallel region that is
     // conditional by isolating the branching condition (which must be uniform,
@@ -556,8 +552,8 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
 
     addPass(Passes, "canon-barriers");
 
-    // replicates tails of barrier containing control flow graphs to ensure
-    // there are not branches in the middle of the produced parallel regions
+    // Replicates tails of barrier-containing control flow graphs to ensure
+    // they are single-entry single-exit regions.
     addPass(Passes, "barriertails");
 
     addPass(Passes, "canon-barriers");
