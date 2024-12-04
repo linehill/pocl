@@ -60,3 +60,5 @@ if (ENABLE_TCE)
   set_property(TEST "examples/example0"
     APPEND PROPERTY LABELS "tce;almaif")
 endif()
+
+add_symlink_to_built_opencl_dynlib(example0)

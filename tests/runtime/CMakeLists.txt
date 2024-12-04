@@ -536,3 +536,5 @@ set_property(TEST
   "runtime/test_subbuffers"
   "runtime/test_queue_creation_with_hints"
   APPEND PROPERTY LABELS "level0")
+
+add_symlink_to_built_opencl_dynlib(test_version)
