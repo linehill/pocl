@@ -32,7 +32,6 @@ set(C_PROGRAMS_TO_BUILD test_assign_loop_variable_to_privvar_makes_it_local
 foreach(PROG ${C_PROGRAMS_TO_BUILD})
   add_executable("${PROG}" "${PROG}.c")
   target_link_libraries("${PROG}" ${POCLU_LINK_OPTIONS})
-  add_symlink_to_built_opencl_dynlib("${PROG}")
 endforeach()
 
 
@@ -62,7 +61,6 @@ include_directories("${CMAKE_SOURCE_DIR}/lib/CL")
 foreach(PROG ${PROGRAMS_TO_BUILD})
   add_executable("${PROG}" "${PROG}.cpp")
   target_link_libraries("${PROG}" ${POCLU_LINK_OPTIONS})
-  add_symlink_to_built_opencl_dynlib("${PROG}")
 endforeach()
 
 

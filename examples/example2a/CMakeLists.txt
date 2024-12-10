@@ -60,5 +60,3 @@ set_tests_properties( "examples/example2a_poclbin"
     ENVIRONMENT "POCL_KERNEL_CACHE=0"
     LABELS "poclbin;internal;level0"
     DEPENDS "pocl_version_check")
-
-add_symlink_to_built_opencl_dynlib(example2a)

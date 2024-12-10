@@ -44,5 +44,3 @@ set_tests_properties( "examples/matadd"
     PROCESSORS 1
     LABELS "internal;vulkan;level0"
     DEPENDS "pocl_version_check")
-
-add_symlink_to_built_opencl_dynlib(matadd)

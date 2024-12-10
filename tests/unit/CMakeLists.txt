@@ -30,7 +30,6 @@ function(add_unit_test MAIN_SOURCE)
   get_filename_component(BASENAME ${MAIN_SOURCE} NAME_WLE)
   add_executable(${BASENAME} ${MAIN_SOURCE})
   target_compile_definitions(${BASENAME} PRIVATE ${UNIT_COMPILE_DEFINITIONS})
-  add_symlink_to_built_opencl_dynlib(${BASENAME})
 
   target_link_libraries(${BASENAME} PRIVATE ${POCL_LIBRARY_NAME})
   if(SANITIZER_OPTIONS)

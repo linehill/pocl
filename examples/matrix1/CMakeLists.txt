@@ -62,5 +62,3 @@ set_tests_properties( "examples/matrix1_poclbin"
     LABELS "poclbin;internal"
     DEPENDS "pocl_version_check"
     ENVIRONMENT "POCL_KERNEL_CACHE=0")
-
-add_symlink_to_built_opencl_dynlib(matrix1)

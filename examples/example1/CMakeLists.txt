@@ -113,5 +113,3 @@ if(ENABLE_REMOTE_CLIENT AND ENABLE_REMOTE_SERVER AND ENABLE_HOST_CPU_DEVICES)
     endif()
 
 endif()
-
-add_symlink_to_built_opencl_dynlib(example1)
