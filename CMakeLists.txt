@@ -2274,32 +2274,32 @@ if(SYCL_LIBDIR)
   set(SYCL_EXTRA "set(ENV{LD_LIBRARY_PATH} \"${OPENCL_LIBDIR}:${SYCL_LIBDIR}:$ENV{LD_LIBRARY_PATH}\")")
 endif()
 
+set(CTEST_CUSTOM_CONTENTS "
+  ${SAN_EXTRA}
+  set(ENV{POCL_ENABLE_UNINIT} \"1\")
+  set(ENV{POCL_BUILDING} \"1\")
+  ${SYCL_EXTRA}")
+
 # pointing OCL_ICD_VENDORS to pocl doesn't make sense with the proxy driver;
-# we want the driver to proxy to another OpenCL, so
-# we must let ocl-icd load it
-if(ENABLE_PROXY_DEVICE)
-
-  file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/CTestCustom.cmake" CONTENT "
-  ${SAN_EXTRA}
-  set(ENV{POCL_ENABLE_UNINIT} \"1\")
-  set(ENV{POCL_BUILDING} \"1\")
-  ${SYCL_EXTRA}
-  ")
-else()
-
-  file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/CTestCustom.cmake" CONTENT "
-  ${SAN_EXTRA}
-  set(ENV{POCL_ENABLE_UNINIT} \"1\")
-  set(ENV{POCL_BUILDING} \"1\")
-  set(ENV{OCL_ICD_VENDORS} \"${CMAKE_BINARY_DIR}/ocl-vendors/\")
-  ${SYCL_EXTRA}
-  ")
+# we want the driver to proxy to another OpenCL, so we must let ocl-icd load it.
+if(NOT ENABLE_PROXY_DEVICE)
+  string(APPEND CTEST_CUSTOM_CONTENTS "
+  set(ENV{OCL_ICD_VENDORS} \"${CMAKE_BINARY_DIR}/ocl-vendors/\")")
 endif()
+
+# Add PoCL DLLs to search paths for tests and examples.
+if(WIN32 AND BUILD_SHARED_LIBS)
+  string(APPEND CTEST_CUSTOM_CONTENTS "
+  set(ENV{PATH} \"${CMAKE_BINARY_DIR}/lib/CL;\$ENV{PATH}\")")
+endif()
+
+file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/CTestCustom.cmake"
+  CONTENT "${CTEST_CUSTOM_CONTENTS}")
 
 ##########################################################
 
 # for tests / examples
-set(POCLU_LINK_OPTIONS poclu ${OPENCL_LIBS} ${LIBMATH})
+set(POCLU_LINK_OPTIONS poclu pocl_internal ${LIBMATH})
 message(STATUS "POCLU LINK OPTS: ${POCLU_LINK_OPTIONS}")
 
 # poclcc bin

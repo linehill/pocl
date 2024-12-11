@@ -38,7 +38,7 @@ endif()
 if(ENABLE_POCLCC)
   add_executable(poclcc poclcc.c)
   harden(poclcc)
-  target_link_libraries(poclcc poclu ${OPENCL_LIBS})
+  target_link_libraries(poclcc poclu ${POCLU_LINK_OPTIONS})
 
   install(TARGETS "poclcc" RUNTIME
           DESTINATION "${POCL_INSTALL_PUBLIC_BINDIR}" COMPONENT "poclcc")

@@ -382,3 +382,17 @@ endif()
 if(WIN32)
   set_target_properties("${POCL_LIBRARY_NAME}" PROPERTIES PREFIX "")
 endif()
+
+# In-build-tree tests and samples depend on "pocl_internal" library. On
+# Windows when PoCL builds the OpenCL.dll, they will depend on DLL named
+# other than OpenCL.dll to avoid having a system one being linked in
+# which we can't override with PATH env (used in substitution for
+# LD_LIBRARY_PATH on Windows).
+if(WIN32 AND BUILD_SHARED_LIBS AND NOT ENABLE_ICD)
+  # TODO: We could just copy and rename the built OpenCL.dll?
+  add_library(pocl_internal ${LIBPOCL_OBJS})
+  harden(pocl_internal)
+  target_link_libraries(pocl_internal PRIVATE ${POCL_PRIVATE_LINK_LIST})
+else()
+  add_library(pocl_internal ALIAS "${POCL_LIBRARY_NAME}")
+endif()
