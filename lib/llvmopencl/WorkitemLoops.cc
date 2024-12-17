@@ -1143,6 +1143,17 @@ bool WorkitemLoops::canHandleKernel(llvm::Function &K,
   llvm::PostDominatorTree &PDT = AM.getResult<PostDominatorTreeAnalysis>(K);
   for (Function::iterator FI = K.begin(), FE = K.end(); FI != FE; ++FI) {
     BasicBlock *BB = &*FI;
+
+    for (const auto &Instr : *BB) {
+      // (Post)dominator analysis that is used in multiple places gets
+      // confused by 'unreachable' instructions. Fall back if finding them.
+      // TO DO: Convert unreachables to returns or similar. Or just remove
+      // them. They should not be reached after all, so it's undefined
+      // what happens if they are.
+      if (isa<UnreachableInst>(Instr))
+        return false;
+    }
+
     if (!Barrier::hasBarrier(BB)) continue;
 
     // Unconditional barrier for this purpose postdominates the entry node or

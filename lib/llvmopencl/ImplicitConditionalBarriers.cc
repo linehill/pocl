@@ -52,18 +52,14 @@ namespace pocl {
 
 using namespace llvm;
 
-/**
- * Finds a predecessor that does not come from a back edge.
- *
- * This is used to include loops in the conditional parallel region.
- */
+/// Finds a predecessor basic block that does not originate from a back edge.
+///
+/// This is used to include loops in the conditional parallel region.
 static BasicBlock *firstNonBackedgePredecessor(llvm::BasicBlock *BB,
                                                DominatorTree &DT) {
 
   pred_iterator I = pred_begin(BB), E = pred_end(BB);
-  if (I == E)
-    return NULL;
-  while (DT.dominates(BB, *I) && I != E)
+  while (I != E && DT.dominates(BB, *I))
     ++I;
   if (I == E)
     return NULL;
