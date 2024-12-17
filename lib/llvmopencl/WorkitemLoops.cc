@@ -191,7 +191,7 @@ bool WorkitemLoopsImpl::runOnFunction(Function &Func) {
 
   Changed |= handleLocalMemAllocas();
 
-#ifdef DUMP_CFGS
+#ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
   dumpCFG(*F, F->getName().str() + "_after_wiloops.dot", nullptr,
           &OriginalParallelRegions);
 #endif
@@ -373,8 +373,9 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
   // Append 'dyn' or 'static' to the dot files to differentiate between the
   // dynamic WG one (produced for the binaries) and the specialized static one.
   std::string DotSuffix = WGDynamicLocalSize ? "_dyn" : "_static";
-  dumpCFG(F, F.getName().str() + "_before_pregions" + DotSuffix + ".dot", nullptr, nullptr);
 #endif
+  dumpCFG(F, F.getName().str() + "_before_pregions" + DotSuffix + ".dot",
+          nullptr, nullptr);
 
   K->getParallelRegions(LI, &OriginalParallelRegions);
   handleWorkitemFunctions();

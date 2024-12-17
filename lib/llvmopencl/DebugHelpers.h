@@ -1,12 +1,13 @@
 // Header for DebugHelpers, tools for debugging the kernel compiler.
 //
 // Copyright (c) 2019 Pekka Jääskeläinen
+//               2024-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
+// of this software and associated documentation files (the "Software"), to
+// deal in the Software without restriction, including without limitation the
+// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+// sell copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
 // The above copyright notice and this permission notice shall be included in
@@ -16,9 +17,9 @@
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+// IN THE SOFTWARE.
 
 #ifndef POCL_DEBUG_HELPERS_H
 #define POCL_DEBUG_HELPERS_H
@@ -41,11 +42,18 @@ class Region;
 #include <string>
 
 namespace pocl {
-  // View CFG with visual aids to debug kernel compiler problems.
-void dumpCFG(llvm::Function &F, std::string Filename,
+
+/// Dump the LLVM Function as a control flow graph in the Graphviz dot format,
+/// highlighting spots of interest in the kernel compilation perspective.
+///
+/// \param F the function to dump.
+/// \param FileName the target file name.
+/// \param Regions highlight these parallel regions in the graph.
+/// \param Highlights highlight these basic blocks in the graph.
+void dumpCFG(llvm::Function &F, std::string FileName = "",
              const std::vector<llvm::Region *> *Regions = nullptr,
              const ParallelRegion::ParallelRegionVector *ParRegions = nullptr,
-             const std::set<llvm::BasicBlock *> *highlights = nullptr);
+             const std::set<llvm::BasicBlock *> *Highlights = nullptr);
 
 /// Overloads for debbuggers (the above is too complicated to be called in gdb).
 void dumpCFG(llvm::Function &F);
@@ -59,31 +67,37 @@ void viewCFG(llvm::Function &F);
 //
 // @return True in case the function was changed.
 bool chopBBs (llvm::Function &F, llvm::Pass &P);
+class PoCLCFGPrinter : public llvm::PassInfoMixin<PoCLCFGPrinter> {
+public:
+  explicit PoCLCFGPrinter(llvm::raw_ostream &OutS, llvm::StringRef Pref = "")
+    : OS(OutS) {
+    Prefix = Pref.str();
+    Prefix += "_";
+  }
+  static void registerWithPB(llvm::PassBuilder &B);
+  llvm::PreservedAnalyses run(llvm::Module &M,
+                              llvm::ModuleAnalysisManager &AM);
+  static bool isRequired() { return true; }
 
-  class PoCLCFGPrinter : public llvm::PassInfoMixin<PoCLCFGPrinter> {
-  public:
-    explicit PoCLCFGPrinter(llvm::raw_ostream &OutS, llvm::StringRef Pref = "")
-        : OS(OutS) {
-      Prefix = Pref.str();
-      Prefix += "_";
-    }
-    static void registerWithPB(llvm::PassBuilder &B);
-    llvm::PreservedAnalyses run(llvm::Module &M,
-                                llvm::ModuleAnalysisManager &AM);
-    static bool isRequired() { return true; }
-
-  private:
-    std::string Prefix;
-    llvm::raw_ostream &OS;
-    void dumpModule(llvm::Module &M);
-  };
+private:
+  std::string Prefix;
+  llvm::raw_ostream &OS;
+  void dumpModule(llvm::Module &M);
 };
+
+}
 
 // Controls the debug output from BarrierTailReplication.cc.
 //#define DEBUG_BARRIER_REPL
 
 // Controls the debug output from ImplicitConditionalBarriers.cc.
 //#define DEBUG_COND_BARRIERS
+
+// Controls the debug output from ImplicitLoopBarriers.cc.
+//#define DEBUG_ILOOP_BARRIERS
+
+// Controls the debug output from LoopBarriers.cc.
+//#define DEBUG_LOOP_BARRIERS
 
 // Controls the debug output from Workgroup.cc
 //#define DEBUG_WORK_GROUP_GEN
@@ -100,5 +114,11 @@ bool chopBBs (llvm::Function &F, llvm::Pass &P);
 // Enable CFG dumps from various spots during the kernel compilation.
 //#define POCL_KERNEL_COMPILER_DUMP_CFGS
 
+#ifndef POCL_KERNEL_COMPILER_DUMP_CFGS
+#define dumpCFG(...)                                                           \
+  do {                                                                         \
+  } while (0)
+#endif
 
 #endif
+

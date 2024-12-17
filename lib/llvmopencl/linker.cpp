@@ -830,7 +830,7 @@ int link(llvm::Module *Program, const llvm::Module *Lib, std::string &Log,
     if (isKernelToProcess(F)) {
       size_t EstStackSize =
           estimateFunctionStackSize(&F, Program, CallChain, FuncStackSizeMap);
-      DB_PRINT("Kernel %s Estimated stack size: %zu \n", F.getName().data(),
+      DB_PRINT("Kernel %s Estimated stack size: %zu \n", F.getName().str().c_str(),
                EstStackSize);
       if (EstStackSize > 0) {
         std::string MetadataKey = F.getName().str();

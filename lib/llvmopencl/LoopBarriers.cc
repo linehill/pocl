@@ -2,7 +2,7 @@
 //
 // Copyright (c) 2011 Universidad Rey Juan Carlos
 //               2012-2019 Pekka Jääskeläinen
-//               2024 Pekka Jääskeläinen / Intel Finland Oy
+//               2024-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -38,6 +38,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Transforms/Scalar/LoopPassManager.h>
 
 #include "Barrier.h"
+#include "DebugHelpers.h"
 #include "KernelCompilerUtils.h"
 #include "LLVMUtils.h"
 #include "LoopBarriers.h"
@@ -60,6 +61,14 @@ using namespace llvm;
 
 static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT) {
 
+  Function *K = L.getHeader()->getParent();
+
+  std::set<llvm::BasicBlock *> Highlights;
+  dumpCFG(*K, K->getName().str() + "_before_loopbbarriers_on_bloop_" +
+                  L.getName().str() + ".dot");
+
+  // TO clean: The loop construct is not necessary here anymore,
+  // as the b-loop property is detected earlier.
   for (Loop::block_iterator i = L.block_begin(), e = L.block_end();
        i != e; ++i) {
     for (BasicBlock::iterator j = (*i)->begin(), e = (*i)->end();
@@ -83,6 +92,7 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT) {
 #endif
         Barrier::createAtEnd(Preheader);
         Preheader->setName(Preheader->getName() + ".loopbarrier");
+        Highlights.insert(Preheader);
 
         // Add a barrier after the PHI nodes on the header (the replicated
         // headers will be merged afterwards).
@@ -94,26 +104,16 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT) {
 #endif
           Barrier::createAtStart(Header);
           Header->setName(Header->getName() + ".phibarrier");
+          Highlights.insert(Header);
         }
-
-        // TODO: Check that if the header doesn't contain non-uniform
-        // instructions, mark it as pure uniform.
-        // TODO: Mark the increment block as uniform, if there is nothing
-        // else in it. Now we might end up replicating the iteration
-        // variable, which hinders vectorization.
-        // TODO: Might be best to do in a single place once and for all:
-        // Marks blocks that accesses only uniform values as pure uniform. It's
-        // not always a win in case it splits a parallel region with a non-uniform
-        // variable's live range getting split to multiple PRs, causing it to get
-        // context saved.
-
-        // Add the barriers on the exiting block and the latches,
+        // Add barriers on the exiting block and the latches,
         // which might not always be the same if there is computation
         // after the exit decision.
         BasicBlock *BrExit = L.getExitingBlock();
         if (BrExit != NULL) {
           Barrier::createAtEnd(BrExit);
           BrExit->setName(BrExit->getName() + ".brexitbarrier");
+          Highlights.insert(BrExit);
         }
 
         BasicBlock *Latch = L.getLoopLatch();
@@ -126,10 +126,46 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT) {
           // before the loop branch.
           markAsPureUniformBlock(Latch, "b-loop latch");
           return true;
+
+        BasicBlock *CondBlock = Barrier::hasOnlyBarrier(BrExit)
+                                    ? BrExit->getSinglePredecessor()
+                                    : BrExit;
+        // Check if we can share the loop construct, meaning the iteration
+        // variable and the code that manages it, across the work-items,
+        // like is usually the case with loops containing barrier calls.
+        // If we can share the iteration variable without storing it in the
+        // context, it helps the loop vectorizer a lot when analyzing the
+        // memory access patterns.
+        bool UniformLoopConstruct = BrExit != Latch && CondBlock != nullptr &&
+                                    !VUA.hasDivergingInstructions(*CondBlock);
+
+#ifdef DEBUG_LOOP_BARRIERS
+        std::cerr << "CondBlock:\n";
+        if (CondBlock != nullptr)
+          CondBlock->dump();
+        std::cerr << "Header:\n";
+        if (Header != nullptr)
+          Header->dump();
+        std::cerr << "Latch:\n";
+        if (Latch != NULL)
+          Latch->dump();
+        std::cerr << "BrExit:\n";
+        if (BrExit != NULL)
+          BrExit->dump();
+        if (UniformLoopConstruct)
+          std::cerr << "Uniform loop construct detected\n";
+#endif
+
+        if (UniformLoopConstruct) {
+          markAsPureUniformBlock(CondBlock, "b-loop condition check");
+          if (Latch != nullptr) {
+            // Only a single latch.
+            markAsPureUniformBlock(Latch, "b-loop latch");
+            return true;
+          }
         }
 
-        // Modified code from llvm::LoopBase::getLoopLatch to
-        // go trough all the latches.
+        // Go through all the latches ('continues').
         BasicBlock *Header2 = L.getHeader();
         typedef GraphTraits<Inverse<BasicBlock *> > InvBlockTraits;
         InvBlockTraits::ChildIteratorType PI =
@@ -146,10 +182,6 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT) {
             // (otherwise if might not even belong to this "tail", see
             // forifbarrier1 graph test).
             if (DT.dominates(j->getParent(), Latch2)) {
-              // Barrier::createAtEnd(Latch2);
-              // Latch2->setName(Latch2->getName() + ".latchbarrier");
-              //  TODO: Check that we don't have diverging code in the block
-              //  before the loop branch.
               markAsPureUniformBlock(Latch2, "b-loop latch");
             }
           }
@@ -210,16 +242,16 @@ llvm::PreservedAnalyses LoopBarriers::run(llvm::Loop &L,
 
   Function *K = L.getHeader()->getParent();
 
-#ifdef DEBUG_LOOP_BARRIERS
-  std::cerr << "Before LoopBarriers on loop " << L.getName().str() << std::endl;
-  K->dump();
-#endif
-
   if (!isKernelToProcess(*K))
     return PreservedAnalyses::all();
 
   if (!hasWorkgroupBarriers(*K))
     return PreservedAnalyses::all();
+
+#ifdef DEBUG_LOOP_BARRIERS
+  std::cerr << "Before LoopBarriers on loop " << L.getName().str() << std::endl;
+  K->dump();
+#endif
 
   PreservedAnalyses PAChanged = PreservedAnalyses::none();
 

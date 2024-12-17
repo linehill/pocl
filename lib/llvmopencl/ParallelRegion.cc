@@ -342,8 +342,8 @@ ParallelRegion *ParallelRegion::Create(const SmallPtrSet<BasicBlock *, 8> &BBs,
   assert(Entry != NULL);
   assert(Exit != NULL);
 
-  // This is done in two steps so order of the vector
-  // is the same as original function order.
+  // This is done in two steps so the order of the vector is the same as
+  // original function order.
   Function *F = Entry->getParent();
   for (Function::iterator i = F->begin(), e = F->end(); i != e; ++i) {
     BasicBlock *B = &*i;
@@ -392,9 +392,9 @@ ParallelRegion::Verify()
           std::set<llvm::BasicBlock*> highlights;
           highlights.insert(entryBB());
           highlights.insert(*i);
-          pocl::dumpCFG(*(*i)->getParent(),
-                        (*i)->getParent()->getName().str() + ".dot", nullptr,
-                        &prvec, &highlights);
+          dumpCFG(*(*i)->getParent(),
+                  (*i)->getParent()->getName().str() + ".dot", nullptr, &prvec,
+                  &highlights);
           assert(0 && "Incoming edges to non-entry block!");
           return false;
         } else if (!Barrier::hasBarrier(*ii)) {

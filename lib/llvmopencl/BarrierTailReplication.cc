@@ -94,16 +94,17 @@ private:
 
 bool BarrierTailReplicationImpl::runOnFunction(Function &Func) {
 
+  F = &Func;
+
 #ifdef DEBUG_BARRIER_REPL
   std::cerr << "### Before barrier tail replication:\n";
   Func.dump();
 #endif
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-  dumpCFG(F, F.getName().str() + "_before_btr.dot", nullptr, nullptr);
+  dumpCFG(Func, Func.getName().str() + "_before_btr.dot", nullptr, nullptr);
 #endif
 
-  F = &Func;
   bool Changed = ProcessFunction(Func);
 
   LI.verify(DT);
@@ -114,7 +115,7 @@ bool BarrierTailReplicationImpl::runOnFunction(Function &Func) {
     Changed |= CleanupPHIs(&*I);
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-  dumpCFG(F, F.getName().str() + "_after_btr.dot", nullptr, nullptr);
+  dumpCFG(Func, Func.getName().str() + "_after_btr.dot", nullptr, nullptr);
 #endif
 
 #ifdef DEBUG_BARRIER_REPL
@@ -469,6 +470,10 @@ BarrierTailReplication::run(llvm::Function &F,
   llvm::LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
 
   BarrierTailReplicationImpl BTRI(DT, LI);
+
+#ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
+  dumpCFG(F, F.getName().str() + "_before_btr.dot", nullptr, nullptr);
+#endif
 
   PreservedAnalyses PAChanged = PreservedAnalyses::none();
   PAChanged.preserve<VariableUniformityAnalysis>();

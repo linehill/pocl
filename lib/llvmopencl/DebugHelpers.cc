@@ -1,6 +1,7 @@
 // Helpers for debugging the kernel compiler.
 //
 // Copyright (c) 2013-2019 Pekka Jääskeläinen
+//               2024-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -39,6 +40,11 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 
 #include "Barrier.h"
 #include "DebugHelpers.h"
+
+#ifdef dumpCFG
+#undef dumpCFG
+#endif
+
 #include "LLVMUtils.h"
 #include "Workgroup.h"
 #include "pocl_file_util.h"
@@ -69,35 +75,39 @@ static void printBranches(
 }
 
 static void printBasicBlock(
-  llvm::BasicBlock* b, std::ostream& s, bool highlighted) {
-  //      if (!Barrier::hasBarrier(b)) continue;
-  s << getDotBasicBlockID(b);
-  s << "[shape=rect,style=";
-  if (Barrier::hasBarrier(b) || isPureUniformBlock(b))
-      s << "dotted";
-  else
-    s << "solid";
+  llvm::BasicBlock* B, std::ostream& S, bool Highlighted) {
 
-  if (highlighted) {
-    s << ",color=red,style=filled";
-  } else if (isPureUniformBlock(b)) {
-    s << ",color=grey,style=filled";
+  S << getDotBasicBlockID(B);
+  S << "[shape=rect,style=";
+  if (Barrier::hasBarrier(B) || isPureUniformBlock(B))
+      S << "dotted";
+  else
+    S << "solid";
+
+  if (Barrier::hasBarrier(B)) {
+    S << ",fillcolor=red,style=filled";
+  } else if (isPureUniformBlock(B)) {
+    S << ",fillcolor=grey,style=filled";
   }
-  s << ",label=\"" << b->getName().str() << ":\\n";
+  if (Highlighted) {
+    // Highlight the wanted nodes with a thick blue border.
+    S << ",color=blue,penwidth=3";
+  }
+  S << ",label=\"" << B->getName().str() << ":\\n";
 
   // The work-item loop control structures.
-  if (b->getName().starts_with("pregion_for_cond")) {
-    s << "wi-loop branch\\n";
-  } else if (b->getName().starts_with("pregion_for_inc")) {
-    s << "local_id_* increment\\n";
-  } else if (b->getName().starts_with("pregion_for_init")) {
-    s << "wi-loop init\\n";
-  } else if (b->getName().starts_with("pregion_for_end")) {
-    s << "wi-loop exit\\n";
+  if (B->getName().starts_with("pregion_for_cond")) {
+    S << "wi-loop branch\\n";
+  } else if (B->getName().starts_with("pregion_for_inc")) {
+    S << "local_id_* increment\\n";
+  } else if (B->getName().starts_with("pregion_for_init")) {
+    S << "wi-loop init\\n";
+  } else if (B->getName().starts_with("pregion_for_end")) {
+    S << "wi-loop exit\\n";
   } else {
     // analyze the contents of the BB
     int PreviousNonHighlighted = 0;
-    for (llvm::BasicBlock::iterator Instr = b->begin(); Instr != b->end();
+    for (llvm::BasicBlock::iterator Instr = B->begin(); Instr != B->end();
          ++Instr) {
 
       llvm::CallInst *Call = dyn_cast<CallInst>(Instr);
@@ -110,7 +120,7 @@ static void printBasicBlock(
         int MaxCharsToPrint = 20;
         llvm::GlobalVariable *FmtStrArg =
             dyn_cast<llvm::GlobalVariable>(Call->getArgOperand(0));
-        s << "printf(\\\"";
+        S << "printf(\\\"";
         if (FmtStrArg != nullptr) {
           Constant *Initializer = FmtStrArg->getInitializer();
           int CharI = 0;
@@ -122,93 +132,81 @@ static void printBasicBlock(
             if (CharVal == 0)
               break;
             if (CharVal == '\n')
-              s << "\\\\n";
+              S << "\\\\n";
             else
-              s << CharVal;
+              S << CharVal;
           }
           if (MaxCharsToPrint == 0)
-            s << "...";
+            S << "...";
         } else {
-          s << "...";
+          S << "...";
         }
-        s << "\\\", ...)\\n";
+        S << "\\\", ...)\\n";
         PreviousNonHighlighted = 0;
       } else if (isa<Barrier>(Instr)) {
-        s << "BARRIER\\n";
+        S << "BARRIER\\n";
         PreviousNonHighlighted = 0;
       } else if (isa<BranchInst>(Instr)) {
-        s << "branch\\n";
+        S << "branch\\n";
         PreviousNonHighlighted = 0;
       } else if (isa<PHINode>(Instr)) {
-        s << "PHI\\n";
+        S << "PHI\\n";
         PreviousNonHighlighted = 0;
       } else if (isa<ReturnInst>(Instr)) {
-        s << "RETURN\\n";
+        S << "RETURN\\n";
         PreviousNonHighlighted = 0;
       } else if (isa<UnreachableInst>(Instr)) {
-        s << "UNREACHABLE\\n";
+        S << "UNREACHABLE\\n";
         PreviousNonHighlighted = 0;
       } else {
         if (PreviousNonHighlighted == 0)
-          s << "...program instructions...\\n";
+          S << "...program instructions...\\n";
         PreviousNonHighlighted++;
       }
     }
   }
-  s << "\"";
-  s << "]";
-  s << ";" << std::endl << std::endl;
+  S << "\"";
+  S << "]";
+  S << ";" << std::endl << std::endl;
 }
 
-/**
- * pocl-specific dumping of the LLVM Function as a control flow graph in the
- * Graphviz dot format.
- *
- * @param F the function to dump
- * @param fname the target file name
- * @param regions highlight these parallel regions in the graph
- * @param highlights highlight these basic blocks in the graph
- */
-void dumpCFG(llvm::Function &F, std::string fname,
+void dumpCFG(llvm::Function &F, std::string FileName,
              const std::vector<llvm::Region *> *Regions,
              const ParallelRegion::ParallelRegionVector *ParRegions,
-             const std::set<llvm::BasicBlock *> *highlights) {
+             const std::set<llvm::BasicBlock *> *Highlights) {
 
   unsigned LastRegID = 0;
 
-  if (fname == "")
-    fname = std::string("pocl_cfg.") + F.getName().str() + ".dot";
-
-  std::string origName = fname;
-  int counter = 0;
-  while (pocl_exists (fname.c_str())) {
-    std::ostringstream ss;
-    ss << origName << "." << counter;
-    fname = ss.str();
-    ++counter;
+  std::string OrigName = FileName;
+  int Counter = 0;
+  while (pocl_exists(FileName.c_str())) {
+    std::ostringstream SS;
+    SS << OrigName << "." << Counter;
+    FileName = SS.str();
+    ++Counter;
   }
 
-  std::ofstream s;
-  s.open(fname.c_str(), std::ios::trunc);
-  s << "digraph " << F.getName().str() << " {" << std::endl;
+  std::ofstream S;
+  S.open(FileName.c_str(), std::ios::trunc);
+  S << "digraph " << F.getName().str() << " {" << std::endl;
 
-  std::set<BasicBlock*> regionBBs;
+  std::set<BasicBlock*> RegionBBs;
 
   if (Regions != nullptr && Regions->size()) {
     for (const Region *R : *Regions) {
       unsigned RegID = ++LastRegID;
-      s << "\tsubgraph cluster" << RegID << " {" << std::endl;
+      S << "\tsubgraph cluster" << RegID << " {" << std::endl;
       for (Region::const_block_iterator RI = R->block_begin(),
                                         RE = R->block_end();
            RI != RE; ++RI) {
         BasicBlock *BB = *RI;
         printBasicBlock(
-            BB, s,
-            (highlights != NULL && highlights->find(BB) != highlights->end()));
-        regionBBs.insert(BB);
+            BB, S,
+            (Highlights != NULL && Highlights->find(BB) != Highlights->end()));
+        RegionBBs.insert(BB);
       }
-      s << "label=\"Parallel region #" << RegID << "\";" << std::endl;
-      s << "}" << std::endl;
+      S << "label=\"Parallel region #" << RegID << "\";" << std::endl;
+      S << "}" << std::endl;
     }
   }
 
@@ -218,35 +216,35 @@ void dumpCFG(llvm::Function &F, std::string fname,
              RE = ParRegions->end();
          RI != RE; ++RI) {
       ParallelRegion *PR = *RI;
-      s << "\tsubgraph cluster" << PR->getID() << " {" << std::endl;
+      S << "\tsubgraph cluster" << PR->getID() << " {" << std::endl;
       for (ParallelRegion::iterator It = PR->begin(), E = PR->end(); It != E;
            ++It) {
         BasicBlock *BB = *It;
         printBasicBlock(
-            BB, s,
-            (highlights != NULL && highlights->find(BB) != highlights->end()));
-        regionBBs.insert(BB);
+            BB, S,
+            (Highlights != NULL && Highlights->find(BB) != Highlights->end()));
+        RegionBBs.insert(BB);
       }
-      s << "label=\"Parallel region #" << PR->getID() << "\";" << std::endl;
-      s << "}" << std::endl;
+      S << "label=\"Parallel region #" << PR->getID() << "\";" << std::endl;
+      S << "}" << std::endl;
     }
   }
   for (Function::iterator FI = F.begin(), e = F.end(); FI != e; ++FI) {
     BasicBlock *BB = &*FI;
-    if (regionBBs.find(BB) != regionBBs.end())
+    if (RegionBBs.find(BB) != RegionBBs.end())
       continue;
     printBasicBlock(
-        BB, s, highlights != NULL && highlights->find(BB) != highlights->end());
+        BB, S, Highlights != NULL && Highlights->find(BB) != Highlights->end());
   }
 
   for (Function::iterator FI = F.begin(), e = F.end(); FI != e; ++FI) {
     BasicBlock *BB = &*FI;
     printBranches(
-        BB, s, highlights != NULL && highlights->find(BB) != highlights->end());
+        BB, S, Highlights != NULL && Highlights->find(BB) != Highlights->end());
   }
 
-  s << "}" << std::endl;
-  s.close();
+  S << "}" << std::endl;
+  S.close();
 #if 0
   std::cout << "### dumped CFG to " << fname << std::endl;
 #endif
@@ -305,7 +303,6 @@ void PoCLCFGPrinter::dumpModule(llvm::Module &M) {
     dumpCFG(F, Name, nullptr, nullptr);
   }
 }
-
 
 llvm::PreservedAnalyses PoCLCFGPrinter::run(llvm::Module &M,
                                             llvm::ModuleAnalysisManager &AM) {

@@ -2,7 +2,7 @@
 //
 // Copyright (c) 2011 Universidad Rey Juan Carlos
 //               2012-2014 Pekka Jääskeläinen / Tampere University of Technology
-//               2024 Pekka Jääskeläinen / Intel Finland Oy
+//               2024-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -36,6 +36,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 
 #include "Barrier.h"
 #include "CanonicalizeBarriers.h"
+#include "DebugHelpers.h"
 #include "LLVMUtils.h"
 #include "VariableUniformityAnalysis.h"
 #include "Workgroup.h"
@@ -67,6 +68,8 @@ static bool canonicalizeBarriers(Function &F, WorkitemHandlerType Handler) {
   F.dump();
 #endif
 
+  dumpCFG(F, F.getName().str() + "_before_canon.dot");
+
   bool Changed = false;
 
   BasicBlock *Entry = &F.getEntryBlock();
@@ -85,9 +88,6 @@ static bool canonicalizeBarriers(Function &F, WorkitemHandlerType Handler) {
 
   BasicBlock *FirstPRStart = F.getEntryBlock().getSingleSuccessor();
   if (!Barrier::hasOnlyBarrier(FirstPRStart)) {
-#ifdef DEBUG_CANON_BARRIERS
-    std::cerr << "CanonBar: hasOnlyBarrier(entry)\n";
-#endif
     BasicBlock *EffectiveEntry =
         SplitBlock(FirstPRStart, &(FirstPRStart->front()));
 
@@ -159,30 +159,29 @@ static bool canonicalizeBarriers(Function &F, WorkitemHandlerType Handler) {
 
 static bool processFunction(Function &F, WorkitemHandlerType Handler) {
 
-  bool changed = false;
+  bool Changed = false;
 
   InstructionSet Barriers;
 
   for (Function::iterator i = F.begin(), e = F.end();
        i != e; ++i) {
-    BasicBlock *b = &*i;
-    for (BasicBlock::iterator i = b->begin(), e = b->end();
-         i != e; ++i) {
+    BasicBlock *BB = &*i;
+    for (BasicBlock::iterator i = BB->begin(), e = BB->end(); i != e; ++i) {
       if (isa<Barrier>(i)) {
         Barriers.insert(&*i);
       }
     }
   }
-  
+
   // Finally add all the split points, now that we are done with the
   // iterators.
   for (InstructionSet::iterator i = Barriers.begin(), e = Barriers.end();
        i != e; ++i) {
-    BasicBlock *b = (*i)->getParent();
+    BasicBlock *BB = (*i)->getParent();
 
-    // Split post barrier first cause it does not make the barrier
-    // to belong to another basic block.
-    Instruction *t = b->getTerminator();
+    // Split post barrier first cause it does not make the barrier belong to
+    // another basic block.
+    Instruction *Term = BB->getTerminator();
     // if ((t->getNumSuccessors() > 1) ||
     //     (t->getPrevNode() != *i)) {
     // Change: barriers with several successors are all right
@@ -190,72 +189,74 @@ static bool processFunction(Function &F, WorkitemHandlerType Handler) {
     // loop handling.
 
     const bool HasNonBranchInstructionsAfterBarrier =
-        t->getPrevNode() != *i ||
-        (Handler == WorkitemHandlerType::CBS && t->getNumSuccessors() > 1);
+        Term->getPrevNode() != *i ||
+        (Handler == WorkitemHandlerType::CBS && Term->getNumSuccessors() > 1);
 
+    BasicBlock *PostBB = nullptr;
     if (HasNonBranchInstructionsAfterBarrier) {
-      BasicBlock *new_b = SplitBlock(b, (*i)->getNextNode());
-      new_b->setName(b->getName() + ".postbarrier");
-      changed = true;
+      BasicBlock *NewBB = SplitBlock(BB, (*i)->getNextNode());
+      NewBB->setName(BB->getName() + ".postbarrier");
+      Changed = true;
+      PostBB = NewBB;
     }
 
-    BasicBlock *predecessor = b->getSinglePredecessor();
-    if (predecessor != NULL) {
-      auto pt = predecessor->getTerminator();
-      if ((pt->getNumSuccessors() == 1) &&
-          (&b->front() == (*i))) {
-        // Barrier is at the beginning of the BB,
-        // which has a single predecessor with just
-        // one successor (the barrier itself), thus
+    BasicBlock *Predecessor = BB->getSinglePredecessor();
+    if (Predecessor != NULL) {
+      auto PT = Predecessor->getTerminator();
+      if ((PT->getNumSuccessors() == 1) && (&BB->front() == (*i))) {
+        // Barrier is at the beginning of the BB, which has a single
+        // predecessor with just one successor (the barrier itself), thus
         // no need to split before barrier.
         continue;
       }
     }
-    if ((b == &(b->getParent()->getEntryBlock())) &&
-        (&b->front() == (*i)))
+    if ((BB == &(BB->getParent()->getEntryBlock())) && (&BB->front() == (*i)))
       continue;
-    
-    // If no instructions before barrier, do not split
-    // (allow multiple predecessors, eases loop handling).
-    // if (&b->front() == (*i))
-    //   continue;
-    BasicBlock *new_b = SplitBlock(b, *i);
-    new_b->takeName(b);
-    b->setName(new_b->getName() + ".prebarrier");
-    changed = true;
+
+    // If there are no instructions before the barrier, do not split
+    // (allow multiple predecessors, which eases loop handling).
+    BasicBlock *NewBB = SplitBlock(BB, *i);
+    NewBB->takeName(BB);
+    BB->setName(NewBB->getName() + ".prebarrier");
+    Changed = true;
+
+    // Retain the pure uniform MD in the original basic block as the barrier
+    // block splitting doesn't change that property. No need to remove the MD
+    // from the barrier block as it can be treated as a pure uniform BB as well.
+    copyPureUniformMD(PostBB != nullptr ? PostBB : NewBB, BB);
   }
 
   // Prune empty regions. That is, if there are two successive
   // pure barrier blocks without side branches, remove the other one.
-  bool emptyRegionDeleted = false;
+  bool EmptyRegionDeleted = false;
   do {
-    emptyRegionDeleted = false;
+    EmptyRegionDeleted = false;
     for (Function::iterator i = F.begin(), e = F.end();
          i != e; ++i) {
-        BasicBlock *b = &*i;
-        auto t = b->getTerminator();
-        if (!Barrier::endsWithBarrier(b) || t->getNumSuccessors() != 1)
-          continue;
+      BasicBlock *BB = &*i;
+      auto Term = BB->getTerminator();
+      if (!Barrier::endsWithBarrier(BB) || Term->getNumSuccessors() != 1)
+        continue;
 
-        BasicBlock *successor = t->getSuccessor(0);
+      BasicBlock *Successor = Term->getSuccessor(0);
 
-        if (Barrier::hasOnlyBarrier(successor) &&
-            successor->getSinglePredecessor() == b) {
-          b->replaceAllUsesWith(successor);
-          b->eraseFromParent();
-          emptyRegionDeleted = true;
-          changed = true;
-          break;
-        }
+      if (Barrier::hasOnlyBarrier(Successor) &&
+          Successor->getSinglePredecessor() == BB) {
+        BB->replaceAllUsesWith(Successor);
+        BB->eraseFromParent();
+        EmptyRegionDeleted = true;
+        Changed = true;
+        break;
       }
-  } while (emptyRegionDeleted);
+      }
+  } while (EmptyRegionDeleted);
 
 #ifdef DEBUG_CANON_BARRIERS
   std::cerr << "After CanonicalizeBarriers:\n";
   F.dump();
 #endif
 
-  return changed;
+  return Changed;
 }
 
 

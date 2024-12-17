@@ -1,7 +1,7 @@
 // Implementation for VariableUniformityAnalysis function pass.
 //
 // Copyright (c) 2013-2019 Pekka Jääskeläinen
-//               2024 Pekka Jääskeläinen / Intel Finland Oy
+//               2024-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -165,7 +165,7 @@ void VariableUniformityAnalysisResult::analyzeLoop(
   // written in the loop check basic block, which is treated as divergent at
   // this point, even if the values written to it were uniform. Let's treat the
   // increment block as uniform and run the check. If the check fails, there
-  // was some another reason for the divergent result.
+  // was some other reason for the divergent result.
 
   setUniform(&F, ExitingBlock);
   setUniform(&F, LatchBlock);
@@ -254,25 +254,24 @@ bool VariableUniformityAnalysisResult::runOnFunction(
   return false;
 }
 
-/**
- * Returns true in case the value should be privatized, e.g., a copy
- * should be created for each parallel work-item.
- *
- * This is not the same as !isUniform() because of some of the allocas.
- * Specifically, the loop iteration variables are sometimes uniform, 
- * that is, each work item sees the same induction variable value at every iteration, 
- * but the variables should be still replicated to avoid multiple increments
- * of the same induction variable by each work-item.
- */
+/// Returns true in case the value should be privatized, e.g., a copy
+/// should be created for each parallel work-item.
+///
+/// This is not the same as !isUniform() because of some of the allocas.
+/// Specifically, the loop iteration variables are in some cases uniform,
+/// that is, each work item sees the same induction variable value at every
+/// iteration, but the variables should be still replicated to avoid multiple
+/// increments of the same induction variable by each work-item in a b-loop
+/// of which iterator cannot be merged cross WIs.
 bool VariableUniformityAnalysisResult::shouldBePrivatized(llvm::Function *F,
                                                           llvm::Value *Val) {
   if (!isUniform(F, Val)) return true;
 
-  /* Check if the value is stored in stack (is an alloca or writes to an alloca). */
-  /* It should be enough to context save the initial alloca and the stores to
-     make sure each work-item gets their own stack slot and they are updated.
-     How the value (based on which of those allocas) is computed does not matter as
-     we are deadling with uniform computation. */
+  // Check if the value is stored in stack (is an alloca or writes to an alloca).
+  // It should be enough to context save the initial alloca and the stores to
+  // make sure each work-item gets their own stack slot and they are updated.
+  // How the value (based on which of those allocas) is computed does not matter as
+  // we are deadling with uniform computation.
 
   if (isa<AllocaInst>(Val)) return true;
 
@@ -423,17 +422,14 @@ bool VariableUniformityAnalysisResult::isUniformityAnalyzed(
   return false;
 }
 
-/**
- * Simple uniformity analysis that recursively analyses all the
- * operands affecting the value.
- *
- * Known uniform Values that act as "leafs" in the recursive uniformity
- * check logic:
- * a) kernel arguments
- * b) constants
- * c) OpenCL C identifiers that are constant for all work-items in a work-group
- * 
- */
+/// Recursively analyses all the operands affecting the value to find out
+/// the uniformity.
+///
+/// Known uniform Values that act as "leafs" in the recursive uniformity
+/// check logic:
+/// a) kernel arguments
+/// b) constants
+/// c) OpenCL C identifiers that are constant for all work-items in a work-group
 bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
                                                  llvm::Value *V) {
 
@@ -666,6 +662,46 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
   return true;
 }
 
+/// Returns true in case the \p BB contains diverging non-branch instructions.
+bool VariableUniformityAnalysisResult::hasDivergingInstructions(
+    llvm::BasicBlock &BB) {
+  for (llvm::Instruction &I : BB) {
+    if (!isUniform(I.getParent()->getParent(), &I))
+      return false;
+  }
+  return true;
+}
+
+bool VariableUniformityAnalysisResult::isPureUniformAlloca(
+    llvm::AllocaInst *Alloca) {
+  bool PureUniformAccessesFound = false;
+  size_t NonPUWriteCount = 0;
+  size_t NonUniformWriteCount = 0;
+  for (Instruction::use_iterator UI = Alloca->use_begin(),
+                                 UE = Alloca->use_end();
+       UI != UE; ++UI) {
+    llvm::StoreInst *Store = dyn_cast<llvm::StoreInst>(UI->getUser());
+    llvm::LoadInst *Load = dyn_cast<llvm::LoadInst>(UI->getUser());
+
+    if (Store == nullptr && Load == nullptr)
+      continue;
+    llvm::Instruction *MemAccess = dyn_cast<llvm::Instruction>(UI->getUser());
+
+    bool PureUniformBlock = isPureUniformBlock(MemAccess->getParent());
+
+    PureUniformAccessesFound |= PureUniformBlock;
+    if (Store != nullptr &&
+        !isUniform(Store->getParent()->getParent(), Store->getValueOperand()))
+      NonUniformWriteCount++;
+  }
+
+  // The variable could be updated outside with non-uniform values.
+  // We should not mark the block uniform in that case.
+  assert(NonPUWriteCount == 0 || NonUniformWriteCount == 0);
+
+  return PureUniformAccessesFound > 0;
+}
+
 void VariableUniformityAnalysisResult::setUniform(llvm::Function *F,
                                                   llvm::Value *V,
                                                   bool isUniform) {
@@ -675,7 +711,7 @@ void VariableUniformityAnalysisResult::setUniform(llvm::Function *F,
 
 #ifdef DEBUG_UNIFORMITY_ANALYSIS
   std::cerr << "### ";
-  if (isUniform) 
+  if (isUniform)
     std::cerr << "uniform ";
   else
     std::cerr << "varying ";

@@ -448,6 +448,15 @@ void markAsPureUniformBlock(BasicBlock *BB, std::string Reason) {
                         {llvm::MDString::get(BB->getContext(), Reason)}));
 }
 
+void copyPureUniformMD(llvm::BasicBlock *Source,
+                       llvm::BasicBlock *Destination) {
+  if (!isPureUniformBlock(Source))
+    return;
+  Destination->getTerminator()->setMetadata(
+      PoCLMDKind::PureUniformBasicBlock,
+      Source->getTerminator()->getMetadata(PoCLMDKind::PureUniformBasicBlock));
+}
+
 bool isPureUniformAlloca(llvm::AllocaInst *Alloca) {
   bool PureUniformAccessesFound = false;
   size_t NonPUWriteCount = 0;

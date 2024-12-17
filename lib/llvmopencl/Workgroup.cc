@@ -1058,8 +1058,8 @@ std::vector<llvm::Value *> WorkgroupImpl::globalHandlesToContextStructLoads(
   return StructLoads;
 }
 
-// Converts Load uses of the given pseudo variable handles (magic external
-// global variables) to Load from the given function-private values instead.
+// Converts loads from the given pseudo variable handles (magic external
+// global variables) to loads from the given function-private values instead.
 void WorkgroupImpl::privatizeGlobalLoads(
     llvm::Function *F, llvm::IRBuilder<> &Builder,
     const std::vector<std::string> &&GlobalHandleNames,
@@ -1130,7 +1130,6 @@ void WorkgroupImpl::privatizeGlobalStores(
         Builder.SetInsertPoint(ii->getParent(), ii->getIterator());
         Builder.CreateStore(StoredVal, PrivatePointers[j].first);
         ii->eraseFromParent();
-
         break;
       }
     }
@@ -1139,13 +1138,11 @@ void WorkgroupImpl::privatizeGlobalStores(
   Builder.SetInsertPoint(&F->front(), F->front().getFirstInsertionPt());
 }
 
-/**
- * Makes the work-item context data function private.
- *
- * Until this point all the work-group generation passes have referred to
- * magic global variables to access the work-item identifiers. These are
- * converted to kernel-local allocas by this function.
- */
+/// Makes the work-item context data function private.
+///
+/// Until this point all the work-group generation passes have referred to
+/// magic global variables to access the work-item identifiers. These are
+/// converted to kernel-local allocas by this function.
 void WorkgroupImpl::privatizeContext(Function *F) {
 
   // Privatize _global_id_* to private allocas.

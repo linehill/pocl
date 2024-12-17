@@ -3,7 +3,7 @@
 
    Copyright (c) 2013 Kalle Raiskila
                  2013-2019 Pekka Jääskeläinen
-                 2023-2024 Pekka Jääskeläinen / Intel Finland Oy
+                 2023-2025 Pekka Jääskeläinen / Intel Finland Oy
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
@@ -432,10 +432,6 @@ static void addStage1PassesToPipeline(cl_device_id Dev,
 
      Some notes about the kernel compiler phase ordering constraints:
 
-     -mem2reg first because we get unoptimized output from Clang where all
-     variables are allocas. Avoid context saving the allocas and make them
-     more readable by calling -mem2reg at the beginning.
-
      -implicit-cond-barriers after -implicit-loop-barriers because the latter
      can inject barriers to loops inside conditional regions after which the
      peeling should be avoided by injecting the implicit conditional barriers.
@@ -443,11 +439,6 @@ static void addStage1PassesToPipeline(cl_device_id Dev,
      -loop-barriers, -barriertails, and -barriers should be ran after the
      implicit barrier injection passes so they "normalize" the implicit
      barriers also.
-
-     -phistoallocas before -workitemloops as otherwise it cannot inject context
-     restore code (PHIs need to be at the beginning of the BB and so one cannot
-     context restore them with non-PHI code if the value is needed in another
-     PHI).
 
      -automatic-locals after inline and always-inline; if we have a kernel
      that calls a non-kernel, and the non-kernel uses an automatic local
@@ -516,12 +507,6 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
 
     // required for OLD PM
     addAnalysis(Passes, "workitem-handler-chooser");
-
-    // VariableUniformityAnalysis relies on mem2reg for dataflow analysis.
-    // addPass(Passes, "mem2reg");
-
-    // TO DEBUG: Running this before VUA breaks test_shuffle_double_loopvec.
-    // addPass(Passes, "canon-barriers");
 
     addAnalysis(Passes, "pocl-vua");
 
@@ -613,35 +598,6 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     addPass(Passes, "workgroup", PassType::Module);
     addPass(Passes, "always-inline", PassType::Module);
   }
-
-  // Attempt to move all allocas to the entry block to avoid the need for
-  // dynamic stack which is problematic for some architectures.
-
-  // Likely not needed anymore with -O0 input.
-  // addPass(Passes, "allocastoentry");
-
-  // Convert variables back to PHIs to clean up loop structures to enable the
-  // LLVM standard loop analysis.
-  // Not needed anymore with -O0 input. The standard opt passes which are
-  // executed after do this.
-  // addPass(Passes, "mem2reg");
-
-  // Later passes might get confused (and expose possible bugs in them) due to
-  // UNREACHABLE blocks left by repl. So let's clean up the CFG before running
-  // the standard LLVM optimizations.
-  // Not needed anymore with -O0 input. The standard opt passes which are
-  // executed after do this.
-  // addPass(Passes, "simplifycfg");
-
-  // the optimization for new PM is handled separately
-  // addPass(Passes, "STANDARD_OPTS");
-
-  // Due to unfortunate phase-ordering problems with store sinking,
-  // loop deletion does not always apply when executing -O3 only
-  // once. Cherry pick the optimization to rerun here.
-  // Not needed anymore with -O0 input.
-  // addPass(Passes, "loop-deletion");
-  // addPass(Passes, "remove-barriers");
 }
 
 // old PM uses a vector of strings directly; new PM requires a single string

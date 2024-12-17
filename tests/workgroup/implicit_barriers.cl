@@ -3,6 +3,7 @@
    barrier to produce nicer parallel regions.
 
    Copyright (c) 2013 Pekka Jääskeläinen / TUT
+                 2025 Pekka Jääskeläinen / Intel Finland Oy
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to

@@ -2,7 +2,7 @@
 // beneficial.
 //
 // Copyright (c) 2012-2013 Pekka Jääskeläinen / Tampere University of Tech.
-//               2023-2024 Pekka Jääskeläinen / Intel Finland Oy
+//               2023-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -38,6 +38,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Transforms/Scalar/LoopPassManager.h>
 
 #include "Barrier.h"
+#include "DebugHelpers.h"
 #include "ImplicitLoopBarriers.h"
 #include "LLVMUtils.h"
 #include "VariableUniformityAnalysis.h"
@@ -49,8 +50,6 @@ POP_COMPILER_DIAGS
 #include "pocl_runtime_config.h"
 
 #include <iostream>
-
-//#define DEBUG_ILOOP_BARRIERS
 
 #define PASS_NAME "implicit-loop-barriers"
 #define PASS_CLASS pocl::ImplicitLoopBarriers
@@ -64,7 +63,10 @@ using namespace llvm;
 /// vectorization across work-items.
 ///
 /// Currently adds the barriers whenever analyzed legal without considering
-/// the vectorization benefits.
+/// the vectorization benefits. This is based on the assumption that most of the
+/// OpenCL kernels are written targeting GPUs/SPMD where the spatial memory
+/// locality is typically targeted across work-items, not inside the work-item
+/// loops.
 bool ImplicitLoopBarriers::addImplicitLoopBarriers(Loop &L) {
 
   if (Barrier::isLoopWithBarrier(L) || !VUA->isUniformLoop(*F, L))
@@ -77,17 +79,25 @@ bool ImplicitLoopBarriers::addImplicitLoopBarriers(Loop &L) {
   llvm::BasicBlock *ExitingBlock = L.getExitingBlock();
   llvm::BasicBlock *HeaderBlock = L.getHeader();
 
+  F = L.getHeader()->getParent();
+  dumpCFG(*F, F->getName().str() + "_before_impl_loopbbarriers_on_loop_" +
+                  L.getName().str() + ".dot");
+
   // Isolate the loop body to a parallel region with two barriers.
   Barrier::create(ExitingBlock->getTerminator());
   Barrier::create(HeaderBlock->getFirstNonPHI());
 
 #ifdef DEBUG_ILOOP_BARRIERS
   std::cerr << "### added inner-loop barriers to loop " << L.getName().str()
-            << std::endl
             << std::endl;
   ExitingBlock->dump();
   HeaderBlock->dump();
 #endif
+  std::set<llvm::BasicBlock *> Highlights;
+  Highlights.insert(ExitingBlock);
+  Highlights.insert(HeaderBlock);
+  dumpCFG(*F, F->getName().str() + "_after_impl_loopbbarriers_on_loop_" + L.getName().str() + ".dot",
+          nullptr, nullptr, &Highlights);
 
   return false;
 }
@@ -104,9 +114,9 @@ ImplicitLoopBarriers::run(llvm::Loop &L, llvm::LoopAnalysisManager &AM,
   if (!isKernelToProcess(*F))
     return PreservedAnalyses::all();
 
-#ifdef DEBUG_COND_BARRIERS
+#ifdef DEBUG_ILOOP_BARRIERS
   std::cerr << "### Before ImplicitLoopBarriers " << std::endl;
-  F.dump();
+  F->dump();
 #endif
 
   if (FAMP.cachedResultExists<WorkitemHandlerChooser>(*F)) {
@@ -139,10 +149,10 @@ ImplicitLoopBarriers::run(llvm::Loop &L, llvm::LoopAnalysisManager &AM,
   PAChanged.preserve<VariableUniformityAnalysis>();
   bool Changed = addImplicitLoopBarriers(L);
 
-#ifdef DEBUG_COND_BARRIERS
+#ifdef DEBUG_ILOOP_BARRIERS
   if (Changed) {
-    std::cerr << "### After ImplicitLoopBarriers' changes " << std::endl;
-    F.dump();
+    std::cerr << "### After ImplicitLoopBarriers" << std::endl;
+    F->dump();
   }
 #endif
 

@@ -126,8 +126,8 @@ bool isGVarUsedByFunction(llvm::GlobalVariable *GVar, llvm::Function *F);
 // Checks if the given argument of Func is a local buffer.
 bool isLocalMemFunctionArg(llvm::Function *Func, unsigned ArgIndex);
 
-// determines if GVar is OpenCL program-scope variable
-// if it has empty name, sets it to __anonymous_global_as.XYZ
+// Determines if GVar is OpenCL program-scope variable
+// if it has empty name, sets it to __anonymous_global_as.XYZ.
 bool isProgramScopeVariable(llvm::GlobalVariable &GVar, unsigned DeviceLocalAS);
 
 /// Checks if the basic block should be executed by a "single thread" that is,
@@ -145,6 +145,9 @@ bool isPureUniformBlock(llvm::BasicBlock *BB);
 /// \param BB The basic block to mark.
 /// \param Reason A human readable comment/reason.
 void markAsPureUniformBlock(llvm::BasicBlock *BB, std::string Reason);
+
+/// Copies the pure uniform metadata from \p Source to \p Destination.
+void copyPureUniformMD(llvm::BasicBlock *Source, llvm::BasicBlock *Destination);
 
 /// Returns true in case the Alloca is accessed in a pure uniform block,
 /// meaning it must be a forced uniform variable.

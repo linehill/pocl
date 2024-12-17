@@ -77,6 +77,11 @@ void Kernel::getRegionExitBlocks(SmallVectorImpl<llvm::BasicBlock *> &B) {
 /* @todo Move to ParallelRegion.cc */
 ParallelRegion *Kernel::createParallelRegionBefore(llvm::BasicBlock *B) {
 
+#ifdef DEBUG_PR_CREATION
+  std::cerr << "# createParallelRegionBefore " << B->getName().str()
+            << std::endl;
+#endif
+
   BasicBlock *RegionEntryBarrier = NULL;
   // The original entry basic block of the parallel region, before creating the
   // context restore entry.
@@ -90,17 +95,13 @@ ParallelRegion *Kernel::createParallelRegionBefore(llvm::BasicBlock *B) {
   SmallVector<BasicBlock *, 4> PendingBlocks;
   addPredecessors(PendingBlocks, B);
 
-#ifdef DEBUG_PR_CREATION
-  std::cerr << "createParallelRegionBefore " << B->getName().str() << std::endl;
-#endif
-
   SmallPtrSet<BasicBlock *, 8> BlocksInRegion;
   while (!PendingBlocks.empty()) {
     BasicBlock *Current = PendingBlocks.back();
     PendingBlocks.pop_back();
 
 #ifdef DEBUG_PR_CREATION
-    std::cerr << "considering " << Current->getName().str() << std::endl;
+    std::cerr << "## considering " << Current->getName().str() << std::endl;
 #endif
 
     // avoid infinite recursion of loops
@@ -120,7 +121,7 @@ ParallelRegion *Kernel::createParallelRegionBefore(llvm::BasicBlock *B) {
 
     if (isPureUniformBlock(Current)) {
 #ifdef DEBUG_PR_CREATION
-      std::cerr << "### reached a required uniform block, not including it"
+      std::cerr << "## reached a required uniform block, not including it"
                 << std::endl;
       Current->dump();
 #endif
@@ -199,6 +200,11 @@ ParallelRegion *Kernel::createParallelRegionBefore(llvm::BasicBlock *B) {
     OrigEntry->replacePhiUsesWith(PredBB, PREntry);
   }
   assert(PREntry != nullptr);
+  assert(Exit != nullptr);
+
+#ifdef DEBUG_PR_CREATION
+  std::cerr << "## exit node: " << Exit->getName().str() << std::endl;
+#endif
 
   return ParallelRegion::Create(BlocksInRegion, PREntry, Exit);
 }
@@ -325,8 +331,8 @@ void Kernel::getParallelRegions(
 #endif
 
 #ifdef DEBUG_PR_CREATION
-  pocl::dumpCFG(*this, this->getName().str() + ".pregions.dot", nullptr,
-                ParallelRegions);
+  dumpCFG(*this, this->getName().str() + ".pregions.dot", nullptr,
+          ParallelRegions);
 #endif
 }
 

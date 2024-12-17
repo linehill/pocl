@@ -51,14 +51,23 @@ public:
                            llvm::BasicBlock *PreviousUniformBB,
                            llvm::PostDominatorTree &PDT);
 
+  /// Returns true in case the value should be privatized, that is, a copy
+  /// should be created for each parallel work-item.
+  ///
+  /// This is not the same as !isUniform() because of some of the allocas:
+  /// The loop iteration variables are in some cases uniform. Each work item
+  /// sees the same induction variable value at every iteration, but the
+  /// variables should be still replicated to avoid multiple increments of
+  /// the same induction variable by each work-item in a b-loop
+  /// of which iterator cannot be merged cross WIs.
   bool shouldBePrivatized(llvm::Function *F, llvm::Value *Val);
+
   bool doFinalization(llvm::Module &M);
   void analyzeLoop(llvm::Function &F, llvm::Loop &L,
                    llvm::PostDominatorTree &PDT);
   bool isUniformLoop(llvm::Function &F, llvm::Loop &L);
   ~VariableUniformityAnalysisResult() { uniformityCache_.clear(); }
 
-  // TODO this could be wrong
   bool invalidate(llvm::Function &F, const llvm::PreservedAnalyses PA,
                   llvm::AnalysisManager<llvm::Function>::Invalidator &Inv);
 
