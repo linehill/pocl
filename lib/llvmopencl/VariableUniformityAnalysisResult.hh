@@ -46,6 +46,17 @@ public:
   bool runOnFunction(llvm::Function &F, llvm::LoopInfo &LI,
                      llvm::PostDominatorTree &PDT);
   bool isUniform(llvm::Function *F, llvm::Value *V);
+
+  /// Returns true in case the \p BB contains at least one instruction of which
+  /// value is (potentially) diverging.
+  bool hasDivergingInstructions(llvm::BasicBlock &BB);
+
+  /// Returns true in case the Alloca is accessed in a pure uniform block,
+  /// meaning it must be a forced uniform variable. Forced uniform variables
+  /// _must_ be updated only once per work-group for correctness. These include
+  /// loop iterators of b-loops.
+  bool isPureUniformAlloca(llvm::AllocaInst *Alloca);
+
   void setUniform(llvm::Function *F, llvm::Value *V, bool isUniform = true);
   void analyzeBBDivergence(llvm::Function *F, llvm::BasicBlock *BB,
                            llvm::BasicBlock *PreviousUniformBB,

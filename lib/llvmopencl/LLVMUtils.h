@@ -149,10 +149,6 @@ void markAsPureUniformBlock(llvm::BasicBlock *BB, std::string Reason);
 /// Copies the pure uniform metadata from \p Source to \p Destination.
 void copyPureUniformMD(llvm::BasicBlock *Source, llvm::BasicBlock *Destination);
 
-/// Returns true in case the Alloca is accessed in a pure uniform block,
-/// meaning it must be a forced uniform variable.
-bool isPureUniformAlloca(llvm::AllocaInst *Alloca);
-
 // Sets the address space metadata of the given function argument.
 // Note: The address space ids must be SPIR ids. If it encounters
 // argument indices without address space ids in the list, sets

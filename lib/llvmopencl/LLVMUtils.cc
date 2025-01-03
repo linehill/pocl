@@ -457,27 +457,6 @@ void copyPureUniformMD(llvm::BasicBlock *Source,
       Source->getTerminator()->getMetadata(PoCLMDKind::PureUniformBasicBlock));
 }
 
-bool isPureUniformAlloca(llvm::AllocaInst *Alloca) {
-  bool PureUniformAccessesFound = false;
-  size_t NonPUWriteCount = 0;
-  for (Instruction::use_iterator UI = Alloca->use_begin(),
-                                 UE = Alloca->use_end();
-       UI != UE; ++UI) {
-    llvm::StoreInst *Store = dyn_cast<llvm::StoreInst>(UI->getUser());
-    llvm::LoadInst *Load = dyn_cast<llvm::LoadInst>(UI->getUser());
-
-    if (Store == nullptr && Load == nullptr)
-      continue;
-    bool PureUniformBlock = isPureUniformBlock(
-      Store == nullptr ? Load->getParent() : Store->getParent());
-
-    PureUniformAccessesFound |= PureUniformBlock;
-
-    if (!PureUniformBlock && Store != nullptr)
-      NonPUWriteCount++;
-  }
-  return PureUniformAccessesFound && NonPUWriteCount == 0;
-}
 
 void setFuncArgAddressSpaceMD(llvm::Function *F, unsigned ArgIndex,
                               unsigned AS) {

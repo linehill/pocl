@@ -666,10 +666,13 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
 bool VariableUniformityAnalysisResult::hasDivergingInstructions(
     llvm::BasicBlock &BB) {
   for (llvm::Instruction &I : BB) {
-    if (!isUniform(I.getParent()->getParent(), &I))
-      return false;
+    if (isa<BranchInst>(I))
+      continue;
+    if (!isUniform(I.getParent()->getParent(), &I)) {
+      return true;
+    }
   }
-  return true;
+  return false;
 }
 
 bool VariableUniformityAnalysisResult::isPureUniformAlloca(

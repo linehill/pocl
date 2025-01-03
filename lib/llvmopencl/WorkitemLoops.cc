@@ -1000,7 +1000,7 @@ bool WorkitemLoopsImpl::shouldNotBeContextSaved(llvm::Instruction *Instr) {
   if (AllocaInst *Alloca = dyn_cast<AllocaInst>(Instr)) {
     // Some of the variables such as B-loop iterators must not be
     // replicated for correctness.
-    if (isPureUniformAlloca(Alloca))
+    if (VUA.isPureUniformAlloca(Alloca))
       return true;
   }
 

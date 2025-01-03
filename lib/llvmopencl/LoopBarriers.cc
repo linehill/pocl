@@ -59,7 +59,86 @@ namespace pocl {
 
 using namespace llvm;
 
-static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT) {
+/// Returns true in case \p L is an ideal/canonical loop that only contains
+/// iteration variable increment/comparison instructions in its loop structure
+/// basic blocks, thus is suitable for cross-WI b-loop structure sharing.
+static bool
+isSuitableForBLoopStructureSharing(Loop &L,
+                                   VariableUniformityAnalysisResult &VUA) {
+
+  // TODO: Expand the coverage of loop cases incrementally.
+  // Currently assumes unoptimized non-SSA (no PHIs) input.
+
+  BasicBlock *Latch = L.getLoopLatch();
+  BasicBlock *Exit = L.getExitingBlock();
+  BasicBlock *CondComp =
+      Barrier::hasOnlyBarrier(Exit) ? Exit->getSinglePredecessor() : Exit;
+
+  if (Exit == Latch || CondComp == Latch || CondComp == nullptr ||
+      Latch == nullptr || VUA.hasDivergingInstructions(*CondComp) ||
+      VUA.hasDivergingInstructions(*Latch))
+    return false;
+
+  ICmpInst *CondCmpI = dyn_cast_or_null<ICmpInst>(
+      CondComp->getTerminator()->getPrevNonDebugInstruction());
+  if (CondCmpI == nullptr)
+    return false;
+
+  Value *CCLeft = CondCmpI->getOperand(0);
+  if (LoadInst *Load = dyn_cast_or_null<LoadInst>(CCLeft))
+    CCLeft = Load->getPointerOperand();
+
+  Value *CCRight = CondCmpI->getOperand(0);
+  if (LoadInst *Load = dyn_cast_or_null<LoadInst>(CCRight))
+    CCRight = Load->getPointerOperand();
+
+  Value *Iterator = nullptr, *LoopBound = nullptr;
+  if (CCLeft->isUsedInBasicBlock(Latch)) {
+    // The latch should only increment the iterator in our case.
+    Iterator = CCLeft;
+    LoopBound = CCRight;
+  } else {
+    Iterator = CCRight;
+    LoopBound = CCLeft;
+  }
+
+  // The for-loop case with only the iteration variable increment in the
+  // latch and a condition check in another.
+  if (CondComp != nullptr && Latch != nullptr) {
+    size_t InstructionsInLatch = std::distance(Latch->begin(), Latch->end());
+    if (InstructionsInLatch == 4) {
+      auto I = Latch->begin();
+      // Non-SSA form with the iteration variable in allocas:
+      LoadInst *Load = nullptr;
+      if (Load = dyn_cast_or_null<LoadInst>(I++)) {
+        if (Load->getPointerOperand() != Iterator)
+          return false;
+      } else
+        return false;
+
+      BinaryOperator *Modify = nullptr;
+      if (Modify = dyn_cast_or_null<BinaryOperator>(I++)) {
+        if (Modify->getOperand(0) != Load ||
+            !isa<Constant>(Modify->getOperand(1)))
+          return false;
+      } else
+        return false;
+
+      StoreInst *Store = nullptr;
+      if (Store = dyn_cast_or_null<StoreInst>(I++)) {
+        if (Store->getOperand(0) != Modify || Store->getOperand(1) != Iterator)
+          return false;
+      } else
+        return false;
+
+      return isa<BranchInst>(I);
+    }
+  }
+  return false;
+}
+
+static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
+                                    VariableUniformityAnalysisResult &VUA) {
 
   Function *K = L.getHeader()->getParent();
 
@@ -117,27 +196,17 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT) {
         }
 
         BasicBlock *Latch = L.getLoopLatch();
-        if (Latch != NULL && BrExit != Latch) {
-          // This loop has only one latch. Do not check for dominance, we
-          // are probably running before BTR.
-          // Barrier::createAtEnd(Latch);
-          // Latch->setName(Latch->getName() + ".latchbarrier");
-          // TODO: Check that we don't have diverging code in the block
-          // before the loop branch.
-          markAsPureUniformBlock(Latch, "b-loop latch");
-          return true;
 
         BasicBlock *CondBlock = Barrier::hasOnlyBarrier(BrExit)
                                     ? BrExit->getSinglePredecessor()
                                     : BrExit;
-        // Check if we can share the loop construct, meaning the iteration
-        // variable and the code that manages it, across the work-items,
+        // Check if we can share the loop construct (the iteration
+        // variable and the code that manages it) across the work-items,
         // like is usually the case with loops containing barrier calls.
         // If we can share the iteration variable without storing it in the
         // context, it helps the loop vectorizer a lot when analyzing the
         // memory access patterns.
-        bool UniformLoopConstruct = BrExit != Latch && CondBlock != nullptr &&
-                                    !VUA.hasDivergingInstructions(*CondBlock);
+        bool UniformLoopConstruct = isSuitableForBLoopStructureSharing(L, VUA);
 
 #ifdef DEBUG_LOOP_BARRIERS
         std::cerr << "CondBlock:\n";
@@ -156,13 +225,28 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT) {
           std::cerr << "Uniform loop construct detected\n";
 #endif
 
+        if (Latch != NULL && BrExit != Latch) {
+          Barrier::create(Latch->getTerminator());
+          Latch->setName(Latch->getName() + ".latchbarrier");
+        }
+
         if (UniformLoopConstruct) {
           markAsPureUniformBlock(CondBlock, "b-loop condition check");
+          Highlights.insert(CondBlock);
           if (Latch != nullptr) {
             // Only a single latch.
             markAsPureUniformBlock(Latch, "b-loop latch");
-            return true;
+            Highlights.insert(Latch);
           }
+        }
+
+        if (Latch != nullptr) {
+          // Single latch case.
+          dumpCFG(*K,
+                  K->getName().str() + "_after_loopbbarriers_on_bloop_" +
+                      L.getName().str() + ".dot",
+                  nullptr, nullptr, &Highlights);
+          return true;
         }
 
         // Go through all the latches ('continues').
@@ -182,10 +266,17 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT) {
             // (otherwise if might not even belong to this "tail", see
             // forifbarrier1 graph test).
             if (DT.dominates(j->getParent(), Latch2)) {
-              markAsPureUniformBlock(Latch2, "b-loop latch");
+              Barrier::create(Latch2->getTerminator());
+              if (UniformLoopConstruct)
+                markAsPureUniformBlock(Latch2, "b-loop latch");
+              Highlights.insert(Latch2);
             }
           }
         }
+        dumpCFG(*K,
+                K->getName().str() + "_after_loopbbarriers_on_bloop_" +
+                    L.getName().str() + ".dot",
+                nullptr, nullptr, &Highlights);
         return true;
       }
     }
@@ -193,10 +284,11 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT) {
   return false;
 }
 
-static bool processLoop(Loop &L, llvm::DominatorTree &DT) {
+bool processLoop(Loop &L, llvm::DominatorTree &DT,
+                 VariableUniformityAnalysisResult &VUA) {
 
   if (Barrier::isLoopWithBarrier(L))
-    return processLoopWithBarriers(L, DT);
+    return processLoopWithBarriers(L, DT, VUA);
 
   // This is a loop without a barrier. Ensure we have a non-barrier
   // block as a preheader so we can capture the loop as a whole
@@ -255,8 +347,16 @@ llvm::PreservedAnalyses LoopBarriers::run(llvm::Loop &L,
 
   PreservedAnalyses PAChanged = PreservedAnalyses::none();
 
+  VariableUniformityAnalysisResult *VUA = nullptr;
+  auto &FAMP = AM.getResult<FunctionAnalysisManagerLoopProxy>(L, AR);
+  if (FAMP.cachedResultExists<VariableUniformityAnalysis>(*K)) {
+    VUA = FAMP.getCachedResult<VariableUniformityAnalysis>(*K);
+  } else {
+    assert(0 && "Missing cached VUA results for ImplicitLoopBarriers");
+  }
+
   PreservedAnalyses Ret =
-      processLoop(L, AR.DT) ? PAChanged : PreservedAnalyses::all();
+      processLoop(L, AR.DT, *VUA) ? PAChanged : PreservedAnalyses::all();
 #ifdef DEBUG_LOOP_BARRIERS
   std::cerr << "After LoopBarriers:" << std::endl;
   K->dump();
