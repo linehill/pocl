@@ -199,6 +199,19 @@ ParallelRegion *Kernel::createParallelRegionBefore(llvm::BasicBlock *B) {
         BR->setSuccessor(Suc, PREntry);
     OrigEntry->replacePhiUsesWith(PredBB, PREntry);
   }
+
+  // Similarly, make sure we have an exit block that can be included entirely
+  // in the region. Note that barrier blocks nor pure uniform blocks are not
+  // included in any pregion.
+  if (Exit == nullptr) {
+    BasicBlock *NewExit = SplitBlock(B, &B->front());
+    NewExit->takeName(B);
+    std::string Name = "parallel_region_" +
+                       std::to_string(ParallelRegion::getNextID()) + "_exit";
+    B->setName(Name);
+    BlocksInRegion.insert(B);
+    Exit = B;
+  }
   assert(PREntry != nullptr);
   assert(Exit != nullptr);
 
