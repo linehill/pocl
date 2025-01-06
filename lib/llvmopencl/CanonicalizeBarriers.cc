@@ -56,12 +56,16 @@ namespace pocl {
 
 using namespace llvm;
 
-static bool canonicalizeBarriers(Function &F, WorkitemHandlerType Handler);
-static bool processFunction(Function &F, WorkitemHandlerType Handler);
+bool isolateBarrierBlocks(Function &F, WorkitemHandlerType Handler);
 
 using InstructionSet = std::set<llvm::Instruction *>;
 
-static bool canonicalizeBarriers(Function &F, WorkitemHandlerType Handler) {
+/// Ensures all barrier calls are in their own basic blocks without any other
+/// instructions than the barrier call and a branch.
+///
+/// Also isolates the entry and exit nodes of the functions as well
+/// as regions of pure uniform basic blocks.
+bool canonicalizeBarriers(Function &F, WorkitemHandlerType Handler) {
 
 #ifdef DEBUG_CANON_BARRIERS
   std::cerr << "Before CanonicalizeBarriers:\n";
@@ -97,38 +101,13 @@ static bool canonicalizeBarriers(Function &F, WorkitemHandlerType Handler) {
     changed |= true;
   }
 
+  // Function exits should have barriers.
   for (Function::iterator i = F.begin(), e = F.end(); i != e; ++i) {
     BasicBlock *BB = &*i;
-    if (isPureUniformBlock(BB)) {
-      // Ensure regions of forced uniform blocks are isolated with a barrier
-      // so they start/end parallel regions cleanly.
-      for (pred_iterator i = pred_begin(BB), e = pred_end(BB); i != e; ++i) {
-        BasicBlock *PredBB = *i;
-        if (!isPureUniformBlock(PredBB) && !Barrier::endsWithBarrier(PredBB)) {
-          // Create the barrier to the beginning of the uniform block so
-          // all predecessors can branch to it, in case it's a join point.
-          Barrier::create(BB->getFirstNonPHI());
-          continue;
-        }
-      }
-
-      for (succ_iterator i = succ_begin(BB), e = succ_end(BB); i != e; ++i) {
-        BasicBlock *SuccBB = *i;
-        if (!isPureUniformBlock(SuccBB) &&
-            !Barrier::startsWithBarrier(SuccBB)) {
-          // Create a barrier at the end of the uniform block which can then
-          // potentially start multiple parallel regions.
-          Barrier::create(BB->getTerminator());
-          continue;
-        }
-      }
-    }
-
     auto t = BB->getTerminator();
     const bool isExitNode =
       (t->getNumSuccessors() == 0) && (!Barrier::hasOnlyBarrier(BB));
 
-    // The function exits should have barriers.
     if (isExitNode && !Barrier::hasOnlyBarrier(BB)) {
       /* In case the bb is already terminated with a barrier,
          split before the barrier so we don't create an empty
@@ -154,39 +133,100 @@ static bool canonicalizeBarriers(Function &F, WorkitemHandlerType Handler) {
     }
   }
 
-  return processFunction(F, Handler) || Changed;
-}
+  bool MoreChanges = false;
+  do {
+    MoreChanges = isolateBarrierBlocks(F, Handler);
+    Changed |= MoreChanges;
+  } while (MoreChanges);
 
-static bool processFunction(Function &F, WorkitemHandlerType Handler) {
-
-  bool Changed = false;
-
-  InstructionSet Barriers;
-
-  for (Function::iterator i = F.begin(), e = F.end();
-       i != e; ++i) {
+  // Ensure regions of forced uniform blocks are isolated with a barrier
+  // so they start/end parallel regions cleanly.
+  for (Function::iterator i = F.begin(), e = F.end(); i != e; ++i) {
     BasicBlock *BB = &*i;
-    for (BasicBlock::iterator i = BB->begin(), e = BB->end(); i != e; ++i) {
-      if (isa<Barrier>(i)) {
-        Barriers.insert(&*i);
+    if (isPureUniformBlock(BB)) {
+      for (pred_iterator i = pred_begin(BB), e = pred_end(BB); i != e; ++i) {
+        BasicBlock *PredBB = *i;
+        if (!isPureUniformBlock(PredBB) && !Barrier::endsWithBarrier(PredBB)) {
+          // Create the barrier to the beginning of the uniform block so
+          // all predecessors can branch to it in case it's a join point.
+          Barrier::create(BB->getFirstNonPHI());
+          continue;
+        }
+      }
+
+      for (succ_iterator i = succ_begin(BB), e = succ_end(BB); i != e; ++i) {
+        BasicBlock *SuccBB = *i;
+        if (!isPureUniformBlock(SuccBB) &&
+            !Barrier::startsWithBarrier(SuccBB)) {
+          // Create a barrier at the end of the uniform block which can then
+          // potentially start multiple parallel regions.
+          Barrier::create(BB->getTerminator());
+          continue;
+        }
       }
     }
   }
 
-  // Finally add all the split points, now that we are done with the
-  // iterators.
+  // Prune empty regions: If there are two successive pure barrier blocks
+  // without side branches, remove the other one.
+  bool EmptyRegionDeleted = false;
+  do {
+    EmptyRegionDeleted = false;
+    for (Function::iterator i = F.begin(), e = F.end(); i != e; ++i) {
+      BasicBlock *BB = &*i;
+      auto Term = BB->getTerminator();
+      if (!Barrier::hasOnlyBarrier(BB) || Term->getNumSuccessors() != 1)
+        continue;
+
+      BasicBlock *Successor = Term->getSuccessor(0);
+
+      if (Barrier::hasOnlyBarrier(Successor) &&
+          Successor->getSinglePredecessor() == BB) {
+        BB->replaceAllUsesWith(Successor);
+        BB->eraseFromParent();
+        EmptyRegionDeleted = true;
+        Changed = true;
+        break;
+      }
+    }
+  } while (EmptyRegionDeleted);
+
+  if (Changed) {
+#ifdef DEBUG_CANON_BARRIERS
+    std::cerr << "After CanonicalizeBarriers:\n";
+    F.dump();
+#endif
+    dumpCFG(F, F.getName().str() + "_after_canon.dot", nullptr, nullptr);
+  }
+
+  return Changed;
+}
+
+/// Ensures all barrier calls are in their own basic blocks without any other
+/// instructions than the barrier call and a branch.
+///
+/// \returns True in case of any changes to the function were done.
+bool isolateBarrierBlocks(Function &F, WorkitemHandlerType Handler) {
+
+  bool Changed = false;
+
+  InstructionSet Barriers;
+  for (Function::iterator i = F.begin(), e = F.end();
+       i != e; ++i) {
+    BasicBlock *BB = &*i;
+    for (BasicBlock::iterator i = BB->begin(), e = BB->end(); i != e; ++i) {
+      if (isa<Barrier>(i))
+        Barriers.insert(&*i);
+    }
+  }
+
   for (InstructionSet::iterator i = Barriers.begin(), e = Barriers.end();
        i != e; ++i) {
     BasicBlock *BB = (*i)->getParent();
 
-    // Split post barrier first cause it does not make the barrier belong to
+    // Split post barrier first because it does not make the barrier go to
     // another basic block.
     Instruction *Term = BB->getTerminator();
-    // if ((t->getNumSuccessors() > 1) ||
-    //     (t->getPrevNode() != *i)) {
-    // Change: barriers with several successors are all right
-    // they just start several parallel regions. Simplifies
-    // loop handling.
 
     const bool HasNonBranchInstructionsAfterBarrier =
         Term->getPrevNode() != *i ||
@@ -198,6 +238,7 @@ static bool processFunction(Function &F, WorkitemHandlerType Handler) {
       NewBB->setName(BB->getName() + ".postbarrier");
       Changed = true;
       PostBB = NewBB;
+      copyPureUniformMD(NewBB, BB);
     }
 
     BasicBlock *Predecessor = BB->getSinglePredecessor();
@@ -213,8 +254,6 @@ static bool processFunction(Function &F, WorkitemHandlerType Handler) {
     if ((BB == &(BB->getParent()->getEntryBlock())) && (&BB->front() == (*i)))
       continue;
 
-    // If there are no instructions before the barrier, do not split
-    // (allow multiple predecessors, which eases loop handling).
     BasicBlock *NewBB = SplitBlock(BB, *i);
     NewBB->takeName(BB);
     BB->setName(NewBB->getName() + ".prebarrier");
@@ -223,42 +262,27 @@ static bool processFunction(Function &F, WorkitemHandlerType Handler) {
     // Retain the pure uniform MD in the original basic block as the barrier
     // block splitting doesn't change that property. No need to remove the MD
     // from the barrier block as it can be treated as a pure uniform BB as well.
+    dumpCFG(F, F.getName().str() + "_before_copy.dot", nullptr, nullptr);
     copyPureUniformMD(PostBB != nullptr ? PostBB : NewBB, BB);
-  }
 
-  // Prune empty regions. That is, if there are two successive
-  // pure barrier blocks without side branches, remove the other one.
-  bool EmptyRegionDeleted = false;
-  do {
-    EmptyRegionDeleted = false;
-    for (Function::iterator i = F.begin(), e = F.end();
-         i != e; ++i) {
-      BasicBlock *BB = &*i;
-      auto Term = BB->getTerminator();
-      if (!Barrier::endsWithBarrier(BB) || Term->getNumSuccessors() != 1)
-        continue;
+#if 0
+    // Tässä logiikassa jotain vikaa. Meidän pitäisi hanskata tämä tapaus
+    // aiemmin. Jos barrier ei aloita basic blockia, se pitää splitata. Nyt
+    // splitataan vain jos se ei lopeta basic blockia?
+    if (!Barrier::startsWithBarrier(BB)) {
+      // Create a barrier at the end of the uniform block which can be a join
+      // point.
 
-      BasicBlock *Successor = Term->getSuccessor(0);
-
-      if (Barrier::hasOnlyBarrier(Successor) &&
-          Successor->getSinglePredecessor() == BB) {
-        BB->replaceAllUsesWith(Successor);
-        BB->eraseFromParent();
-        EmptyRegionDeleted = true;
-        Changed = true;
-        break;
-      }
-      }
-  } while (EmptyRegionDeleted);
-
-#ifdef DEBUG_CANON_BARRIERS
-  std::cerr << "After CanonicalizeBarriers:\n";
-  F.dump();
+      // TODO: JOS tässä PHInode alussa, tulee epäkanonikaalinen barrier, eli
+      // joudutaan ajamaan uusiksi.
+      Barrier::create(BB->getFirstNonPHI());
+    }
 #endif
 
+    dumpCFG(F, F.getName().str() + "_after_copy.dot", nullptr, nullptr);
+  }
   return Changed;
 }
-
 
 llvm::PreservedAnalyses
 CanonicalizeBarriers::run(llvm::Function &F,
