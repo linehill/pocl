@@ -44,11 +44,6 @@ public:
   void Initialize(pocl::Kernel *K);
 
 protected:
-  void movePhiNodes(llvm::BasicBlock *Src, llvm::BasicBlock *Dst);
-  bool fixUndominatedVariableUses (llvm::DominatorTree &DT, llvm::Function &F);
-  bool dominatesUse (llvm::DominatorTree &DT, llvm::Instruction &Inst,
-                     unsigned OpNum);
-
   llvm::Instruction *getGlobalSize(int Dim);
   llvm::Instruction *getGlobalIdOrigin(int dim);
   void GenerateGlobalIdComputation();

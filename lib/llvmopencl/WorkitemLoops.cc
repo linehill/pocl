@@ -196,8 +196,6 @@ bool WorkitemLoopsImpl::runOnFunction(Function &Func) {
           &OriginalParallelRegions);
 #endif
 
-  Changed |= fixUndominatedVariableUses(DT, Func);
-
   ContextArrays.clear();
   TempInstructionIds.clear();
 
