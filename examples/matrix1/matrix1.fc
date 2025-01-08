@@ -1,0 +1,15 @@
+# Outer loop vectorization (and unrolling) should occur in this case thanks to
+# the injection of the implicit barriers to the originally unbarriered kernel
+# loop and handling the b-loop structure with its iteration variable as
+# "pure uniform".
+
+# CHECK: load <8 x float>
+
+# The accumulator should end up in the WI context, one accumulator is
+# maintained for each WI.
+# CHECK: acc.wi_context
+
+# CHECK: llvm.fmuladd.v8f32
+
+# CHECK: store <8 x float>
+

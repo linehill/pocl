@@ -29,7 +29,7 @@ add_executable("matrix1" matrix1.c matrix1.cl)
 target_link_libraries("matrix1" ${POCLU_LINK_OPTIONS})
 add_symlink_to_built_opencl_dynlib(matrix1)
 
-add_test(NAME "examples/matrix1" COMMAND "matrix1" 512)
+add_test_pocl(NAME "examples/matrix1" COMMAND "matrix1" 512 LLVM_FILECHECK "matrix1.fc" WORKITEM_HANDLER "loopvec")
 
 add_test(NAME "examples/matrix1_local" COMMAND "matrix1" 512 -l)
 
