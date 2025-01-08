@@ -74,6 +74,9 @@ protected:
 
   bool canAnnotateParallelLoops();
   bool handleLocalMemAllocas();
+
+  /// Removes (pseudo)barrier calls from the current kernel.
+  bool removeBarrierCalls();
   void handleWorkitemFunctions();
 
   llvm::Instruction *getWorkGroupSizeInstr();

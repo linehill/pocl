@@ -437,6 +437,7 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
           &OriginalParallelRegions);
 #endif
 
+  removeBarrierCalls();
   return true;
 }
 

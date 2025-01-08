@@ -1570,6 +1570,7 @@ SubCFGFormation::run(llvm::Function &F, llvm::FunctionAnalysisManager &AM) {
 
   handleWorkitemFunctions();
   GenerateGlobalIdComputation();
+  removeBarrierCalls();
 
   eraseInvalidLifetimeMarkers(&F);
 

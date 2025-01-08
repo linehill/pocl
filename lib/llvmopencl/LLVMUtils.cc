@@ -1,7 +1,7 @@
 // Implementation of LLVMUtils, useful common LLVM-related functionality.
 //
 // Copyright (c) 2013-2019 Pekka Jääskeläinen
-//               2023-2024 Pekka Jääskeläinen / Intel Finland Oy
+//               2023-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -56,7 +56,6 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "OptimizeWorkItemGVars.h"
 #include "PHIsToAllocas.h"
 #include "ParallelRegion.h"
-#include "RemoveBarrierCalls.h"
 #include "SanitizeUBofDivRem.h"
 #include "SubCFGFormation.h"
 #include "UnreachablesToReturns.h"
@@ -712,7 +711,6 @@ void registerPassBuilderPasses(llvm::PassBuilder &PB) {
   FixMinVecSize::registerWithPB(PB);
   OptimizeWorkItemGVars::registerWithPB(PB);
   PHIsToAllocas::registerWithPB(PB);
-  RemoveBarrierCalls::registerWithPB(PB);
   SubCFGFormation::registerWithPB(PB);
   Workgroup::registerWithPB(PB);
   WorkitemLoops::registerWithPB(PB);

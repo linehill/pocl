@@ -50,6 +50,8 @@ POP_COMPILER_DIAGS
 #include <iostream>
 #include <sstream>
 
+#include "Barrier.h"
+
 POP_COMPILER_DIAGS
 
 namespace pocl {
@@ -803,6 +805,25 @@ void WorkitemHandler::handleWorkitemFunctions() {
   }
   for (auto I : InstrsToDelete)
     I->eraseFromParent();
+}
+
+bool WorkitemHandler::removeBarrierCalls() {
+  std::set<Instruction *> BarriersToRemove;
+  for (Function::iterator I = K->begin(), E = K->end(); I != E; ++I) {
+    for (BasicBlock::iterator BI = I->begin(), BE = I->end(); BI != BE; ++BI) {
+      Instruction *Instr = dyn_cast<Instruction>(BI);
+      if (llvm::isa<Barrier>(Instr)) {
+        BarriersToRemove.insert(Instr);
+      }
+    }
+  }
+
+  bool Changed = !BarriersToRemove.empty();
+  for (auto B : BarriersToRemove) {
+    B->eraseFromParent();
+  }
+
+  return Changed;
 }
 
 } // namespace pocl

@@ -569,10 +569,6 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     // kernels without barriers, but after the transformation the kernel looks
     // like it has barriers, so subcfg would do its thing.
     addPass(Passes, "workitemloops");
-    // Remove the (pseudo) barriers.   They have no use anymore due to the
-    // work-item loop control taking care of them.
-    addPass(Passes, "remove-barriers");
-
   } else {
     // Attempt to move all allocas to the entry block to avoid the need for
     // dynamic stack which is problematic for some architectures.
