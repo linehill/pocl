@@ -126,7 +126,7 @@ private:
   bool processFunction(llvm::Function &F);
 
   void fixMultiRegionVariables();
-  void addContextSaveRestore(llvm::Instruction *instruction);
+  void addContextSaveRestore(llvm::Instruction *Instruction);
   void releaseParallelRegions();
 
   // Returns an instruction in the entry block which computes the
@@ -145,7 +145,7 @@ private:
   llvm::Instruction *
   addContextRestore(llvm::Value *Val, llvm::AllocaInst *AllocaI,
                     llvm::Type *LoadInstType, bool PaddingWasAdded,
-                    llvm::Instruction *Before = nullptr, bool isAlloca = false);
+                    llvm::Instruction *Before = nullptr, bool IsAlloca = false);
   llvm::AllocaInst *getContextArray(llvm::Instruction *Inst,
                                     bool &PoclWrapperStructAdded);
 
@@ -242,7 +242,7 @@ WorkitemLoopsImpl::createLoopAround(ParallelRegion &Region,
   // exit. These are used in determining whether load instructions may
   // be executed unconditionally in the parallel loop (see below).
   llvm::SmallPtrSet<llvm::BasicBlock *, 8> DominatesExitBB;
-  for (auto BB: Region) {
+  for (auto *BB : Region) {
     if (DT.dominates(BB, ExitBB)) {
       DominatesExitBB.insert(BB);
     }
@@ -259,8 +259,8 @@ WorkitemLoopsImpl::createLoopAround(ParallelRegion &Region,
   for (; PI != E; ++PI)
     Preds.push_back(*PI);
 
-  for (BasicBlockVector::iterator i = Preds.begin(); i != Preds.end(); ++i) {
-    llvm::BasicBlock *BB = *i;
+  for (BasicBlockVector::iterator I = Preds.begin(); I != Preds.end(); ++I) {
+    llvm::BasicBlock *BB = *I;
     // Do not fix loop edges inside the region. The loop is replicated as
     // a whole to the body of the WI-loop.
     if (DT.dominates(LoopBodyEntryBB, BB))
@@ -383,7 +383,7 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
           &OriginalParallelRegions);
 #endif
 
-  IRBuilder<> builder(&*(F.getEntryBlock().getFirstInsertionPt()));
+  IRBuilder<> Builder(&*(F.getEntryBlock().getFirstInsertionPt()));
   fixMultiRegionVariables();
 
   for (ParallelRegion::ParallelRegionVector::iterator
@@ -419,8 +419,8 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
     }
 
     // Fix the predecessors to jump to the beginning of the new WI loop.
-    for (BasicBlockVector::iterator i = Preds.begin(); i != Preds.end(); ++i) {
-      llvm::BasicBlock *BB = *i;
+    for (BasicBlockVector::iterator I = Preds.begin(); I != Preds.end(); ++I) {
+      llvm::BasicBlock *BB = *I;
       BB->getTerminator()->replaceUsesOfWith(PRegion->entryBB(), WILoop.first);
     }
   }
@@ -575,44 +575,45 @@ WorkitemLoopsImpl::addContextSave(llvm::Instruction *Def,
   }
 
   /* Save the produced variable to the array. */
-  BasicBlock::iterator definition = (dyn_cast<Instruction>(Def))->getIterator();
-  ++definition;
-  while (isa<PHINode>(definition)) ++definition;
+  BasicBlock::iterator Definition = (dyn_cast<Instruction>(Def))->getIterator();
+  ++Definition;
+  while (isa<PHINode>(Definition))
+    ++Definition;
 
   // TO CLEAN: Refactor by calling CreateContextArrayGEP.
-  IRBuilder<> builder(&*definition);
-  std::vector<llvm::Value *> gepArgs;
+  IRBuilder<> Builder(&*Definition);
+  std::vector<llvm::Value *> GepArgs;
 
   /* Reuse the id loads earlier in the region, if possible, to
      avoid messy output with lots of redundant loads. */
-  ParallelRegion *region = regionOfBlock(Def->getParent());
-  assert ("Adding context save outside any region produces illegal code." && 
-          region != NULL);
+  ParallelRegion *Region = regionOfBlock(Def->getParent());
+  assert("Adding context save outside any region produces illegal code." &&
+         Region != NULL);
 
   if (WGDynamicLocalSize) {
     Module *M = AllocaI->getParent()->getParent()->getParent();
-    gepArgs.push_back(getLinearWiIndex(builder, M, region));
+    GepArgs.push_back(getLinearWiIndex(Builder, M, Region));
   } else {
-    gepArgs.push_back(ConstantInt::get(ST, 0));
-    gepArgs.push_back(region->getOrCreateIDLoad(LID_G_NAME(2)));
-    gepArgs.push_back(region->getOrCreateIDLoad(LID_G_NAME(1)));
-    gepArgs.push_back(region->getOrCreateIDLoad(LID_G_NAME(0)));
+    GepArgs.push_back(ConstantInt::get(ST, 0));
+    GepArgs.push_back(Region->getOrCreateIDLoad(LID_G_NAME(2)));
+    GepArgs.push_back(Region->getOrCreateIDLoad(LID_G_NAME(1)));
+    GepArgs.push_back(Region->getOrCreateIDLoad(LID_G_NAME(0)));
   }
 
-  return builder.CreateStore(
+  return Builder.CreateStore(
       Def,
       builder.CreateGEP(AllocaI->getAllocatedType(), AllocaI, gepArgs));
 }
 
 llvm::Instruction *WorkitemLoopsImpl::addContextRestore(
     llvm::Value *Val, llvm::AllocaInst *AllocaI, llvm::Type *LoadInstType,
-    bool PaddingWasAdded, llvm::Instruction *Before, bool isAlloca) {
+    bool PaddingWasAdded, llvm::Instruction *Before, bool IsAlloca) {
 
   assert(Before != nullptr);
 
   llvm::Instruction *GEP =
       createContextArrayGEP(AllocaI, Before, PaddingWasAdded);
-  if (isAlloca) {
+  if (IsAlloca) {
     // In case the context saved instruction was an alloca, we created a
     // context array with pointed-to elements, and now want to return a
     // pointer to the elements to emulate the original alloca.
@@ -673,9 +674,11 @@ llvm::AllocaInst *WorkitemLoopsImpl::getContextArray(llvm::Instruction *Inst,
 /// cloning is not actually done, but only its possibility is investigated.
 /// \param Depth the recursion depth. Used to limit rematerialization size.
 /// \return The rematerialized instruction if possible and beneficial.
-llvm::Value *WorkitemLoopsImpl::tryToRematerialize(
-    llvm::Instruction *Before, llvm::Value *Def, const std::string &NamePrefix,
-    bool *CanDoIt, int *Depth) {
+static llvm::Value *tryToRematerialize(llvm::Instruction *Before,
+                                       llvm::Value *Def,
+                                       const std::string &NamePrefix,
+                                       bool *CanDoIt = nullptr,
+                                       int *Depth = 0) {
 
   auto DbgRemat = [=](const std::string &Reason) {
     LLVM_DEBUG(dbgs() << "##### " << Reason << "\n");
@@ -1061,29 +1064,29 @@ llvm::BasicBlock *WorkitemLoopsImpl::appendIncBlock(llvm::BasicBlock *After,
 
   llvm::LLVMContext &C = After->getContext();
 
-  llvm::BasicBlock *oldExit = After->getTerminator()->getSuccessor(0);
-  assert (oldExit != NULL);
+  llvm::BasicBlock *OldExit = After->getTerminator()->getSuccessor(0);
+  assert(OldExit != NULL);
 
-  llvm::BasicBlock *forIncBB =
-    BasicBlock::Create(C, "pregion_for_inc", After->getParent());
+  llvm::BasicBlock *ForIncBb =
+      BasicBlock::Create(C, "pregion_for_inc", After->getParent());
 
-  After->getTerminator()->replaceUsesOfWith(oldExit, forIncBB);
+  After->getTerminator()->replaceUsesOfWith(OldExit, ForIncBb);
 
-  IRBuilder<> builder(oldExit);
+  IRBuilder<> Builder(OldExit);
 
-  builder.SetInsertPoint(forIncBB);
+  Builder.SetInsertPoint(ForIncBb);
   // Create the iteration variable increment for both the local and global ids.
-  builder.CreateStore(builder.CreateAdd(builder.CreateLoad(ST, LocalIdVar),
+  Builder.CreateStore(Builder.CreateAdd(Builder.CreateLoad(ST, LocalIdVar),
                                         ConstantInt::get(ST, 1)),
                       LocalIdVar);
 
-  builder.CreateStore(builder.CreateAdd(builder.CreateLoad(ST, GlobalIdVar),
+  Builder.CreateStore(Builder.CreateAdd(Builder.CreateLoad(ST, GlobalIdVar),
                                         ConstantInt::get(ST, 1)),
                       GlobalIdVar);
 
-  builder.CreateBr(oldExit);
+  Builder.CreateBr(OldExit);
 
-  return forIncBB;
+  return ForIncBb;
 }
 
 // enable new pass manager infrastructure
@@ -1119,7 +1122,7 @@ bool WorkitemLoops::canHandleKernel(llvm::Function &K,
   // the vectorizer won't produce efficient code for such loops anyhow.
   // Tested by tricky_for.cl.
   LoopInfo &LI = AM.getResult<llvm::LoopAnalysis>(K);
-  for (auto L : LI) {
+  for (auto *L : LI) {
     if (!Barrier::isLoopWithBarrier(*L))
       continue;
     // More than one 'break' point. It would lead to a complex control flow
