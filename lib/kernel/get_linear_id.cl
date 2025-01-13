@@ -39,14 +39,13 @@ constant extern const size_t _global_offset_x;
 constant extern const size_t _global_offset_y;
 constant extern const size_t _global_offset_z;
 
-size_t _CL_OVERLOADABLE _CL_READNONE _CL_OPTNONE
-get_local_id (unsigned int dimindx);
+extern const size_t _local_size_x;
+extern const size_t _local_size_y;
+extern const size_t _local_size_z;
 
-size_t _CL_OVERLOADABLE _CL_READNONE _CL_OPTNONE
-get_global_size (unsigned int dimindx);
-
-size_t _CL_OVERLOADABLE _CL_READNONE _CL_OPTNONE
-get_local_size (unsigned int dimindx);
+extern const size_t _num_groups_x;
+extern const size_t _num_groups_y;
+extern const size_t _num_groups_z;
 
 /* attribute optnone disables all optimizations.
  * This was necessary, because running opt on kernel library
@@ -68,13 +67,13 @@ size_t _CL_OVERLOADABLE _CL_READNONE _CL_OPTNONE
 get_global_linear_id ()
 #endif
 {
-  return ((_local_size_z * _group_id_z + get_local_id (2))
-          * get_global_size (1) * get_global_size (0))
+  return ((_local_size_z * _group_id_z + _local_id_x) * _num_groups_y
+          * _local_size_y * _num_groups_x * _local_size_x)
 
-         + ((_local_size_y * _group_id_y + get_local_id (1))
-            * get_global_size (0))
+         + ((_local_size_y * _group_id_y + _local_id_y) * _num_groups_x
+            * _local_size_x)
 
-         + (_local_size_x * _group_id_x + get_local_id (0));
+         + (_local_size_x * _group_id_x + _local_id_x);
 }
 
 #if _MSC_VER
@@ -85,6 +84,6 @@ size_t _CL_OVERLOADABLE _CL_READNONE _CL_OPTNONE
 get_local_linear_id (void)
 #endif
 {
-  return (get_local_id (2) * get_local_size (1) * get_local_size (0))
-         + (get_local_id (1) * get_local_size (0)) + get_local_id (0);
+  return _local_id_z * _local_size_y * _local_size_x
+         + _local_id_y * _local_size_x + _local_id_x;
 }
