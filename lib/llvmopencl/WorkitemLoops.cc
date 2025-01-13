@@ -1116,6 +1116,10 @@ llvm::PreservedAnalyses WorkitemLoops::run(llvm::Function &F,
 
 bool WorkitemLoops::canHandleKernel(llvm::Function &K,
                                     llvm::FunctionAnalysisManager &AM) {
+
+  // The below cases should be now manageable. TODO: update the check for the
+  // unhandled case(s).
+#if 0
   // Do not handle kernels with barriers inside loops which have early exits
   // or continues.
   // It would require additional complexity that is unlikely worth it since
@@ -1187,6 +1191,7 @@ bool WorkitemLoops::canHandleKernel(llvm::Function &K,
 #endif
     return false;
   }
+#endif
   return true;
 }
 

@@ -505,7 +505,8 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     if (!Dev->spmd)
       addPass(Passes, "unreachables-to-returns");
 
-    // required for OLD PM
+    // Run loop-simplify to make more of the loops manageable by WILoops.
+    addPass(Passes, "loop-simplify");
     addAnalysis(Passes, "workitem-handler-chooser");
 
     addAnalysis(Passes, "pocl-vua");
@@ -548,8 +549,6 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
 
     // required for OLD PM
     addAnalysis(Passes, "wi-aa");
-    addAnalysis(Passes, "workitem-handler-chooser");
-    addAnalysis(Passes, "pocl-vua");
 
 #if 0
     // use PoCL's own print-module pass
@@ -564,6 +563,12 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     // loops for kernels without barriers, but after the transformation the
     // kernel looks like it has barriers, so subcfg would do its thing.
     addPass(Passes, "subcfgformation");
+
+    // Run implicit conditional barriers again since the implicit loop barriers
+    // pass might have added new conditional barrier cases that must be
+    // handled.
+    addPass(Passes, "implicit-cond-barriers");
+    addPass(Passes, "canon-barriers");
 
     // subcfgformation before workitemloops, as wiloops creates the loops for
     // kernels without barriers, but after the transformation the kernel looks

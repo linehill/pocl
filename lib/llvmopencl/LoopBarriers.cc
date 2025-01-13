@@ -71,6 +71,10 @@ isSuitableForBLoopStructureSharing(Loop &L,
 
   BasicBlock *Latch = L.getLoopLatch();
   BasicBlock *Exit = L.getExitingBlock();
+
+  // TODO: handle multiple exit cases
+  if (Exit == nullptr)
+    return false;
   BasicBlock *CondComp =
       Barrier::hasOnlyBarrier(Exit) ? Exit->getSinglePredecessor() : Exit;
 
@@ -185,6 +189,8 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
           Header->setName(Header->getName() + ".phibarrier");
           Highlights.insert(Header);
         }
+
+        BasicBlock *CondBlock = nullptr;
         // Add barriers on the exiting block and the latches,
         // which might not always be the same if there is computation
         // after the exit decision.
@@ -193,13 +199,13 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
           Barrier::createAtEnd(BrExit);
           BrExit->setName(BrExit->getName() + ".brexitbarrier");
           Highlights.insert(BrExit);
+          CondBlock = Barrier::hasOnlyBarrier(BrExit)
+            ? BrExit->getSinglePredecessor()
+            : BrExit;
         }
 
         BasicBlock *Latch = L.getLoopLatch();
 
-        BasicBlock *CondBlock = Barrier::hasOnlyBarrier(BrExit)
-                                    ? BrExit->getSinglePredecessor()
-                                    : BrExit;
         // Check if we can share the loop construct (the iteration
         // variable and the code that manages it) across the work-items,
         // like is usually the case with loops containing barrier calls.
