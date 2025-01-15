@@ -64,6 +64,11 @@ add_test_pocl(NAME "workgroup/cond_barriers_in_for"
               EXPECTED_OUTPUT "cond_barriers_in_for_2_4_1_1.stdout"
               COMMAND "run_kernel" "cond_barriers_in_for.cl" 2 4 1 1)
 
+add_test_pocl(NAME "workgroup/outerlooppar_multiple_exits"
+              EXPECTED_OUTPUT "outerlooppar_multiple_exits_1_4_1_1.stdout"
+              COMMAND "run_kernel" "outerlooppar_multiple_exits.cl" 1 4 1 1
+              WORKITEM_HANDLER "loops")
+
 add_test_pocl(NAME "workgroup/cond_barrier_in_var_for_cbs"
               EXPECTED_OUTPUT "cond_barrier_in_var_for_2_4_1_1.stdout"
               COMMAND "run_kernel" "cond_barrier_in_var_for.cl" 2 4 1 1

@@ -14,7 +14,7 @@ test_kernel (void)
   if (lid == 0)
     printf ("vertical:\n");
   /* This loop cannot be horizontally vectorized by the implicit loop barrier
-     mechanism because of an iteration count that depends on the gid. */
+     mechanism because of an iteration count that depends on the id. */
   for (int i = 0; i < gid; ++i) {
     printf ("i: %d gid: %d\n", i, gid);
   }
@@ -23,7 +23,7 @@ test_kernel (void)
   if (lid == 0)
     printf ("horizontal:\n");
     /* This loop should be horizontally vectorized because the iteration count
-       does not depend on the gid. */
+       does not depend on the id. */
 #pragma nounroll
   for (int i = 0; i < get_local_size(0); ++i) {
     if (i < 4)

@@ -111,23 +111,13 @@ void VariableUniformityAnalysisResult::analyzeLoop(
     analyzeLoop(F, *ParentLoop, PDT);
   }
 
-  llvm::BasicBlock *ExitingBlock = L.getExitingBlock();
   llvm::BasicBlock *HeaderBlock = L.getHeader();
   llvm::BasicBlock *PredecessorBlock = L.getLoopPredecessor();
   llvm::BasicBlock *LatchBlock = L.getLoopLatch();
-  llvm::BranchInst *LoopBranch =
-      ExitingBlock == nullptr
-          ? nullptr
-          : dyn_cast<llvm::BranchInst>(ExitingBlock->getTerminator());
   llvm::BranchInst *LoopEntryBranch =
       PredecessorBlock != nullptr
           ? dyn_cast<llvm::BranchInst>(PredecessorBlock->getTerminator())
           : nullptr;
-
-  // For now, bail out on even a bit more complex loop structures.
-  const bool UnsupportedLoopStructure =
-      ExitingBlock == nullptr || HeaderBlock == nullptr ||
-      LoopBranch == nullptr || LatchBlock == nullptr;
 
   const bool ParentLoopIsDivergent =
       ParentLoop != nullptr && !isUniformLoop(F, *ParentLoop);
@@ -141,12 +131,8 @@ void VariableUniformityAnalysisResult::analyzeLoop(
        !isUniform(&F, LoopEntryBranch->getCondition()));
 
 #ifdef DEBUG_UNIFORMITY_ANALYSIS
-  std::cerr << "#### analyzing a loop with ";
-  if (ExitingBlock != nullptr)
-    std::cerr << ExitingBlock->getName().str();
+  std::cerr << "#### analyzing loop " << L.getName().str();
   std::cerr << ": ";
-  if (UnsupportedLoopStructure)
-    std::cerr << "unsupported loop structure ";
   if (ParentLoopIsDivergent)
     std::cerr << "parent loop is divergent ";
   if (LoopNotReachedByAllWIs)
@@ -154,45 +140,69 @@ void VariableUniformityAnalysisResult::analyzeLoop(
   std::cerr << "\n";
 #endif
 
-  if (UnsupportedLoopStructure || ParentLoopIsDivergent ||
-      LoopNotReachedByAllWIs) {
+  if (ParentLoopIsDivergent || LoopNotReachedByAllWIs) {
     LoopUniformityCache_[&F][&L] = false;
     return;
   }
 
-  llvm::Value *LoopCondition = LoopBranch->getCondition();
-  // Now the uniformity data can treat the condition as divergent since it is
-  // written in the loop check basic block, which is treated as divergent at
-  // this point, even if the values written to it were uniform. Let's treat the
-  // increment block as uniform and run the check. If the check fails, there
-  // was some other reason for the divergent result.
+  bool LoopStructureIsUniform = true;
+  SmallVector<BasicBlock *> ExitingBlocks;
+  L.getExitingBlocks(ExitingBlocks);
+  // Check that all the exiting blocks have a uniform branch condition.
+  for (BasicBlock *ExitingBlock : ExitingBlocks) {
+    llvm::BranchInst *LoopBranch =
+        ExitingBlock == nullptr
+            ? nullptr
+            : dyn_cast<llvm::BranchInst>(ExitingBlock->getTerminator());
 
-  setUniform(&F, ExitingBlock);
-  setUniform(&F, LatchBlock);
+    llvm::Value *LoopCondition = LoopBranch->getCondition();
+    // Now the uniformity data can treat the condition as divergent since it is
+    // written in the loop check basic block, which is treated as divergent at
+    // this point, even if the values written to it were uniform. Let's treat
+    // the increment block as uniform and run the check. If the check fails,
+    // there was some other reason for the divergent result.
 
-  removeUniformityData(*LoopCondition, 10);
+    setUniform(&F, ExitingBlock);
+    setUniform(&F, LatchBlock);
 
-  bool LoopStructureUniform = LoopUniformityCache_[&F][&L] =
-      isUniform(&F, LoopCondition);
+    removeUniformityData(*LoopCondition, 10);
+
+    LoopStructureIsUniform =
+        LoopStructureIsUniform &&
+        (LoopUniformityCache_[&F][&L] = isUniform(&F, LoopCondition));
+  }
 
 #ifdef DEBUG_UNIFORMITY_ANALYSIS
   std::cerr << "#### loop detected as "
-            << (LoopStructureUniform ? "uniform" : "divergent") << "\n";
-  std::cerr << "#### loop condition:";
-  LoopCondition->dump();
+            << (LoopStructureIsUniform ? "uniform" : "divergent") << "\n";
 #endif
 
-  if (LoopStructureUniform) {
+  if (LoopStructureIsUniform) {
     // Recompute the uniformity of the loop body's basic blocks.
     llvm::BasicBlock *BodyStart = nullptr;
+
+    // Find the block that should have a branch to the first body BB:
+    llvm::BasicBlock *EnteringBlock = L.getHeader();
+    if (EnteringBlock == nullptr)
+      EnteringBlock = L.getExitingBlock();
+
+    // Todo: do...whiles with breaks might not get caught here?
+    assert(EnteringBlock != nullptr);
+
+    // One of the header branches should point to the start of the loop.
+    if (L.contains(EnteringBlock->getTerminator()->getSuccessor(0)))
+      BodyStart = EnteringBlock->getTerminator()->getSuccessor(0);
+    else if (L.contains(EnteringBlock->getTerminator()->getSuccessor(1)))
+      BodyStart = EnteringBlock->getTerminator()->getSuccessor(1);
+
     for (auto &BB : L.getBlocksVector()) {
-      if (ExitingBlock->getTerminator()->getSuccessor(0) == BB ||
-          ExitingBlock->getTerminator()->getSuccessor(1) == BB)
-        BodyStart = BB;
       removeUniformityDatum(F, *BB);
     }
     assert(BodyStart != nullptr);
-    setUniform(&F, ExitingBlock);
+
+    for (BasicBlock *ExitingBlock : ExitingBlocks)
+      setUniform(&F, ExitingBlock);
+
     setUniform(&F, LatchBlock);
     setUniform(&F, BodyStart);
 
@@ -669,6 +679,10 @@ bool VariableUniformityAnalysisResult::hasDivergingInstructions(
     if (isa<BranchInst>(I))
       continue;
     if (!isUniform(I.getParent()->getParent(), &I)) {
+#ifdef DEBUG_UNIFORMITY_ANALYSIS
+      std::cerr << "### not uniform:\n";
+      I.dump();
+#endif
       return true;
     }
   }

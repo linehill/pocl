@@ -50,7 +50,6 @@ POP_COMPILER_DIAGS
 
 #include <iostream>
 
-//#define DEBUG_LOOP_BARRIERS
 #define PASS_NAME "loop-barriers"
 #define PASS_CLASS pocl::LoopBarriers
 #define PASS_DESC "Add needed barriers to loops"
@@ -71,12 +70,18 @@ isSuitableForBLoopStructureSharing(Loop &L,
 
   BasicBlock *Latch = L.getLoopLatch();
   BasicBlock *Exit = L.getExitingBlock();
+  BasicBlock *Header = L.getHeader();
 
-  // TODO: handle multiple exit cases
-  if (Exit == nullptr)
+  // The BB with a condition check instruction in the end.
+  BasicBlock *CondComp = nullptr;
+  if (Exit != nullptr) {
+    CondComp =
+        Barrier::hasOnlyBarrier(Exit) ? Exit->getSinglePredecessor() : Exit;
+  } else if (Header != nullptr) {
+    CondComp = Header;
+  } else {
     return false;
-  BasicBlock *CondComp =
-      Barrier::hasOnlyBarrier(Exit) ? Exit->getSinglePredecessor() : Exit;
+  }
 
   if (Exit == Latch || CondComp == Latch || CondComp == nullptr ||
       Latch == nullptr || VUA.hasDivergingInstructions(*CondComp) ||
@@ -149,6 +154,10 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
   std::set<llvm::BasicBlock *> Highlights;
   dumpCFG(*K, K->getName().str() + "_before_loopbbarriers_on_bloop_" +
                   L.getName().str() + ".dot");
+
+#ifdef DEBUG_LOOP_BARRIERS
+  std::cerr << "Loop: " << L.getName().str() << "\n";
+#endif
 
   // TO clean: The loop construct is not necessary here anymore,
   // as the b-loop property is detected earlier.

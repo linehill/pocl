@@ -83,20 +83,27 @@ bool ImplicitLoopBarriers::addImplicitLoopBarriers(Loop &L) {
   dumpCFG(*F, F->getName().str() + "_before_impl_loopbbarriers_on_loop_" +
                   L.getName().str() + ".dot");
 
+  std::set<llvm::BasicBlock *> Highlights;
+
   // Isolate the loop body to a parallel region with two barriers.
-  Barrier::create(ExitingBlock->getTerminator());
+  SmallVector<BasicBlock *> ExitingBlocks;
+  L.getExitingBlocks(ExitingBlocks);
+  for (BasicBlock *ExitingBlock : ExitingBlocks) {
+    Barrier::create(ExitingBlock->getTerminator());
+    Highlights.insert(ExitingBlock);
+  }
+
   Barrier::create(HeaderBlock->getFirstNonPHI());
 
 #ifdef DEBUG_ILOOP_BARRIERS
   std::cerr << "### added inner-loop barriers to loop " << L.getName().str()
             << std::endl;
-  ExitingBlock->dump();
   HeaderBlock->dump();
 #endif
-  std::set<llvm::BasicBlock *> Highlights;
-  Highlights.insert(ExitingBlock);
   Highlights.insert(HeaderBlock);
-  dumpCFG(*F, F->getName().str() + "_after_impl_loopbbarriers_on_loop_" + L.getName().str() + ".dot",
+  dumpCFG(*F,
+          F->getName().str() + "_after_impl_loopbbarriers_on_loop_" +
+              L.getName().str() + ".dot",
           nullptr, nullptr, &Highlights);
 
   return false;
@@ -115,7 +122,7 @@ ImplicitLoopBarriers::run(llvm::Loop &L, llvm::LoopAnalysisManager &AM,
     return PreservedAnalyses::all();
 
 #ifdef DEBUG_ILOOP_BARRIERS
-  std::cerr << "### Before ImplicitLoopBarriers " << std::endl;
+  std::cerr << "### Before ImplicitLoopBarriers" << std::endl;
   F->dump();
 #endif
 
