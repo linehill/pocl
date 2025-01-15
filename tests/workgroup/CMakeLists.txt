@@ -67,7 +67,8 @@ add_test_pocl(NAME "workgroup/cond_barriers_in_for"
 add_test_pocl(NAME "workgroup/outerlooppar_multiple_exits"
               EXPECTED_OUTPUT "outerlooppar_multiple_exits_1_4_1_1.stdout"
               COMMAND "run_kernel" "outerlooppar_multiple_exits.cl" 1 4 1 1
-              WORKITEM_HANDLER "loops")
+              LLVM_FILECHECK "outerlooppar_multiple_exits.fc"
+              WORKITEM_HANDLER "loopvec")
 
 add_test_pocl(NAME "workgroup/cond_barrier_in_var_for_cbs"
               EXPECTED_OUTPUT "cond_barrier_in_var_for_2_4_1_1.stdout"

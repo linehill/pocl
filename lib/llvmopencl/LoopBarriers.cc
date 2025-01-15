@@ -58,6 +58,34 @@ namespace pocl {
 
 using namespace llvm;
 
+/// Finds the basic block in a loop that contains the loop condition check.
+/// \return nullptr if unable to analyze the loop.
+static BasicBlock *getConditionCheckBlock(Loop &L) {
+
+  BasicBlock *CondComp = nullptr;
+  if (BasicBlock *Exit = L.getExitingBlock()) {
+    CondComp =
+        Barrier::hasOnlyBarrier(Exit) ? Exit->getSinglePredecessor() : Exit;
+  } else if (BasicBlock *Header = L.getHeader()) {
+    CondComp = Header;
+
+    // Due to the barrier transformation, the implicit barriers might have
+    // pushed the condition check block forward. Find it.
+    while (Barrier::hasOnlyBarrier(CondComp) ||
+           isa<BranchInst>(CondComp->begin())) {
+      CondComp = CondComp->getSingleSuccessor();
+    }
+  } else {
+    return nullptr;
+  }
+  if (CondComp != nullptr &&
+      isa<ICmpInst>(CondComp->getTerminator()->getPrevNonDebugInstruction())) {
+    return CondComp;
+  } else {
+    return nullptr;
+  }
+}
+
 /// Returns true in case \p L is an ideal/canonical loop that only contains
 /// iteration variable increment/comparison instructions in its loop structure
 /// basic blocks, thus is suitable for cross-WI b-loop structure sharing.
@@ -68,23 +96,13 @@ isSuitableForBLoopStructureSharing(Loop &L,
   // TODO: Expand the coverage of loop cases incrementally.
   // Currently assumes unoptimized non-SSA (no PHIs) input.
 
+  BasicBlock *CondComp = getConditionCheckBlock(L);
+
   BasicBlock *Latch = L.getLoopLatch();
-  BasicBlock *Exit = L.getExitingBlock();
   BasicBlock *Header = L.getHeader();
 
-  // The BB with a condition check instruction in the end.
-  BasicBlock *CondComp = nullptr;
-  if (Exit != nullptr) {
-    CondComp =
-        Barrier::hasOnlyBarrier(Exit) ? Exit->getSinglePredecessor() : Exit;
-  } else if (Header != nullptr) {
-    CondComp = Header;
-  } else {
-    return false;
-  }
-
-  if (Exit == Latch || CondComp == Latch || CondComp == nullptr ||
-      Latch == nullptr || VUA.hasDivergingInstructions(*CondComp) ||
+  if (CondComp == Latch || CondComp == nullptr || Latch == nullptr ||
+      VUA.hasDivergingInstructions(*CondComp) ||
       VUA.hasDivergingInstructions(*Latch))
     return false;
 
@@ -199,7 +217,8 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
           Highlights.insert(Header);
         }
 
-        BasicBlock *CondBlock = nullptr;
+        BasicBlock *CondBlock = getConditionCheckBlock(L);
+
         // Add barriers on the exiting block and the latches,
         // which might not always be the same if there is computation
         // after the exit decision.
@@ -208,9 +227,6 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
           Barrier::createAtEnd(BrExit);
           BrExit->setName(BrExit->getName() + ".brexitbarrier");
           Highlights.insert(BrExit);
-          CondBlock = Barrier::hasOnlyBarrier(BrExit)
-            ? BrExit->getSinglePredecessor()
-            : BrExit;
         }
 
         BasicBlock *Latch = L.getLoopLatch();
