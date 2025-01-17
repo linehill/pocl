@@ -511,14 +511,9 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
 
     addAnalysis(Passes, "pocl-vua");
 
-    // not needed anymore with -O0 input.
-    // addPass(Passes, "isolate-regions");
-
     // NEW PM requires WIH & VUA analyses here,
     // but they should not be invalidated by previous passes
     addPass(Passes, "implicit-loop-barriers", PassType::Loop);
-
-    addPass(Passes, "canon-barriers");
 
     // Handles barriers inside conditional basic blocks (basically if...elses).
     // It tries to minimize the part ending up in the parallel region that is
@@ -527,8 +522,6 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     // to minimize the impact of "work-item peeling" (* to describe).
     addPass(Passes, "implicit-cond-barriers");
 
-    addPass(Passes, "canon-barriers");
-
     // loop-barriers adds implicit barriers to handle b-loops by isolating the
     // loop body from the loop construct. It also tries to make non b-loops
     // "isolated" in a way to produce the wiloop strictly around it, making
@@ -536,16 +529,9 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     // loopvec at least).
     addPass(Passes, "loop-barriers", PassType::Loop);
 
-    addPass(Passes, "canon-barriers");
-
     // Replicates tails of barrier-containing control flow graphs to ensure
     // they are single-entry single-exit regions.
     addPass(Passes, "barriertails");
-
-    addPass(Passes, "canon-barriers");
-
-    // Not needed anymore with -O0 input.
-    // addPass(Passes, "isolate-regions");
 
     // required for OLD PM
     addAnalysis(Passes, "wi-aa");
@@ -557,8 +543,6 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     addPass(Passes, "print<pocl-cfg;before>", PassType::Module);
 #endif
 
-    addPass(Passes, "canon-barriers");
-
     // subcfgformation (for CBS) before workitemloops, as wiloops creates the
     // loops for kernels without barriers, but after the transformation the
     // kernel looks like it has barriers, so subcfg would do its thing.
@@ -568,7 +552,6 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     // pass might have added new conditional barrier cases that must be
     // handled.
     addPass(Passes, "implicit-cond-barriers");
-    addPass(Passes, "canon-barriers");
 
     // subcfgformation before workitemloops, as wiloops creates the loops for
     // kernels without barriers, but after the transformation the kernel looks

@@ -31,6 +31,7 @@ IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 #include "Barrier.h"
+#include "CanonicalizeBarriers.h"
 #include "DebugHelpers.h"
 #include "ImplicitConditionalBarriers.h"
 #include "LLVMUtils.h"
@@ -88,17 +89,15 @@ ImplicitConditionalBarriers::run(llvm::Function &F,
 
   llvm::PostDominatorTree &PDT = FAM.getResult<PostDominatorTreeAnalysis>(F);
   llvm::DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-  llvm::LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
 
   PreservedAnalyses PAChanged = PreservedAnalyses::none();
   PAChanged.preserve<VariableUniformityAnalysis>();
   PAChanged.preserve<WorkitemHandlerChooser>();
-  PAChanged.preserve<LoopAnalysis>();
 
   typedef std::vector<BasicBlock*> BarrierBlockIndex;
   BarrierBlockIndex ConditionalBarriers;
 
-  bool Changed = false;
+  bool Changed = pocl::canonicalizeBarriers(F);
 
   for (Function::iterator FI = F.begin(), FE = F.end(); FI != FE; ++FI) {
     BasicBlock *BB = &*FI;
@@ -182,14 +181,17 @@ ImplicitConditionalBarriers::run(llvm::Function &F,
           nullptr);
 #endif
 
-#ifdef DEBUG_COND_BARRIERS
+  // We run this before LoopBarriers, which is a loop pass currently, so it's
+  // best ran here only once per function.
+  Changed = pocl::canonicalizeBarriers(F) || Changed;
   if (Changed) {
+#ifdef DEBUG_COND_BARRIERS
     std::cerr << "### After ImplicitConditionalBarriers " << std::endl;
     F.dump();
     dumpCFG(F, F.getName().str() + "_after_cond_barriers.dot", nullptr,
             nullptr);
-  }
 #endif
+  }
   return Changed ? PAChanged : PreservedAnalyses::all();
 }
 

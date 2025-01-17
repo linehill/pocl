@@ -2,7 +2,7 @@
 //
 // Copyright (c) 2011 Universidad Rey Juan Carlos and
 //               2012-2019 Pekka Jääskeläinen
-//               2024 Pekka Jääskeläinen / Intel Finland Oy
+//               2024-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -37,6 +37,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 
 #include "Barrier.h"
 #include "BarrierTailReplication.h"
+#include "CanonicalizeBarriers.h"
 #include "DebugHelpers.h"
 #include "LLVMUtils.h"
 #include "VariableUniformityAnalysis.h"
@@ -96,6 +97,14 @@ bool BarrierTailReplicationImpl::runOnFunction(Function &Func) {
 
   F = &Func;
 
+  bool Changed = pocl::canonicalizeBarriers(Func);
+
+  if (Changed) {
+    DT.recalculate(*F);
+    LI.releaseMemory();
+    LI.analyze(DT);
+  }
+
 #ifdef DEBUG_BARRIER_REPL
   std::cerr << "### Before barrier tail replication:\n";
   Func.dump();
@@ -105,7 +114,7 @@ bool BarrierTailReplicationImpl::runOnFunction(Function &Func) {
   dumpCFG(Func, Func.getName().str() + "_before_btr.dot", nullptr, nullptr);
 #endif
 
-  bool Changed = ProcessFunction(Func);
+  Changed = ProcessFunction(Func) || Changed;
 
   LI.verify(DT);
   // The created tails might contain PHI nodes with operands
@@ -118,12 +127,13 @@ bool BarrierTailReplicationImpl::runOnFunction(Function &Func) {
   dumpCFG(Func, Func.getName().str() + "_after_btr.dot", nullptr, nullptr);
 #endif
 
-#ifdef DEBUG_BARRIER_REPL
   if (Changed) {
+    pocl::canonicalizeBarriers(Func);
+#ifdef DEBUG_BARRIER_REPL
     std::cerr << "### After barrier tail replication:\n";
     Func.dump();
-  }
 #endif
+  }
 
   return Changed;
 }

@@ -696,7 +696,6 @@ void registerPassBuilderPasses(llvm::PassBuilder &PB) {
   AllocasToEntry::registerWithPB(PB);
   AutomaticLocals::registerWithPB(PB);
   BarrierTailReplication::registerWithPB(PB);
-  CanonicalizeBarriers::registerWithPB(PB);
   SanitizeUBofDivRem::registerWithPB(PB);
   ConvertUnreachablesToReturns::registerWithPB(PB);
   FlattenAll::registerWithPB(PB);

@@ -1,4 +1,4 @@
-// Header for CanonicalizeBarriers.cc function pass.
+// Header for barrier canonicalization.
 //
 // Copyright (c) 2011 Universidad Rey Juan Carlos
 //               2023-2025 Pekka Jääskeläinen / Intel Finland Oy
@@ -27,26 +27,17 @@
 #include "config.h"
 
 #include <llvm/IR/Function.h>
-#include <llvm/IR/PassManager.h>
-#include <llvm/Pass.h>
-#include <llvm/Passes/PassBuilder.h>
 
 namespace pocl {
 
-/// Pass that ensures barrier usage is in a "canonical form" ready for
-/// parallel region analysis.
+/// Ensures all barrier calls are in their own basic blocks without any other
+/// instructions than the barrier call and a branch.
 ///
-/// Canonical form means that the barriers are in their separate BB containing
-/// only the barrier and the terminator, with just one predecessor. This allows
-/// us to use those BBs as pure uniform marker blocks only which won't be
-/// included in any parallel region.
-class CanonicalizeBarriers : public llvm::PassInfoMixin<CanonicalizeBarriers> {
-public:
-  static void registerWithPB(llvm::PassBuilder &B);
-  llvm::PreservedAnalyses run(llvm::Function &F,
-                              llvm::FunctionAnalysisManager &AM);
-  static bool isRequired() { return true; }
-};
+/// Also isolates the entry and exit nodes of the functions as well
+/// as regions of pure uniform basic blocks.
+///
+/// \return true if updated.
+bool canonicalizeBarriers(llvm::Function &F);
 
 } // namespace pocl
 

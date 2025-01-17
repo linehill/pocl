@@ -38,6 +38,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Transforms/Scalar/LoopPassManager.h>
 
 #include "Barrier.h"
+#include "CanonicalizeBarriers.h"
 #include "DebugHelpers.h"
 #include "ImplicitLoopBarriers.h"
 #include "KernelCompilerUtils.h"
@@ -129,7 +130,7 @@ size_t countWorkitemIDTerms(Value *Term, int RecursionDepth) {
 /// This should be preferably decided in LLVM's loop interchange, but it might
 /// be difficult to add the context data etc. needed for producing the outer
 /// loop case there.
-bool outerLoopIsLikelyBeneficial(Loop &L) {
+static bool outerLoopIsLikelyBeneficial(Loop &L) {
   /// Check the memory accessess of the loop. If the loop more often has the
   /// work item id as a term, than not, we assume it's more efficient to
   /// vectorize over the WI loop. Note that LLVM loopvec can unroll loops to
@@ -206,7 +207,6 @@ bool ImplicitLoopBarriers::addImplicitLoopBarriers(Loop &L) {
     return false;
   }
 
-  llvm::BasicBlock *ExitingBlock = L.getExitingBlock();
   llvm::BasicBlock *HeaderBlock = L.getHeader();
 
   F = L.getHeader()->getParent();
@@ -229,14 +229,14 @@ bool ImplicitLoopBarriers::addImplicitLoopBarriers(Loop &L) {
   std::cerr << "### added inner-loop barriers to loop " << L.getName().str()
             << std::endl;
   HeaderBlock->dump();
-#endif
   Highlights.insert(HeaderBlock);
   dumpCFG(*F,
           F->getName().str() + "_after_impl_loopbbarriers_on_loop_" +
               L.getName().str() + ".dot",
           nullptr, nullptr, &Highlights);
+#endif
 
-  return false;
+  return true;
 }
 
 llvm::PreservedAnalyses
@@ -268,14 +268,15 @@ ImplicitLoopBarriers::run(llvm::Loop &L, llvm::LoopAnalysisManager &AM,
   PreservedAnalyses PAChanged = PreservedAnalyses::none();
   PAChanged.preserve<WorkitemHandlerChooser>();
   PAChanged.preserve<VariableUniformityAnalysis>();
-  bool Changed = addImplicitLoopBarriers(L);
+  bool Changed = false;
+  Changed = addImplicitLoopBarriers(L) || Changed;
 
-#ifdef DEBUG_ILOOP_BARRIERS
   if (Changed) {
+#ifdef DEBUG_ILOOP_BARRIERS
     std::cerr << "### After ImplicitLoopBarriers" << std::endl;
     F->dump();
-  }
 #endif
+  }
 
   return Changed ? PAChanged : PreservedAnalyses::all();
 }
