@@ -105,9 +105,8 @@ add_test_pocl(NAME "workgroup/unconditional_barriers"
               EXPECTED_OUTPUT "basic_barriers_2_2_2_2.stdout"
               COMMAND "run_kernel" "basic_barriers.cl" 2 2 2 2)
 
-# This case should now automatically fall back to CBS.
 add_test_pocl(NAME "workgroup/conditional_barrier_loopvec"
-              EXPECTED_OUTPUT "cond_barriers_1_2_1_1_cbs.stdout"
+              EXPECTED_OUTPUT "cond_barriers_1_2_1_1_loopvec.stdout"
               COMMAND "run_kernel" "conditional_barriers.cl" 1 2 1 1
               WORKITEM_HANDLER "loopvec")
 
@@ -125,6 +124,11 @@ add_test_pocl(NAME "workgroup/conditional_barrier_dynamic"
 add_test_pocl(NAME "workgroup/forcing_horizontal_parallelization_to_some_outer_loopvec"
               EXPECTED_OUTPUT "outerlooppar_2_2_1_1.stdout"
               COMMAND "run_kernel" "outerlooppar.cl" 2 2 1 1
+              WORKITEM_HANDLER "loopvec")
+
+add_test_pocl(NAME "workgroup/outerloop_intelligence"
+              EXPECTED_OUTPUT "outerloop_intelligence_1_2_1_1.stdout"
+              COMMAND "run_kernel" "outerlooppar_intelligence.cl" 1 2 1 1
               WORKITEM_HANDLER "loopvec")
 
 add_test_pocl(NAME "workgroup/loop_with_two_paths_to_the_latch"

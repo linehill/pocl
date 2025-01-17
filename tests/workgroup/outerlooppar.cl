@@ -11,12 +11,18 @@ test_kernel (void)
   int gid = get_global_id (0);
   int lid = get_local_id (0);
 
+  local float dummy[100];
+  dummy[get_local_id (0)] = 0;
+
   if (lid == 0)
     printf ("vertical:\n");
   /* This loop cannot be horizontally vectorized by the implicit loop barrier
      mechanism because of an iteration count that depends on the id. */
   for (int i = 0; i < gid; ++i) {
     printf ("i: %d gid: %d\n", i, gid);
+    /* This should make the outerloop intelligence want to transform it to
+       a b-loop, if it was legal to do so. */
+    dummy[get_local_id (0)] += 1;
   }
 
   barrier(CLK_GLOBAL_MEM_FENCE);
@@ -28,6 +34,9 @@ test_kernel (void)
   for (int i = 0; i < get_local_size(0); ++i) {
     if (i < 4)
       printf ("i: %d gid: %d\n", i, gid);
+    /* This should make the outerloop intelligence want to transform it to
+       a b-loop, if it was legal to do so. */
+    dummy[get_local_id (0)] += 1;
   }
 
   barrier(CLK_GLOBAL_MEM_FENCE);
@@ -39,6 +48,9 @@ test_kernel (void)
   if (gid > 0) {
     for (int i = 0; i < get_local_size(0); ++i) {
       printf ("i: %d gid: %d\n", i, gid);
+      /* This should make the outerloop intelligence want to transform it to
+         a b-loop, if it was legal to do so. */
+      dummy[get_local_id (0)] += 1;
     }
   }
   barrier(CLK_GLOBAL_MEM_FENCE);

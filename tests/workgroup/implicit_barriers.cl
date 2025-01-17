@@ -30,7 +30,11 @@ test_kernel (void)
   unsigned group_id = get_group_id (0);
   unsigned local_id = get_local_id (0);
   local int buf[512];
+  local int buf2[512];
+
   buf[local_id] = get_local_size(0) - local_id;
+  buf2[local_id] = 0;
+
   barrier(CLK_LOCAL_MEM_FENCE);
 
   printf ("LOCAL_ID=%d before if\n", local_id);
@@ -53,6 +57,9 @@ test_kernel (void)
 
         printf ("LOCAL_ID=%d inside for, iteration %d, value %d\n", local_id,
                 a, buf[index]);
+
+        /* Without id references the outerloop might not be injected. */
+        buf2[get_local_id (0)] = +1;
 
         ++index;
         ++a;

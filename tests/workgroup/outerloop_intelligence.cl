@@ -1,5 +1,6 @@
-/* Workgroup function generation test case for outer loop parallelization
-   of a loop with multiple breaks.
+/* Workgroup function generation test case for when outer loop parallelization
+   should not be performed for better vectorization opportunities over the
+   inner (kernel) loop.
 
    Copyright (c) 2025 Pekka Jääskeläinen / Intel Finland Oy
 
@@ -25,17 +26,18 @@
 __kernel void
 test_kernel (global int *d)
 {
-  for (int i = 0; i < 2048; ++i) {
-    /* This should be detected as an uniform loop automatically and converted to
-       a b-loop, meaning a's for all WIs should be executed first for each
-       iteration. */
-    printf ("a: i == %d lid == %d\n", i, get_local_id(0));
-    /* The local-id-specific array access should induce par outerloop. */
-    d[get_local_id (0)] += get_local_id (0) + i;
-    /* A dummy never-taken break which cannot be optimized away. */
-    if (d[0] == 2)
-      break;
-    printf ("b: i == %d lid == %d\n", i, get_local_id(0));
+  /* Perform partial sums. The structure might be vectorizable as a reduction
+     pattern by LLVM loopvec if we don't push the WI-loops inside the inner
+     loop to flip the mem access pattern stepping to 4. */
+  int sum = 0;
+  for (int i = 0; i < 4; ++i) {
+    printf ("i: %d gid: %d\n", i, get_global_id(0));
+    /* The load memory access pattern is stride 1 over i, stride 4 over
+       WI_X. */
+    sum += d[get_local_id(0) * 4 + i];
   }
-  d[get_local_id (0)] = get_local_id (0) * 2;
+
+  barrier(CLK_GLOBAL_MEM_FENCE);
+
+  d[get_local_id(0)] = sum;
 }

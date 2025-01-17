@@ -168,14 +168,15 @@ void VariableUniformityAnalysisResult::analyzeLoop(
     removeUniformityData(*LoopCondition, 10);
 
     LoopStructureIsUniform =
-        LoopStructureIsUniform &&
-        (LoopUniformityCache_[&F][&L] = isUniform(&F, LoopCondition));
+        LoopStructureIsUniform && isUniform(&F, LoopCondition);
   }
 
 #ifdef DEBUG_UNIFORMITY_ANALYSIS
   std::cerr << "#### loop detected as "
             << (LoopStructureIsUniform ? "uniform" : "divergent") << "\n";
 #endif
+
+  LoopUniformityCache_[&F][&L] = LoopStructureIsUniform;
 
   if (LoopStructureIsUniform) {
     // Recompute the uniformity of the loop body's basic blocks.
