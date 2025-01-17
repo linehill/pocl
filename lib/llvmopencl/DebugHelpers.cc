@@ -48,6 +48,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "LLVMUtils.h"
 #include "Workgroup.h"
 #include "pocl_file_util.h"
+#include "pocl_runtime_config.h"
 
 POP_COMPILER_DIAGS
 
@@ -177,7 +178,14 @@ void dumpCFG(llvm::Function &F, std::string FileName,
 
   unsigned LastRegID = 0;
 
+  // By default dump the dots to the kernel compiler cache/tmp directory,
+  // if set explicitly to avoid polluting the CWD.
+  const char *TmpPath = pocl_get_string_option("POCL_CACHE_DIR", nullptr);
+  if (TmpPath != nullptr)
+    FileName = std::string(TmpPath) + "/" + FileName;
+
   std::string OrigName = FileName;
+
   int Counter = 0;
   while (pocl_exists(FileName.c_str())) {
     std::ostringstream SS;
