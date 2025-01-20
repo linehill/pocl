@@ -53,10 +53,6 @@ POP_COMPILER_DIAGS
 
 #include <iostream>
 
-#define PASS_NAME "implicit-loop-barriers"
-#define PASS_CLASS pocl::ImplicitLoopBarriers
-#define PASS_DESC "Adds implicit barriers to loops"
-
 namespace pocl {
 
 using namespace llvm;
@@ -65,7 +61,7 @@ using namespace llvm;
 /// address expression.
 ///
 /// Currently considers only the X dimension.
-size_t countWorkitemIDTerms(Value *Term, int RecursionDepth) {
+static size_t countWorkitemIDTerms(Value *Term, int RecursionDepth) {
 #ifdef DEBUG_ILOOP_BARRIERS
   std::cerr << "#### Pointer term:\n";
   Term->dump();
@@ -97,7 +93,8 @@ size_t countWorkitemIDTerms(Value *Term, int RecursionDepth) {
       IDTerms += countWorkitemIDTerms(AddrTerm, RecursionDepth + 1);
     }
     return IDTerms;
-  } else if (Inst->isBinaryOp() && Inst->getOpcode() == Instruction::Add) {
+  }
+  if (Inst->isBinaryOp() && Inst->getOpcode() == Instruction::Add) {
     return countWorkitemIDTerms(Inst->getOperand(0), RecursionDepth + 1) +
            countWorkitemIDTerms(Inst->getOperand(1), RecursionDepth + 1);
   } else if (LoadInst *Load = dyn_cast_or_null<LoadInst>(Inst)) {
@@ -166,50 +163,19 @@ static bool outerLoopIsLikelyBeneficial(Loop &L) {
   return WIAddresses > 0;
 }
 
-/// Adds barriers to uniform loops without barriers to force horizontal
-/// vectorization across work-items.
+/// Adds implicit barriers to the given loop such that its body
+/// will contain a parallel work-item loop after parallel region
+/// formation.
 ///
-/// Currently adds the barriers whenever analyzed legal without considering
-/// the vectorization benefits. This is based on the assumption that most of the
-/// OpenCL kernels are written targeting GPUs/SPMD where the spatial memory
-/// locality is typically targeted across work-items, not inside the work-item
-/// loops.
-bool ImplicitLoopBarriers::addImplicitLoopBarriers(Loop &L) {
-
-  // Only add barriers to the innermost loops.
-  if (L.getSubLoops().size() > 0)
-    return false;
-
-#ifdef DEBUG_ILOOP_BARRIERS
-  std::cerr << "### Before ImplicitLoopBarriers on loop " << L.getName().str()
-            << std::endl;
-  F->dump();
-#endif
-
-  if (Barrier::isLoopWithBarrier(L)) {
-#ifdef DEBUG_ILOOP_BARRIERS
-    std::cerr << "#### loop with barrier\n";
-#endif
-    return false;
-  }
-  if (!VUA->isUniformLoop(*F, L)) {
-#ifdef DEBUG_ILOOP_BARRIERS
-    std::cerr << "#### not a uniform loop\n";
-#endif
-    return false;
-  }
-
-  if (!pocl_get_bool_option("POCL_FORCE_PARALLEL_OUTER_LOOP", 0) &&
-      !outerLoopIsLikelyBeneficial(L)) {
-#ifdef DEBUG_ILOOP_BARRIERS
-    std::cerr << "#### likely better inner-loop vectorized\n";
-#endif
-    return false;
-  }
+/// If a vectorizer is applied on the result, it can produce "outer loop
+/// vectorization" where the "outer loop" is considered the work-item loop
+/// that by default would be the outer loop surrounding the kernel
+/// "inner loop".
+static bool convertToLoopWithBarriers(Loop &L) {
 
   llvm::BasicBlock *HeaderBlock = L.getHeader();
+  llvm::Function *F = L.getHeader()->getParent();
 
-  F = L.getHeader()->getParent();
   dumpCFG(*F, F->getName().str() + "_before_impl_loopbbarriers_on_loop_" +
                   L.getName().str() + ".dot");
 
@@ -239,37 +205,47 @@ bool ImplicitLoopBarriers::addImplicitLoopBarriers(Loop &L) {
   return true;
 }
 
-llvm::PreservedAnalyses
-ImplicitLoopBarriers::run(llvm::Loop &L, llvm::LoopAnalysisManager &AM,
-                          llvm::LoopStandardAnalysisResults &AR,
-                          llvm::LPMUpdater &U) {
+bool enforceOuterLoopParIfBeneficial(llvm::Function &F, llvm::LoopInfo &LI,
+                                     VariableUniformityAnalysisResult &VUA) {
 
-  F = L.getHeader()->getParent();
+  if (!isKernelToProcess(F))
+    return false;
 
-  if (!isKernelToProcess(*F))
-    return PreservedAnalyses::all();
-
-  auto &FAMP = AM.getResult<FunctionAnalysisManagerLoopProxy>(L, AR);
-
-  if (FAMP.cachedResultExists<WorkitemHandlerChooser>(*F)) {
-    auto Res = FAMP.getCachedResult<WorkitemHandlerChooser>(*F);
-    if (Res->WIH == WorkitemHandlerType::CBS)
-      return PreservedAnalyses::all();
-  } else {
-    assert(0 && "missing cached result WIH for ImplicitLoopBarriers");
-  }
-
-  if (FAMP.cachedResultExists<VariableUniformityAnalysis>(*F)) {
-    VUA = FAMP.getCachedResult<VariableUniformityAnalysis>(*F);
-  } else {
-    assert(0 && "Missing cached VUA results for ImplicitLoopBarriers");
-  }
-
-  PreservedAnalyses PAChanged = PreservedAnalyses::none();
-  PAChanged.preserve<WorkitemHandlerChooser>();
-  PAChanged.preserve<VariableUniformityAnalysis>();
+#ifdef DEBUG_ILOOP_BARRIERS
+  std::cerr << "### Before ImplicitLoopBarriers:";
+  F.dump();
+#endif
   bool Changed = false;
-  Changed = addImplicitLoopBarriers(L) || Changed;
+  // Then correct loop divergence information.
+  for (llvm::Loop *L : LI) {
+
+    // Only add barriers to the innermost loops.
+    if (L->getSubLoops().size() > 0)
+      continue;
+
+    if (Barrier::isLoopWithBarrier(*L)) {
+#ifdef DEBUG_ILOOP_BARRIERS
+      std::cerr << "#### loop with barrier\n";
+#endif
+      continue;
+    }
+
+    if (!VUA.isUniformLoop(F, *L)) {
+#ifdef DEBUG_ILOOP_BARRIERS
+      std::cerr << "#### not a uniform loop\n";
+#endif
+      continue;
+    }
+
+    if (!pocl_get_bool_option("POCL_FORCE_PARALLEL_OUTER_LOOP", 0) &&
+        !outerLoopIsLikelyBeneficial(*L)) {
+#ifdef DEBUG_ILOOP_BARRIERS
+      std::cerr << "#### likely better inner-loop vectorized\n";
+#endif
+      continue;
+    }
+    Changed = convertToLoopWithBarriers(*L) || Changed;
+  }
 
   if (Changed) {
 #ifdef DEBUG_ILOOP_BARRIERS
@@ -277,10 +253,7 @@ ImplicitLoopBarriers::run(llvm::Loop &L, llvm::LoopAnalysisManager &AM,
     F->dump();
 #endif
   }
-
-  return Changed ? PAChanged : PreservedAnalyses::all();
+  return Changed;
 }
-
-REGISTER_NEW_LPASS(PASS_NAME, PASS_CLASS, PASS_DESC);
 
 } // namespace pocl

@@ -511,10 +511,6 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
 
     addAnalysis(Passes, "pocl-vua");
 
-    // NEW PM requires WIH & VUA analyses here,
-    // but they should not be invalidated by previous passes
-    addPass(Passes, "implicit-loop-barriers", PassType::Loop);
-
     // Handles barriers inside conditional basic blocks (basically if...elses).
     // It tries to minimize the part ending up in the parallel region that is
     // conditional by isolating the branching condition (which must be uniform,

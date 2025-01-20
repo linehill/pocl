@@ -34,6 +34,7 @@ IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
 #include "CanonicalizeBarriers.h"
 #include "DebugHelpers.h"
 #include "ImplicitConditionalBarriers.h"
+#include "ImplicitLoopBarriers.h"
 #include "LLVMUtils.h"
 #include "VariableUniformityAnalysis.h"
 #include "VariableUniformityAnalysisResult.hh"
@@ -74,6 +75,13 @@ ImplicitConditionalBarriers::run(llvm::Function &F,
 
   if (!isKernelToProcess(F))
     return PreservedAnalyses::all();
+
+  llvm::LoopInfo &LI = FAM.getResult<llvm::LoopAnalysis>(F);
+  pocl::VariableUniformityAnalysisResult &VUA =
+      FAM.getResult<VariableUniformityAnalysis>(F);
+
+  // TODO: This call will be moved to the new DeSPMD pass in the end.
+  enforceOuterLoopParIfBeneficial(F, LI, VUA);
 
   if (!hasWorkgroupBarriers(F))
     return PreservedAnalyses::all();

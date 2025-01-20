@@ -703,7 +703,6 @@ void registerPassBuilderPasses(llvm::PassBuilder &PB) {
   FlattenGlobals::registerWithPB(PB);
   HandleSamplerInitialization::registerWithPB(PB);
   ImplicitConditionalBarriers::registerWithPB(PB);
-  ImplicitLoopBarriers::registerWithPB(PB);
   InlineKernels::registerWithPB(PB);
   IsolateRegions::registerWithPB(PB);
   LoopBarriers::registerWithPB(PB);

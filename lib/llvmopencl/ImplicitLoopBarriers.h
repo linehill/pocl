@@ -1,6 +1,7 @@
-// Header for ImplicitLoopBarriers loop pass.
+// Header for implicit loop barriers (outerloop parallelization) functionality.
 //
 // Copyright (c) 2012-2013 Pekka Jääskeläinen / TUT
+//               2024-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -25,33 +26,26 @@
 
 #include "config.h"
 
-#include <llvm/IR/Function.h>
-#include <llvm/IR/PassManager.h>
-#include <llvm/Pass.h>
-#include <llvm/Passes/PassBuilder.h>
-
-#include <llvm/Analysis/LoopAnalysisManager.h>
-#include <llvm/Transforms/Scalar/LoopPassManager.h>
-
-#include "VariableUniformityAnalysis.h"
-#include "VariableUniformityAnalysisResult.hh"
+namespace llvm {
+class Function;
+class LoopInfo;
+} // namespace llvm
 
 namespace pocl {
 
-class ImplicitLoopBarriers : public llvm::PassInfoMixin<ImplicitLoopBarriers> {
-public:
-  static void registerWithPB(llvm::PassBuilder &B);
-  llvm::PreservedAnalyses run(llvm::Loop &L, llvm::LoopAnalysisManager &AM,
-                              llvm::LoopStandardAnalysisResults &AR,
-                              llvm::LPMUpdater &U);
-  static bool isRequired() { return true; }
+class VariableUniformityAnalysisResult;
 
-private:
-  bool addImplicitLoopBarriers(llvm::Loop &L);
-
-  llvm::Function *F;
-  VariableUniformityAnalysisResult *VUA;
-};
+/// Adds barriers to uniform loops without barriers to force horizontal
+/// vectorization across work-items.
+///
+/// The work-item loops is logically the "outer loop" of an SPMD kernel
+/// executed across work-items. Does not always add the barriers in case
+/// it guesstimates that it's more beneficial leave the loop intact for
+/// "inner loop" vectorization instead.
+///
+/// \return True in case modified the function.
+bool enforceOuterLoopParIfBeneficial(llvm::Function &F, llvm::LoopInfo &LI,
+                                     VariableUniformityAnalysisResult &VUA);
 
 } // namespace pocl
 
