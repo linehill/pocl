@@ -1,4 +1,5 @@
-// Header for LoopBarriers.cc function pass.
+// Addition of implicit barriers to isolate loops for clean and correct
+// parallel regions.
 //
 // Copyright (c) 2011 Universidad Rey Juan Carlos
 //               2025 Pekka Jääskeläinen / Intel Finland Oy
@@ -26,26 +27,22 @@
 
 #include "config.h"
 
-#include <llvm/Analysis/LoopAnalysisManager.h>
-#include <llvm/IR/Function.h>
-#include <llvm/IR/PassManager.h>
-#include <llvm/Pass.h>
-#include <llvm/Passes/PassBuilder.h>
-#include <llvm/Transforms/Scalar/LoopPassManager.h>
-
-#include "VariableUniformityAnalysis.h"
-#include "VariableUniformityAnalysisResult.hh"
+namespace llvm {
+class Function;
+class LoopInfo;
+} // namespace llvm
 
 namespace pocl {
 
-class LoopBarriers : public llvm::PassInfoMixin<LoopBarriers> {
-public:
-  static void registerWithPB(llvm::PassBuilder &B);
-  llvm::PreservedAnalyses run(llvm::Loop &L, llvm::LoopAnalysisManager &AM,
-                              llvm::LoopStandardAnalysisResults &AR,
-                              llvm::LPMUpdater &U);
-  static bool isRequired() { return true; }
-};
+class VariableUniformityAnalysisResult;
+
+/// Adds implicit barriers to isolate loops to produce clean and semantically
+/// correct parallel region control flow regions.
+///
+/// \return True in case modified the function.
+bool addLoopConstructIsolationBarriers(llvm::Function &F, llvm::LoopInfo &LI,
+                                       VariableUniformityAnalysisResult &VUA,
+                                       llvm::DominatorTree &DT);
 
 } // namespace pocl
 

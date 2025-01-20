@@ -28,6 +28,7 @@ IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
 POP_COMPILER_DIAGS
 IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Analysis/LoopInfo.h>
+#include <llvm/Analysis/PostDominators.h>
 #include <llvm/IR/InstrTypes.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
@@ -39,8 +40,12 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "BarrierTailReplication.h"
 #include "CanonicalizeBarriers.h"
 #include "DebugHelpers.h"
+#include "ImplicitConditionalBarriers.h"
+#include "ImplicitLoopBarriers.h"
 #include "LLVMUtils.h"
+#include "LoopBarriers.h"
 #include "VariableUniformityAnalysis.h"
+#include "VariableUniformityAnalysisResult.hh"
 #include "Workgroup.h"
 #include "WorkitemHandlerChooser.h"
 
@@ -93,42 +98,46 @@ private:
   bool CleanupPHIs(llvm::BasicBlock *BB);
 };
 
-bool BarrierTailReplicationImpl::runOnFunction(Function &Func) {
+#define REFRESH_LOOP_INFO()                                                    \
+  do {                                                                         \
+    if (Changed) {                                                             \
+      DT.recalculate(F);                                                       \
+      LI.releaseMemory();                                                      \
+      LI.analyze(DT);                                                          \
+      LI.verify(DT);                                                           \
+    }                                                                          \
+  } while (false)
 
-  F = &Func;
+bool BarrierTailReplicationImpl::runOnFunction(Function &F) {
 
-  bool Changed = pocl::canonicalizeBarriers(Func);
-
-  if (Changed) {
-    DT.recalculate(*F);
-    LI.releaseMemory();
-    LI.analyze(DT);
-  }
+  bool Changed = pocl::canonicalizeBarriers(F);
+  REFRESH_LOOP_INFO();
 
 #ifdef DEBUG_BARRIER_REPL
   std::cerr << "### Before barrier tail replication:\n";
-  Func.dump();
+  F.dump();
 #endif
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-  dumpCFG(Func, Func.getName().str() + "_before_btr.dot", nullptr, nullptr);
+  dumpCFG(F, Func.getName().str() + "_before_btr.dot", nullptr, nullptr);
 #endif
 
-  Changed = ProcessFunction(Func) || Changed;
+  Changed = ProcessFunction(F) || Changed;
 
-  LI.verify(DT);
+  // Note: LI is invalid after the call.
+
   // The created tails might contain PHI nodes with operands
   // referring to the non-predecessor (split point) BB.
   // These must be cleaned to avoid breakage later on.
-  for (Function::iterator I = Func.begin(), E = Func.end(); I != E; ++I)
+  for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I)
     Changed |= CleanupPHIs(&*I);
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-  dumpCFG(Func, Func.getName().str() + "_after_btr.dot", nullptr, nullptr);
+  dumpCFG(F, F.getName().str() + "_after_btr.dot", nullptr, nullptr);
 #endif
 
   if (Changed) {
-    pocl::canonicalizeBarriers(Func);
+    pocl::canonicalizeBarriers(F);
 #ifdef DEBUG_BARRIER_REPL
     std::cerr << "### After barrier tail replication:\n";
     Func.dump();
@@ -477,7 +486,22 @@ BarrierTailReplication::run(llvm::Function &F,
     return PreservedAnalyses::all();
 
   llvm::DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+  llvm::PostDominatorTree &PDT = FAM.getResult<PostDominatorTreeAnalysis>(F);
   llvm::LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
+  pocl::VariableUniformityAnalysisResult &VUA =
+      FAM.getResult<VariableUniformityAnalysis>(F);
+
+  bool Changed = false;
+
+  // TODO: These calls will be moved to the new DeSPMD pass in the end.
+  Changed = enforceOuterLoopParIfBeneficial(F, LI, VUA) || Changed;
+  REFRESH_LOOP_INFO();
+
+  Changed = addLoopConstructIsolationBarriers(F, LI, VUA, DT) || Changed;
+  REFRESH_LOOP_INFO();
+
+  Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
+  REFRESH_LOOP_INFO();
 
   BarrierTailReplicationImpl BTRI(DT, LI);
 
@@ -491,7 +515,13 @@ BarrierTailReplication::run(llvm::Function &F,
   PAChanged.preserve<LoopAnalysis>();
   PAChanged.preserve<DominatorTreeAnalysis>();
 
-  return BTRI.runOnFunction(F) ? PAChanged : PreservedAnalyses::all();
+  Changed = BTRI.runOnFunction(F) || Changed;
+
+  // Run implicit conditional barriers again since BTR might have added new
+  // conditional barrier cases that must be handled.
+  Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
+
+  return Changed ? PAChanged : PreservedAnalyses::all();
 }
 
 REGISTER_NEW_FPASS(PASS_NAME, PASS_CLASS, PASS_DESC);

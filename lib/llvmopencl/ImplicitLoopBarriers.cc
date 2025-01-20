@@ -97,7 +97,8 @@ static size_t countWorkitemIDTerms(Value *Term, int RecursionDepth) {
   if (Inst->isBinaryOp() && Inst->getOpcode() == Instruction::Add) {
     return countWorkitemIDTerms(Inst->getOperand(0), RecursionDepth + 1) +
            countWorkitemIDTerms(Inst->getOperand(1), RecursionDepth + 1);
-  } else if (LoadInst *Load = dyn_cast_or_null<LoadInst>(Inst)) {
+  }
+  if (LoadInst *Load = dyn_cast_or_null<LoadInst>(Inst)) {
     // In unoptimized non-SSA input we might load terms of the address from
     // alloca'd temporary variables.
     return countWorkitemIDTerms(Inst->getOperand(0), RecursionDepth + 1);
@@ -212,11 +213,11 @@ bool enforceOuterLoopParIfBeneficial(llvm::Function &F, llvm::LoopInfo &LI,
     return false;
 
 #ifdef DEBUG_ILOOP_BARRIERS
-  std::cerr << "### Before ImplicitLoopBarriers:";
+  std::cerr << "### Before ImplicitLoopBarriers:\n";
   F.dump();
 #endif
+
   bool Changed = false;
-  // Then correct loop divergence information.
   for (llvm::Loop *L : LI) {
 
     // Only add barriers to the innermost loops.
@@ -249,7 +250,7 @@ bool enforceOuterLoopParIfBeneficial(llvm::Function &F, llvm::LoopInfo &LI,
 
   if (Changed) {
 #ifdef DEBUG_ILOOP_BARRIERS
-    std::cerr << "### After ImplicitLoopBarriers" << std::endl;
+    std::cerr << "### After ImplicitLoopBarriers\n";
     F->dump();
 #endif
   }

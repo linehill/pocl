@@ -1,8 +1,7 @@
-// LLVM function pass that adds implicit barriers to branches where it sees
-// beneficial (and legal).
+// Adds implicit barriers to branches where required and seen beneficial.
 //
 // Copyright (c) 2013 Pekka Jääskeläinen / TUT
-//               2024 Pekka Jääskeläinen / Intel Finland Oy
+//               2024-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -54,7 +53,8 @@ namespace pocl {
 
 using namespace llvm;
 
-/// Finds a predecessor basic block that does not originate from a back edge.
+/// Finds a predecessor basic block for \p BB that does not originate from
+/// a back edge.
 ///
 /// This is used to include loops in the conditional parallel region.
 static BasicBlock *firstNonBackedgePredecessor(llvm::BasicBlock *BB,
@@ -65,42 +65,24 @@ static BasicBlock *firstNonBackedgePredecessor(llvm::BasicBlock *BB,
     ++I;
   if (I == E)
     return NULL;
-  else
-    return *I;
+  return *I;
 }
 
-llvm::PreservedAnalyses
-ImplicitConditionalBarriers::run(llvm::Function &F,
-                                 llvm::FunctionAnalysisManager &FAM) {
+bool addImplicitBranchBarriers(llvm::Function &F, llvm::LoopInfo &LI,
+                               pocl::VariableUniformityAnalysisResult &VUA,
+                               llvm::PostDominatorTree &PDT,
+                               llvm::DominatorTree &DT) {
 
   if (!isKernelToProcess(F))
-    return PreservedAnalyses::all();
-
-  llvm::LoopInfo &LI = FAM.getResult<llvm::LoopAnalysis>(F);
-  pocl::VariableUniformityAnalysisResult &VUA =
-      FAM.getResult<VariableUniformityAnalysis>(F);
-
-  // TODO: This call will be moved to the new DeSPMD pass in the end.
-  enforceOuterLoopParIfBeneficial(F, LI, VUA);
+    return false;
 
   if (!hasWorkgroupBarriers(F))
-    return PreservedAnalyses::all();
-
-  WorkitemHandlerType WIH = FAM.getResult<WorkitemHandlerChooser>(F).WIH;
-  if (WIH == WorkitemHandlerType::CBS)
-    return PreservedAnalyses::all();
+    return false;
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
   dumpCFG(F, F.getName().str() + "_before_implicit_cond_barriers.dot", nullptr,
           nullptr);
 #endif
-
-  llvm::PostDominatorTree &PDT = FAM.getResult<PostDominatorTreeAnalysis>(F);
-  llvm::DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-
-  PreservedAnalyses PAChanged = PreservedAnalyses::none();
-  PAChanged.preserve<VariableUniformityAnalysis>();
-  PAChanged.preserve<WorkitemHandlerChooser>();
 
   typedef std::vector<BasicBlock*> BarrierBlockIndex;
   BarrierBlockIndex ConditionalBarriers;
@@ -112,19 +94,17 @@ ImplicitConditionalBarriers::run(llvm::Function &F,
     if (!Barrier::hasBarrier(BB)) continue;
 
     // Unconditional barrier postdominates the entry node.
-    if (PDT.dominates(BB, &F.getEntryBlock())) {
+    if (PDT.dominates(&BB, &F.getEntryBlock())) {
 #ifdef DEBUG_COND_BARRIERS
       std::cerr << "### BB postdominates the entry block" << std::endl;
       BB->dump();
 #endif
       continue;
     }
-    ConditionalBarriers.push_back(BB);
+    ConditionalBarriers.push_back(&BB);
   }
 
-  for (BarrierBlockIndex::const_iterator i = ConditionalBarriers.begin();
-       i != ConditionalBarriers.end(); ++i) {
-    BasicBlock *BB = *i;
+  for (BasicBlock *BB : ConditionalBarriers) {
 #ifdef DEBUG_COND_BARRIERS
     std::cerr << "### handling a conditional barrier in basic block:\n";
     BB->dump();
@@ -189,8 +169,6 @@ ImplicitConditionalBarriers::run(llvm::Function &F,
           nullptr);
 #endif
 
-  // We run this before LoopBarriers, which is a loop pass currently, so it's
-  // best ran here only once per function.
   Changed = pocl::canonicalizeBarriers(F) || Changed;
   if (Changed) {
 #ifdef DEBUG_COND_BARRIERS
@@ -200,9 +178,7 @@ ImplicitConditionalBarriers::run(llvm::Function &F,
             nullptr);
 #endif
   }
-  return Changed ? PAChanged : PreservedAnalyses::all();
+  return Changed;
 }
-
-REGISTER_NEW_FPASS(PASS_NAME, PASS_CLASS, PASS_DESC);
 
 } // namespace pocl

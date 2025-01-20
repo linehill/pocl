@@ -702,10 +702,8 @@ void registerPassBuilderPasses(llvm::PassBuilder &PB) {
   FlattenBarrierSubs::registerWithPB(PB);
   FlattenGlobals::registerWithPB(PB);
   HandleSamplerInitialization::registerWithPB(PB);
-  ImplicitConditionalBarriers::registerWithPB(PB);
   InlineKernels::registerWithPB(PB);
   IsolateRegions::registerWithPB(PB);
-  LoopBarriers::registerWithPB(PB);
   FixMinVecSize::registerWithPB(PB);
   OptimizeWorkItemGVars::registerWithPB(PB);
   PHIsToAllocas::registerWithPB(PB);

@@ -511,20 +511,6 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
 
     addAnalysis(Passes, "pocl-vua");
 
-    // Handles barriers inside conditional basic blocks (basically if...elses).
-    // It tries to minimize the part ending up in the parallel region that is
-    // conditional by isolating the branching condition (which must be uniform,
-    // otherwise the end result is undefined according to barrier rules),
-    // to minimize the impact of "work-item peeling" (* to describe).
-    addPass(Passes, "implicit-cond-barriers");
-
-    // loop-barriers adds implicit barriers to handle b-loops by isolating the
-    // loop body from the loop construct. It also tries to make non b-loops
-    // "isolated" in a way to produce the wiloop strictly around it, making
-    // things nice for LLVM standard loop analysis (loop-interchange and
-    // loopvec at least).
-    addPass(Passes, "loop-barriers", PassType::Loop);
-
     // Replicates tails of barrier-containing control flow graphs to ensure
     // they are single-entry single-exit regions.
     addPass(Passes, "barriertails");
@@ -543,11 +529,6 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     // loops for kernels without barriers, but after the transformation the
     // kernel looks like it has barriers, so subcfg would do its thing.
     addPass(Passes, "subcfgformation");
-
-    // Run implicit conditional barriers again since the implicit loop barriers
-    // pass might have added new conditional barrier cases that must be
-    // handled.
-    addPass(Passes, "implicit-cond-barriers");
 
     // subcfgformation before workitemloops, as wiloops creates the loops for
     // kernels without barriers, but after the transformation the kernel looks
