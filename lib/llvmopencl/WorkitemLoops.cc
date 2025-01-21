@@ -43,6 +43,14 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 #include "Barrier.h"
+
+// To be moved to DeSPMD:
+#include "BarrierTailReplication.h"
+#include "CanonicalizeBarriers.h"
+#include "ImplicitConditionalBarriers.h"
+#include "ImplicitLoopBarriers.h"
+#include "LoopBarriers.h"
+
 #include "DebugHelpers.h"
 #include "Kernel.h"
 #include "KernelCompilerUtils.h"
@@ -1089,6 +1097,16 @@ llvm::BasicBlock *WorkitemLoopsImpl::appendIncBlock(llvm::BasicBlock *After,
   return ForIncBb;
 }
 
+#define REFRESH_LOOP_INFO()                                                    \
+  do {                                                                         \
+    if (Changed) {                                                             \
+      DT.recalculate(F);                                                       \
+      LI.releaseMemory();                                                      \
+      LI.analyze(DT);                                                          \
+      LI.verify(DT);                                                           \
+    }                                                                          \
+  } while (false)
+
 // enable new pass manager infrastructure
 llvm::PreservedAnalyses WorkitemLoops::run(llvm::Function &F,
                                            llvm::FunctionAnalysisManager &AM) {
@@ -1108,10 +1126,36 @@ llvm::PreservedAnalyses WorkitemLoops::run(llvm::Function &F,
   PAChanged.preserve<VariableUniformityAnalysis>();
   PAChanged.preserve<WorkitemHandlerChooser>();
 
+  bool Changed = false;
+  // TODO: These calls will be moved to the new DeSPMD pass in the end.
+  Changed = enforceOuterLoopParIfBeneficial(F, LI, VUA) || Changed;
+  REFRESH_LOOP_INFO();
+
+  Changed = addLoopConstructIsolationBarriers(F, LI, VUA, DT) || Changed;
+  REFRESH_LOOP_INFO();
+
+  Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
+  REFRESH_LOOP_INFO();
+
+  Changed = pocl::canonicalizeBarriers(F);
+  REFRESH_LOOP_INFO();
+
+  // Replicates tails of barrier-containing control flow graphs to ensure they
+  // are single-entry single-exit regions.
+  Changed = replicateBarrierPathTails(F, LI, DT, PDT, VUA) || Changed;
+  REFRESH_LOOP_INFO();
+
+  // Run implicit conditional barriers again since BTR might have added new
+  // conditional barrier cases that must be handled.
+  Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
+  REFRESH_LOOP_INFO();
+
   WorkitemLoopsImpl WIL(DT, LI, PDT, VUA);
   // llvm::verifyFunction(F);
 
-  return WIL.runOnFunction(F) ? PAChanged : PreservedAnalyses::all();
+  Changed = WIL.runOnFunction(F) || Changed;
+
+  return Changed ? PAChanged : PreservedAnalyses::all();
 }
 
 bool WorkitemLoops::canHandleKernel(llvm::Function &K,

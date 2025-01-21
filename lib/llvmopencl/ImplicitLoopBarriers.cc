@@ -102,7 +102,8 @@ static size_t countWorkitemIDTerms(Value *Term, int RecursionDepth) {
     // In unoptimized non-SSA input we might load terms of the address from
     // alloca'd temporary variables.
     return countWorkitemIDTerms(Inst->getOperand(0), RecursionDepth + 1);
-  } else if (AllocaInst *Alloca = dyn_cast_or_null<AllocaInst>(Inst)) {
+  }
+  if (AllocaInst *Alloca = dyn_cast_or_null<AllocaInst>(Inst)) {
     // If the load is from an alloca, let's traverse all stores to it.
     size_t IDTerms = 0;
     for (Instruction::use_iterator UI = Alloca->use_begin(),

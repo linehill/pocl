@@ -295,4 +295,7 @@ void CloneFunctionIntoAbs(llvm::Function *NewFunc,
 #define Inst2InsertPt(X) X->getIterator()
 #endif
 
+typedef std::set<llvm::BasicBlock *> BasicBlockSet;
+typedef std::vector<llvm::BasicBlock *> BasicBlockVector;
+
 #endif

@@ -29,6 +29,7 @@ POP_COMPILER_DIAGS
 IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Analysis/LoopInfo.h>
 #include <llvm/Analysis/PostDominators.h>
+#include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/InstrTypes.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
@@ -40,10 +41,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "BarrierTailReplication.h"
 #include "CanonicalizeBarriers.h"
 #include "DebugHelpers.h"
-#include "ImplicitConditionalBarriers.h"
-#include "ImplicitLoopBarriers.h"
 #include "LLVMUtils.h"
-#include "LoopBarriers.h"
 #include "VariableUniformityAnalysis.h"
 #include "VariableUniformityAnalysisResult.hh"
 #include "Workgroup.h"
@@ -57,109 +55,38 @@ POP_COMPILER_DIAGS
 #include <set>
 #include <vector>
 
-#define PASS_NAME "barriertails"
-#define PASS_CLASS pocl::BarrierTailReplication
-#define PASS_DESC "Barrier tail replication pass"
+using namespace llvm;
 
 namespace pocl {
 
-using namespace llvm;
+static void replicateBasicBlocks(BasicBlockVector &NewGraph,
+                                 ValueToValueMapTy &ReferenceMap,
+                                 BasicBlockVector &Graph, Function *F);
 
-class BarrierTailReplicationImpl {
+static bool replicateJoinedSubgraphs(BasicBlock *Dominator,
+                                     BasicBlock *SubgraphEntry,
+                                     BasicBlockSet &ProcessedBBs,
+                                     llvm::DominatorTree &DT,
+                                     llvm::LoopInfo &LI);
 
-public:
-  bool runOnFunction(llvm::Function &F);
-  BarrierTailReplicationImpl(llvm::DominatorTree &DT, llvm::LoopInfo &LI)
-      : DT(DT), LI(LI){};
+static BasicBlock *replicateTail(BasicBlock *Entry, Function *F,
+                                 llvm::DominatorTree &DT);
 
-private:
-  typedef std::set<llvm::BasicBlock *> BasicBlockSet;
-  typedef std::vector<llvm::BasicBlock *> BasicBlockVector;
-  typedef std::map<llvm::Value *, llvm::Value *> ValueValueMap;
+static void updateReferences(const BasicBlockVector &Graph,
+                             ValueToValueMapTy &ReferenceMap);
 
-  llvm::DominatorTree &DT;
-  llvm::LoopInfo &LI;
-  llvm::Function *F;
+static void findTailBlocks(BasicBlockVector &Subgraph, BasicBlock *Entry,
+                           llvm::DominatorTree &DT);
 
-  bool ProcessFunction(llvm::Function &F);
-  bool processBarriersDFS(llvm::BasicBlock *BB, BasicBlockSet &ProcessedBBs);
-  bool ReplicateJoinedSubgraphs(llvm::BasicBlock *Dominator,
-                                llvm::BasicBlock *SubgraphEntry,
-                                BasicBlockSet &ProcessedBBs);
-
-  llvm::BasicBlock *replicateTail(llvm::BasicBlock *Entry, llvm::Function *F);
-  void findTailBlocks(BasicBlockVector &Subgraph, llvm::BasicBlock *Entry);
-  void ReplicateBasicBlocks(BasicBlockVector &NewGraph,
-                            llvm::ValueToValueMapTy &ReferenceMap,
-                            BasicBlockVector &Graph, llvm::Function *F);
-  void UpdateReferences(const BasicBlockVector &Graph,
-                        llvm::ValueToValueMapTy &ReferenceMap);
-
-  bool CleanupPHIs(llvm::BasicBlock *BB);
-};
-
-#define REFRESH_LOOP_INFO()                                                    \
-  do {                                                                         \
-    if (Changed) {                                                             \
-      DT.recalculate(F);                                                       \
-      LI.releaseMemory();                                                      \
-      LI.analyze(DT);                                                          \
-      LI.verify(DT);                                                           \
-    }                                                                          \
-  } while (false)
-
-bool BarrierTailReplicationImpl::runOnFunction(Function &F) {
-
-  bool Changed = pocl::canonicalizeBarriers(F);
-  REFRESH_LOOP_INFO();
-
-#ifdef DEBUG_BARRIER_REPL
-  std::cerr << "### Before barrier tail replication:\n";
-  F.dump();
-#endif
-
-#ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-  dumpCFG(F, Func.getName().str() + "_before_btr.dot", nullptr, nullptr);
-#endif
-
-  Changed = ProcessFunction(F) || Changed;
-
-  // Note: LI is invalid after the call.
-
-  // The created tails might contain PHI nodes with operands
-  // referring to the non-predecessor (split point) BB.
-  // These must be cleaned to avoid breakage later on.
-  for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I)
-    Changed |= CleanupPHIs(&*I);
-
-#ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-  dumpCFG(F, F.getName().str() + "_after_btr.dot", nullptr, nullptr);
-#endif
-
-  if (Changed) {
-    pocl::canonicalizeBarriers(F);
-#ifdef DEBUG_BARRIER_REPL
-    std::cerr << "### After barrier tail replication:\n";
-    Func.dump();
-#endif
-  }
-
-  return Changed;
-}
-
-bool BarrierTailReplicationImpl::ProcessFunction(Function &F) {
-  BasicBlockSet ProcessedBBs;
-  return processBarriersDFS(&F.getEntryBlock(), ProcessedBBs);
-}
-
-/// Recursively (depht-first) look for barriers in all possible
+/// Recursively (depth-first) look for barriers in all possible
 /// execution paths starting on entry, replicating the barrier
 /// successors to ensure there is a separate function exit BB
 /// for each combination of traversed barriers.
 ///
 /// \p ProcessedBBs stores the already traversed barriers.
-bool BarrierTailReplicationImpl::processBarriersDFS(
-    BasicBlock *BB, BasicBlockSet &ProcessedBBs) {
+static bool processBarriersDFS(BasicBlock *BB, BasicBlockSet &ProcessedBBs,
+                               llvm::DominatorTree &DT, llvm::LoopInfo &LI) {
+
   bool Changed = false;
 
   // Check if we already visited this BB to avoid infinite recursion in
@@ -175,33 +102,45 @@ bool BarrierTailReplicationImpl::processBarriersDFS(
               << " has a barrier, replicate the tail" << std::endl;
 #endif
     BasicBlockSet ProcessedBBsRJS;
-    Changed |= ReplicateJoinedSubgraphs(BB, BB, ProcessedBBsRJS);
+    Changed |= replicateJoinedSubgraphs(BB, BB, ProcessedBBsRJS, DT, LI);
   }
 
-  auto t = BB->getTerminator();
+  auto *T = BB->getTerminator();
 
   // Find barriers in the successors (depth first).
-  for (unsigned i = 0, e = t->getNumSuccessors(); i != e; ++i)
-    Changed |= processBarriersDFS(t->getSuccessor(i), ProcessedBBs);
+  for (unsigned I = 0, E = T->getNumSuccessors(); I != E; ++I)
+    Changed |= processBarriersDFS(T->getSuccessor(I), ProcessedBBs, DT, LI);
 
   return Changed;
 }
 
+#define REFRESH_LOOP_INFO(COND, FUNC)                                          \
+  do {                                                                         \
+    if (COND) {                                                                \
+      DT.recalculate(FUNC);                                                    \
+      LI.releaseMemory();                                                      \
+      LI.analyze(DT);                                                          \
+      LI.verify(DT);                                                           \
+    }                                                                          \
+  } while (false)
+
 /// Only replicate those parts of the subgraph that are not dominated by
 /// a (barrier) basic block, to avoid excessive (and confusing) code
 /// duplication.
-bool BarrierTailReplicationImpl::ReplicateJoinedSubgraphs(
-    BasicBlock *Dominator, BasicBlock *SubgraphEntry,
-    BasicBlockSet &ProcessedBBs) {
+static bool replicateJoinedSubgraphs(BasicBlock *Dominator,
+                                     BasicBlock *SubgraphEntry,
+                                     BasicBlockSet &ProcessedBBs,
+                                     llvm::DominatorTree &DT,
+                                     llvm::LoopInfo &LI) {
   bool Changed = false;
 
   assert(DT.dominates(Dominator, SubgraphEntry));
 
   Function *F = Dominator->getParent();
 
-  auto Term = SubgraphEntry->getTerminator();
-  for (int i = 0, e = Term->getNumSuccessors(); i != e; ++i) {
-    BasicBlock *BB = Term->getSuccessor(i);
+  auto *Term = SubgraphEntry->getTerminator();
+  for (int I = 0, E = Term->getNumSuccessors(); I != E; ++I) {
+    BasicBlock *BB = Term->getSuccessor(I);
 #ifdef DEBUG_BARRIER_REPL
     std::cerr << "### traversing from " << SubgraphEntry->getName().str()
               << " to " << BB->getName().str() << std::endl;
@@ -215,20 +154,21 @@ bool BarrierTailReplicationImpl::ReplicateJoinedSubgraphs(
       continue;
     }
 
-    const bool isBackedge = DT.dominates(BB, SubgraphEntry);
-    if (isBackedge) {
+    const bool IsBackedge = DT.dominates(BB, SubgraphEntry);
+    if (IsBackedge) {
       // This is a loop backedge. Do not traverse.
 #ifdef DEBUG_BARRIER_REPL
       std::cerr << "### a loop backedge, skipping" << std::endl;
 #endif
       continue;
     }
+
     if (DT.dominates(Dominator, BB)) {
 #ifdef DEBUG_BARRIER_REPL
       std::cerr << "### " << Dominator->getName().str() << " dominates "
                 << BB->getName().str() << std::endl;
 #endif
-      Changed |= ReplicateJoinedSubgraphs(Dominator, BB, ProcessedBBs);
+      Changed |= replicateJoinedSubgraphs(Dominator, BB, ProcessedBBs, DT, LI);
     } else {
 #ifdef DEBUG_BARRIER_REPL
       std::cerr << "#### " << Dominator->getName().str()
@@ -236,9 +176,9 @@ bool BarrierTailReplicationImpl::ReplicateJoinedSubgraphs(
                 << " replicating " << std::endl;
 #endif
       BasicBlock *OrigTailEntry = BB;
-      BasicBlock *NewTailEntry = replicateTail(OrigTailEntry, F);
+      BasicBlock *NewTailEntry = replicateTail(OrigTailEntry, F, DT);
 
-      Term->setSuccessor(i, NewTailEntry);
+      Term->setSuccessor(I, NewTailEntry);
       Changed = true;
 
       // Next we'll choose whether the other basic blocks that branched to
@@ -271,11 +211,11 @@ bool BarrierTailReplicationImpl::ReplicateJoinedSubgraphs(
       }
 
       for (auto &PredBB : IncludedPredecessors) {
-        auto PredTerm = PredBB->getTerminator();
-        for (int i = 0, e = PredTerm->getNumSuccessors(); i != e; ++i) {
-          BasicBlock *OrigSucc = PredTerm->getSuccessor(i);
+        auto *PredTerm = PredBB->getTerminator();
+        for (int I = 0, E = PredTerm->getNumSuccessors(); I != E; ++I) {
+          BasicBlock *OrigSucc = PredTerm->getSuccessor(I);
           if (OrigSucc == OrigTailEntry) {
-            PredTerm->setSuccessor(i, NewTailEntry);
+            PredTerm->setSuccessor(I, NewTailEntry);
             break;
           }
         }
@@ -295,11 +235,8 @@ bool BarrierTailReplicationImpl::ReplicateJoinedSubgraphs(
       // We modified the function. Possibly created new loops and possibly
       // now some barriers do have new dominating barriers.
       // Update analysis passes.
-      DT.reset();
-      DT.recalculate(*F);
-      LI.releaseMemory();
-      LI.analyze(DT);
     }
+    REFRESH_LOOP_INFO(Changed, *F);
   }
   ProcessedBBs.insert(SubgraphEntry);
   return Changed;
@@ -307,7 +244,7 @@ bool BarrierTailReplicationImpl::ReplicateJoinedSubgraphs(
 
 /// Removes phi elements for which there are no successors anymore due
 /// to replication removing a join point.
-bool BarrierTailReplicationImpl::CleanupPHIs(llvm::BasicBlock *BB) {
+static bool cleanupPHIs(llvm::BasicBlock *BB) {
 
   bool Changed = false;
 #ifdef DEBUG_BARRIER_REPL
@@ -321,37 +258,37 @@ bool BarrierTailReplicationImpl::CleanupPHIs(llvm::BasicBlock *BB) {
       break;
 
     bool PHIRemoved = false;
-    for (unsigned i = 0, e = PN->getNumIncomingValues(); i < e; ++i) {
-      bool isSuccessor = false;
+    for (unsigned I = 0, E = PN->getNumIncomingValues(); I < E; ++I) {
+      bool IsSuccessor = false;
       // find if the predecessor branches to this one (anymore)
       for (unsigned
                S = 0,
                SE =
-                   PN->getIncomingBlock(i)->getTerminator()->getNumSuccessors();
+                   PN->getIncomingBlock(I)->getTerminator()->getNumSuccessors();
            S < SE; ++S) {
-        if (PN->getIncomingBlock(i)->getTerminator()->getSuccessor(S) == BB) {
-          isSuccessor = true;
+        if (PN->getIncomingBlock(I)->getTerminator()->getSuccessor(S) == BB) {
+          IsSuccessor = true;
           break;
         }
       }
-      if (!isSuccessor) {
+      if (!IsSuccessor) {
 #ifdef DEBUG_BARRIER_REPL
         std::cerr << "removing incoming value " << i
                   << " from PHINode:" << std::endl;
         PN->dump();
 #endif
-        PN->removeIncomingValue(i, true);
+        PN->removeIncomingValue(I, true);
 #ifdef DEBUG_BARRIER_REPL
         std::cerr << "now:" << std::endl;
         PN->dump();
 #endif
         Changed = true;
-        e--;
-        if (e == 0) {
+        E--;
+        if (E == 0) {
           PHIRemoved = true;
           break;
         }
-        i = 0;
+        I = 0;
         continue;
       }
     }
@@ -363,17 +300,17 @@ bool BarrierTailReplicationImpl::CleanupPHIs(llvm::BasicBlock *BB) {
   return Changed;
 }
 
-BasicBlock *BarrierTailReplicationImpl::replicateTail(BasicBlock *Entry,
-                                                      Function *F) {
+static BasicBlock *replicateTail(BasicBlock *Entry, Function *F,
+                                 llvm::DominatorTree &DT) {
   BasicBlockVector Tail;
-  findTailBlocks(Tail, Entry);
+  findTailBlocks(Tail, Entry, DT);
 
   // Replicate subgraph maintaining control flow.
   BasicBlockVector V;
 
   ValueToValueMapTy VVM;
-  ReplicateBasicBlocks(V, VVM, Tail, F);
-  UpdateReferences(V, VVM);
+  replicateBasicBlocks(V, VVM, Tail, F);
+  updateReferences(V, VVM);
 
   // Return entry block of replicated subgraph.
   return cast<BasicBlock>(VVM[Entry]);
@@ -383,8 +320,8 @@ BasicBlock *BarrierTailReplicationImpl::replicateTail(BasicBlock *Entry,
 ///
 /// Traverses from the given replication point down to the exit.
 /// TODO: Reduce duplication by traversing until the next shared barrier.
-void BarrierTailReplicationImpl::findTailBlocks(BasicBlockVector &Subgraph,
-                                                BasicBlock *Entry) {
+static void findTailBlocks(BasicBlockVector &Subgraph, BasicBlock *Entry,
+                           llvm::DominatorTree &DT) {
   // The subgraph can have internal branches (join points) avoid replicating
   // these parts multiple times within the same tail.
   if (std::count(Subgraph.begin(), Subgraph.end(), Entry) > 0)
@@ -392,18 +329,19 @@ void BarrierTailReplicationImpl::findTailBlocks(BasicBlockVector &Subgraph,
 
   Subgraph.push_back(Entry);
 
-  auto Terminator = Entry->getTerminator();
+  auto *Terminator = Entry->getTerminator();
   for (unsigned I = 0, E = Terminator->getNumSuccessors(); I != E; ++I) {
     BasicBlock *Successor = Terminator->getSuccessor(I);
-    const bool isBackedge = DT.dominates(Successor, Entry);
-    if (isBackedge) continue;
-    findTailBlocks(Subgraph, Successor);
+    const bool IsBackedge = DT.dominates(Successor, Entry);
+    if (IsBackedge)
+      continue;
+    findTailBlocks(Subgraph, Successor, DT);
   }
 }
 
-void BarrierTailReplicationImpl::ReplicateBasicBlocks(
-    BasicBlockVector &NewGraph, ValueToValueMapTy &ReferenceMap,
-    BasicBlockVector &Graph, Function *F) {
+static void replicateBasicBlocks(BasicBlockVector &NewGraph,
+                                 ValueToValueMapTy &ReferenceMap,
+                                 BasicBlockVector &Graph, Function *F) {
 #ifdef DEBUG_BARRIER_REPL
   std::cerr << "### ReplicateBasicBlocks: " << std::endl;
 #endif
@@ -430,7 +368,7 @@ void BarrierTailReplicationImpl::ReplicateBasicBlocks(
 
     // Add predicates to PHINodes of basic blocks the replicated block jumps
     // to (backedges).
-    auto Terminator = NewBB->getTerminator();
+    auto *Terminator = NewBB->getTerminator();
     for (unsigned I = 0, E = Terminator->getNumSuccessors(); I != E; ++I) {
       BasicBlock *Successor = Terminator->getSuccessor(I);
       if (std::count(Graph.begin(), Graph.end(), Successor) == 0) {
@@ -460,8 +398,8 @@ void BarrierTailReplicationImpl::ReplicateBasicBlocks(
   }
 }
 
-void BarrierTailReplicationImpl::UpdateReferences(
-    const BasicBlockVector &Graph, ValueToValueMapTy &ReferenceMap) {
+static void updateReferences(const BasicBlockVector &Graph,
+                             ValueToValueMapTy &ReferenceMap) {
   for (BasicBlockVector::const_iterator BBVI = Graph.begin(),
                                         BBVE = Graph.end();
        BBVI != BBVE; ++BBVI) {
@@ -475,35 +413,28 @@ void BarrierTailReplicationImpl::UpdateReferences(
   }
 }
 
-llvm::PreservedAnalyses
-BarrierTailReplication::run(llvm::Function &F,
-                            llvm::FunctionAnalysisManager &FAM) {
-  if (!isKernelToProcess(F))
-    return PreservedAnalyses::all();
-
-  WorkitemHandlerType WIH = FAM.getResult<WorkitemHandlerChooser>(F).WIH;
-  if (WIH == WorkitemHandlerType::CBS)
-    return PreservedAnalyses::all();
-
-  llvm::DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-  llvm::PostDominatorTree &PDT = FAM.getResult<PostDominatorTreeAnalysis>(F);
-  llvm::LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
-  pocl::VariableUniformityAnalysisResult &VUA =
-      FAM.getResult<VariableUniformityAnalysis>(F);
+bool replicateBarrierPathTails(Function &F, llvm::LoopInfo &LI,
+                               llvm::DominatorTree &DT,
+                               llvm::PostDominatorTree &PDT,
+                               VariableUniformityAnalysisResult &VUA) {
 
   bool Changed = false;
 
-  // TODO: These calls will be moved to the new DeSPMD pass in the end.
-  Changed = enforceOuterLoopParIfBeneficial(F, LI, VUA) || Changed;
-  REFRESH_LOOP_INFO();
+#ifdef DEBUG_BARRIER_REPL
+  std::cerr << "### Before barrier tail replication:\n";
+  F.dump();
+#endif
 
-  Changed = addLoopConstructIsolationBarriers(F, LI, VUA, DT) || Changed;
-  REFRESH_LOOP_INFO();
+#ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
+  dumpCFG(F, Func.getName().str() + "_before_btr.dot", nullptr, nullptr);
+#endif
 
-  Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
-  REFRESH_LOOP_INFO();
+  BasicBlockSet ProcessedBBs;
+  Changed =
+      processBarriersDFS(&F.getEntryBlock(), ProcessedBBs, DT, LI) || Changed;
 
-  BarrierTailReplicationImpl BTRI(DT, LI);
+  // Note: LI can become invalid after the above call and should be refreshed
+  // before reuse.
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
   dumpCFG(F, F.getName().str() + "_before_btr.dot", nullptr, nullptr);
@@ -515,15 +446,26 @@ BarrierTailReplication::run(llvm::Function &F,
   PAChanged.preserve<LoopAnalysis>();
   PAChanged.preserve<DominatorTreeAnalysis>();
 
-  Changed = BTRI.runOnFunction(F) || Changed;
+  // The created tails might contain PHI nodes with operands
+  // referring to the non-predecessor (split point) BB.
+  // These must be cleaned to avoid breakage later on.
+  for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I)
+    Changed |= cleanupPHIs(&*I);
 
-  // Run implicit conditional barriers again since BTR might have added new
-  // conditional barrier cases that must be handled.
-  Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
 
-  return Changed ? PAChanged : PreservedAnalyses::all();
+#ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
+  dumpCFG(F, F.getName().str() + "_after_btr.dot", nullptr, nullptr);
+#endif
+
+  if (Changed) {
+    pocl::canonicalizeBarriers(F);
+#ifdef DEBUG_BARRIER_REPL
+    std::cerr << "### After barrier tail replication:\n";
+    Func.dump();
+#endif
+  }
+
+  return Changed;
 }
-
-REGISTER_NEW_FPASS(PASS_NAME, PASS_CLASS, PASS_DESC);
 
 } // namespace pocl

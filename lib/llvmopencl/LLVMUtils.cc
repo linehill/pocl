@@ -695,7 +695,6 @@ const std::vector<std::string> DIFuncNameVec(DIFuncNameArray,
 void registerPassBuilderPasses(llvm::PassBuilder &PB) {
   AllocasToEntry::registerWithPB(PB);
   AutomaticLocals::registerWithPB(PB);
-  BarrierTailReplication::registerWithPB(PB);
   SanitizeUBofDivRem::registerWithPB(PB);
   ConvertUnreachablesToReturns::registerWithPB(PB);
   FlattenAll::registerWithPB(PB);

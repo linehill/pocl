@@ -432,14 +432,6 @@ static void addStage1PassesToPipeline(cl_device_id Dev,
 
      Some notes about the kernel compiler phase ordering constraints:
 
-     -implicit-cond-barriers after -implicit-loop-barriers because the latter
-     can inject barriers to loops inside conditional regions after which the
-     peeling should be avoided by injecting the implicit conditional barriers.
-
-     -loop-barriers, -barriertails, and -barriers should be ran after the
-     implicit barrier injection passes so they "normalize" the implicit
-     barriers also.
-
      -automatic-locals after inline and always-inline; if we have a kernel
      that calls a non-kernel, and the non-kernel uses an automatic local
      (= GlobalVariable in LLVM), the 'automatic-locals' will skip processing
@@ -510,10 +502,6 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     addAnalysis(Passes, "workitem-handler-chooser");
 
     addAnalysis(Passes, "pocl-vua");
-
-    // Replicates tails of barrier-containing control flow graphs to ensure
-    // they are single-entry single-exit regions.
-    addPass(Passes, "barriertails");
 
     // required for OLD PM
     addAnalysis(Passes, "wi-aa");
