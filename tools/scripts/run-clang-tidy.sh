@@ -15,7 +15,7 @@ fi
 
 SRCROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 
-clang-tidy --config-file=$SCRIPTDIR/clang-tidy-llvm.config --fix --format-style=llvm \
+clang-tidy -extra-arg=-Wno-unknown-warning-option --config-file=$SCRIPTDIR/clang-tidy-llvm.config --fix --format-style=llvm \
 ../lib/llvmopencl/BarrierTailReplication.cc \
 ../lib/llvmopencl/CanonicalizeBarriers.cc \
 ../lib/llvmopencl/DeSPMD.cpp \

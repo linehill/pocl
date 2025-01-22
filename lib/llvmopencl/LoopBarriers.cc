@@ -136,14 +136,14 @@ isSuitableForBLoopStructureSharing(Loop &L,
       auto I = Latch->begin();
       // Non-SSA form with the iteration variable in allocas:
       LoadInst *Load = nullptr;
-      if (Load = dyn_cast_or_null<LoadInst>(I++)) {
+      if ((Load = dyn_cast_or_null<LoadInst>(I++))) {
         if (Load->getPointerOperand() != Iterator)
           return false;
       } else
         return false;
 
       BinaryOperator *Modify = nullptr;
-      if (Modify = dyn_cast_or_null<BinaryOperator>(I++)) {
+      if ((Modify = dyn_cast_or_null<BinaryOperator>(I++))) {
         if (Modify->getOperand(0) != Load ||
             !isa<Constant>(Modify->getOperand(1)))
           return false;
@@ -151,7 +151,7 @@ isSuitableForBLoopStructureSharing(Loop &L,
         return false;
 
       StoreInst *Store = nullptr;
-      if (Store = dyn_cast_or_null<StoreInst>(I++)) {
+      if ((Store = dyn_cast_or_null<StoreInst>(I++))) {
         if (Store->getOperand(0) != Modify || Store->getOperand(1) != Iterator)
           return false;
       } else
