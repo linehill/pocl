@@ -2,7 +2,7 @@
 // function for a kernel and work group size.
 //
 // Copyright (c) 2012-2019 Pekka Jääskeläinen
-//               2024 Pekka Jääskeläinen / Intel Finland Oy
+//               2024-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,7 +21,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-
 
 #include "CompilerWarnings.h"
 IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
@@ -88,12 +87,15 @@ WorkitemHandlerType ChooseWorkitemHandler(Function &F,
     Result = WorkitemHandlerType::LOOPS;
   }
 
+#if 0
+  // To be replaced with heuristics in DeSPMD.
   if (Result == WorkitemHandlerType::LOOPS &&
       !WorkitemLoops::canHandleKernel(F, AM))
     Result = WorkitemHandlerType::CBS;
   else if (Result == WorkitemHandlerType::CBS &&
            !SubCFGFormation::canHandleKernel(F, AM))
     Result = WorkitemHandlerType::LOOPS;
+#endif
 
   return Result;
 }

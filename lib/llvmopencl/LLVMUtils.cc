@@ -40,6 +40,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "Barrier.h"
 #include "BarrierTailReplication.h"
 #include "CanonicalizeBarriers.h"
+#include "DeSPMD.h"
 #include "DebugHelpers.h"
 #include "Flatten.hh"
 #include "FlattenBarrierSubs.hh"
@@ -697,6 +698,7 @@ void registerPassBuilderPasses(llvm::PassBuilder &PB) {
   AutomaticLocals::registerWithPB(PB);
   SanitizeUBofDivRem::registerWithPB(PB);
   ConvertUnreachablesToReturns::registerWithPB(PB);
+  llvm::DeSPMDPass::registerWithPB(PB);
   FlattenAll::registerWithPB(PB);
   FlattenBarrierSubs::registerWithPB(PB);
   FlattenGlobals::registerWithPB(PB);
@@ -708,7 +710,6 @@ void registerPassBuilderPasses(llvm::PassBuilder &PB) {
   PHIsToAllocas::registerWithPB(PB);
   SubCFGFormation::registerWithPB(PB);
   Workgroup::registerWithPB(PB);
-  WorkitemLoops::registerWithPB(PB);
   PoCLCFGPrinter::registerWithPB(PB);
 }
 

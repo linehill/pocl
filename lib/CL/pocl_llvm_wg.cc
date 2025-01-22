@@ -507,21 +507,14 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     addAnalysis(Passes, "wi-aa");
 
 #if 0
-    // use PoCL's own print-module pass
-    // note: the "before" is an option given to the PoclCFGPrinter instance;
-    // it will be used as a prefix to the dot files ("PREFIX_kernel.dot")
-    addPass(Passes, "print<pocl-cfg;before>", PassType::Module);
-#endif
-
+    // TODO: Call from DeSPMDPass.
     // subcfgformation (for CBS) before workitemloops, as wiloops creates the
     // loops for kernels without barriers, but after the transformation the
     // kernel looks like it has barriers, so subcfg would do its thing.
     addPass(Passes, "subcfgformation");
+#endif
 
-    // subcfgformation before workitemloops, as wiloops creates the loops for
-    // kernels without barriers, but after the transformation the kernel looks
-    // like it has barriers, so subcfg would do its thing.
-    addPass(Passes, "workitemloops");
+    addPass(Passes, "despmd");
   } else {
     // Attempt to move all allocas to the entry block to avoid the need for
     // dynamic stack which is problematic for some architectures.
@@ -534,6 +527,11 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
 #if 0
   addPass(Passes, "verify", PassType::Module);
   addPass(Passes, "print", PassType::Module);
+
+  // PoCL's own print-module pass
+  // note: the "before" is an option given to the PoclCFGPrinter instance;
+  // it will be used as a prefix to the dot files ("PREFIX_kernel.dot")
+  addPass(Passes, "print<pocl-cfg;before>", PassType::Module);
 #endif
 
 

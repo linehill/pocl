@@ -1,7 +1,7 @@
-// Header for WorkitemLoops function pass.
+// Header for work-item looping functionality.
 //
 // Copyright (c) 2012 Pekka Jääskeläinen / TUT
-//               2022-2023 Pekka Jääskeläinen / Intel Finland Oy
+//               2022-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -26,28 +26,19 @@
 
 #include "config.h"
 
-#include <llvm/IR/Function.h>
-#include <llvm/IR/PassManager.h>
-#include <llvm/Pass.h>
-#include <llvm/Passes/PassBuilder.h>
+namespace llvm {
+class DominatorTreeAnalysis;
+class Function;
+class LoopAnalysis;
+class PostDominatorTreeAnalysis;
+class VariableUniformityAnalysisResult;
+} // namespace llvm
 
 namespace pocl {
 
-
-class WorkitemLoops : public llvm::PassInfoMixin<WorkitemLoops> {
-public:
-  static void registerWithPB(llvm::PassBuilder &B);
-  llvm::PreservedAnalyses run(llvm::Function &F,
-                              llvm::FunctionAnalysisManager &AM);
-  static bool isRequired() { return true; }
-
-  // Returns false in case the WG generator can or should not handle the given
-  // kernel. It might refuse to handle trickiest of conditional barrier
-  // scenarios which would result in non-vectorizable loops anyhow.
-  static bool canHandleKernel(llvm::Function &K,
-                              llvm::FunctionAnalysisManager &AM);
-};
-
+bool addWorkItemLoops(llvm::Function &F, llvm::DominatorTree &DT,
+                      llvm::PostDominatorTree &PDT, llvm::LoopInfo &LI,
+                      VariableUniformityAnalysisResult &VUA);
 
 } // namespace pocl
 

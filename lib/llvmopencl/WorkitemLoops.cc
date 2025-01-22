@@ -1,7 +1,6 @@
-// LLVM function pass to create loops that run all the work items
-// in a work group while respecting barrier synchronization points.
+// Header for work-item looping functionality.
 //
-// Copyright (c) 2012-2019 Pekka Jääskeläinen / Tampere University
+// Copyright (c) 2012 Pekka Jääskeläinen / TUT
 //               2022-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -1097,73 +1096,25 @@ llvm::BasicBlock *WorkitemLoopsImpl::appendIncBlock(llvm::BasicBlock *After,
   return ForIncBb;
 }
 
-#define REFRESH_LOOP_INFO()                                                    \
-  do {                                                                         \
-    if (Changed) {                                                             \
-      DT.recalculate(F);                                                       \
-      LI.releaseMemory();                                                      \
-      LI.analyze(DT);                                                          \
-      LI.verify(DT);                                                           \
-    }                                                                          \
-  } while (false)
-
-// enable new pass manager infrastructure
-llvm::PreservedAnalyses WorkitemLoops::run(llvm::Function &F,
-                                           llvm::FunctionAnalysisManager &AM) {
-  if (!isKernelToProcess(F))
-    return llvm::PreservedAnalyses::all();
-
-  WorkitemHandlerType WIH = AM.getResult<WorkitemHandlerChooser>(F).WIH;
-  if (WIH != WorkitemHandlerType::LOOPS)
-    return llvm::PreservedAnalyses::all();
-
-  auto &DT = AM.getResult<llvm::DominatorTreeAnalysis>(F);
-  auto &PDT = AM.getResult<llvm::PostDominatorTreeAnalysis>(F);
-  auto &LI = AM.getResult<llvm::LoopAnalysis>(F);
-  auto &VUA = AM.getResult<VariableUniformityAnalysis>(F);
-
-  llvm::PreservedAnalyses PAChanged = PreservedAnalyses::none();
-  PAChanged.preserve<VariableUniformityAnalysis>();
-  PAChanged.preserve<WorkitemHandlerChooser>();
-
-  bool Changed = false;
-  // TODO: These calls will be moved to the new DeSPMD pass in the end.
-  Changed = enforceOuterLoopParIfBeneficial(F, LI, VUA) || Changed;
-  REFRESH_LOOP_INFO();
-
-  Changed = addLoopConstructIsolationBarriers(F, LI, VUA, DT) || Changed;
-  REFRESH_LOOP_INFO();
-
-  Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
-  REFRESH_LOOP_INFO();
-
-  Changed = pocl::canonicalizeBarriers(F);
-  REFRESH_LOOP_INFO();
-
-  // Replicates tails of barrier-containing control flow graphs to ensure they
-  // are single-entry single-exit regions.
-  Changed = replicateBarrierPathTails(F, LI, DT, PDT, VUA) || Changed;
-  REFRESH_LOOP_INFO();
-
-  // Run implicit conditional barriers again since BTR might have added new
-  // conditional barrier cases that must be handled.
-  Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
-  REFRESH_LOOP_INFO();
+/// Identifies regions between barrier calls and loops that are annotated
+/// parallel around them.
+///
+/// The loops can be then loop vectorized easily with standard LLVM IR
+/// vectorization passes.
+bool addWorkItemLoops(llvm::Function &F, llvm::DominatorTree &DT,
+                      llvm::PostDominatorTree &PDT, llvm::LoopInfo &LI,
+                      VariableUniformityAnalysisResult &VUA) {
 
   WorkitemLoopsImpl WIL(DT, LI, PDT, VUA);
-  // llvm::verifyFunction(F);
-
-  Changed = WIL.runOnFunction(F) || Changed;
-
-  return Changed ? PAChanged : PreservedAnalyses::all();
+  return WIL.runOnFunction(F);
 }
 
+#if 0
 bool WorkitemLoops::canHandleKernel(llvm::Function &K,
                                     llvm::FunctionAnalysisManager &AM) {
 
   // The below cases should be now manageable. TODO: update the check for the
   // unhandled case(s).
-#if 0
   // Do not handle kernels with barriers inside loops which have early exits
   // or continues.
   // It would require additional complexity that is unlikely worth it since
@@ -1235,10 +1186,8 @@ bool WorkitemLoops::canHandleKernel(llvm::Function &K,
 #endif
     return false;
   }
-#endif
   return true;
 }
-
-REGISTER_NEW_FPASS(PASS_NAME, PASS_CLASS, PASS_DESC);
+#endif
 
 } // namespace pocl
