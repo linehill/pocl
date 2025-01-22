@@ -1,6 +1,7 @@
 // LLVM pass to recursively inline kernels which are called by other kernels
 //
 // Copyright (c) 2020 Michal Babej / Tampere University
+//               2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -34,7 +35,6 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 
 #include "InlineKernels.hh"
 #include "LLVMUtils.h"
-#include "WorkitemHandlerChooser.h"
 POP_COMPILER_DIAGS
 
 //#define DEBUG_INLINE_KERNELS
@@ -142,7 +142,6 @@ static bool inlineKernels(Function &F) {
 llvm::PreservedAnalyses InlineKernels::run(llvm::Function &F,
                                            llvm::FunctionAnalysisManager &AM) {
   PreservedAnalyses PAChanged = PreservedAnalyses::none();
-  PAChanged.preserve<WorkitemHandlerChooser>();
   return inlineKernels(F) ? PAChanged : PreservedAnalyses::all();
 }
 

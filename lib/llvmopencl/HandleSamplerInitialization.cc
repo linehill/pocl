@@ -98,7 +98,6 @@ llvm::PreservedAnalyses
 HandleSamplerInitialization::run(llvm::Function &F,
                                  llvm::FunctionAnalysisManager &AM) {
   PreservedAnalyses PAChanged = PreservedAnalyses::none();
-  PAChanged.preserve<WorkitemHandlerChooser>();
   PAChanged.preserve<VariableUniformityAnalysis>();
   return handleSamplerInitialization(F) ? PAChanged : PreservedAnalyses::all();
 }

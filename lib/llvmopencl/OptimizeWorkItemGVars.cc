@@ -47,7 +47,6 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "LLVMUtils.h"
 #include "OptimizeWorkItemGVars.h"
 #include "VariableUniformityAnalysis.h"
-#include "WorkitemHandlerChooser.h"
 POP_COMPILER_DIAGS
 
 #include <iostream>
@@ -114,7 +113,6 @@ llvm::PreservedAnalyses
 OptimizeWorkItemGVars::run(llvm::Function &F,
                            llvm::FunctionAnalysisManager &AM) {
   PreservedAnalyses PAChanged = PreservedAnalyses::none();
-  PAChanged.preserve<WorkitemHandlerChooser>();
 
   if (!isKernelToProcess(F))
     return PreservedAnalyses::all();

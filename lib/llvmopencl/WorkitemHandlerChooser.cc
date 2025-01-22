@@ -1,7 +1,6 @@
-// LLVM function pass to select the best way to create a work group
-// function for a kernel and work group size.
+// Header for work-item handler choosing.
 //
-// Copyright (c) 2012-2019 Pekka Jääskeläinen
+// Copyright (c) 2012 Pekka Jääskeläinen / TUT
 //               2024-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -27,47 +26,20 @@ IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
 #include <llvm/ADT/Twine.h>
 POP_COMPILER_DIAGS
 IGNORE_COMPILER_WARNING("-Wunused-parameter")
-#include "llvm/Analysis/PostDominators.h"
-#include "llvm/Analysis/LoopInfo.h"
 
-#include "CanonicalizeBarriers.h"
-#include "Kernel.h"
 #include "LLVMUtils.h"
-#include "SubCFGFormation.h"
-#include "Workgroup.h"
 #include "WorkitemHandlerChooser.h"
-#include "WorkitemLoops.h"
 POP_COMPILER_DIAGS
 
-#include "pocl_llvm_api.h"
-
 #include <iostream>
-
-#define DEBUG_TYPE "workitem-loops"
-
-#define PASS_NAME "workitem-handler-chooser"
-#define PASS_CLASS pocl::WorkitemHandlerChooser
-#define PASS_DESC                                                              \
-  "Finds the best way to handle work-items to produce a multi-WI function."
 
 namespace pocl {
 
 using namespace llvm;
 
-/**
- * Selects the work-group generator to use for handling the given
- * kernel.
- */
-WorkitemHandlerType ChooseWorkitemHandler(Function &F,
-                                          llvm::FunctionAnalysisManager &AM) {
-  if (!isKernelToProcess(F))
-    return WorkitemHandlerType::INVALID;
+WorkitemHandlerType getWorkitemHandler() {
 
   WorkitemHandlerType Result = WorkitemHandlerType::INVALID;
-  bool WGDynamicLocalSize = false;
-
-  getModuleBoolMetadata(*F.getParent(), "WGDynamicLocalSize",
-                        WGDynamicLocalSize);
 
   std::string method = "auto";
   if (getenv("POCL_WORK_GROUP_METHOD") != NULL) {
@@ -84,41 +56,11 @@ WorkitemHandlerType ChooseWorkitemHandler(Function &F,
   }
 
   if (method == "auto") {
+    // To be replaced with heuristics in DeSPMD.
     Result = WorkitemHandlerType::LOOPS;
   }
 
-#if 0
-  // To be replaced with heuristics in DeSPMD.
-  if (Result == WorkitemHandlerType::LOOPS &&
-      !WorkitemLoops::canHandleKernel(F, AM))
-    Result = WorkitemHandlerType::CBS;
-  else if (Result == WorkitemHandlerType::CBS &&
-           !SubCFGFormation::canHandleKernel(F, AM))
-    Result = WorkitemHandlerType::LOOPS;
-#endif
-
   return Result;
 }
-
-/**********************************************************************/
-
-llvm::AnalysisKey WorkitemHandlerChooser::Key;
-
-WorkitemHandlerResult
-WorkitemHandlerChooser::run(llvm::Function &F,
-                            llvm::FunctionAnalysisManager &AM) {
-  return ChooseWorkitemHandler(F, AM);
-}
-
-bool WorkitemHandlerResult::invalidate(
-    llvm::Function &F, const llvm::PreservedAnalyses PA,
-    llvm::AnalysisManager<llvm::Function>::Invalidator &Inv) {
-  // Check whether the analysis has been explicitly invalidated.
-  // Otherwise, it stays valid
-  auto PAC = PA.getChecker<WorkitemHandlerChooser>();
-  return !PAC.preservedWhenStateless();
-}
-
-REGISTER_NEW_FANALYSIS(PASS_NAME, PASS_CLASS, PASS_DESC);
 
 } // namespace pocl

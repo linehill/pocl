@@ -1,7 +1,7 @@
 // LLVM function pass to convert all PHIs to allocas.
 //
 // Copyright (c) 2012-2019 Pekka Jääskeläinen
-//               2024 Pekka Jääskeläinen / Intel Finland Oy
+//               2024-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -34,7 +34,6 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "VariableUniformityAnalysis.h"
 #include "VariableUniformityAnalysisResult.hh"
 #include "Workgroup.h"
-#include "WorkitemHandlerChooser.h"
 #include "WorkitemLoops.h"
 POP_COMPILER_DIAGS
 
@@ -61,22 +60,6 @@ using namespace llvm;
 
 static llvm::Instruction *
 breakPHIToAllocas(PHINode *Phi, VariableUniformityAnalysisResult &VUA);
-
-static bool needsPHIsToAllocas(Function &F, WorkitemHandlerType WIH) {
-#ifdef CBS_NO_PHIS_IN_SPLIT
-  bool RunWithCBS = true;
-#else
-  bool RunWithCBS = false;
-#endif
-  if (!isKernelToProcess(F))
-    return false;
-
-  if (WIH != WorkitemHandlerType::LOOPS &&
-      !(RunWithCBS && WIH == WorkitemHandlerType::CBS))
-    return false;
-
-  return true;
-}
 
 /**
  * Convert a PHI to a read from a stack value and all the sources to
@@ -145,10 +128,6 @@ breakPHIToAllocas(PHINode *Phi, VariableUniformityAnalysisResult &VUA) {
 llvm::PreservedAnalyses PHIsToAllocas::run(llvm::Function &F,
                                            llvm::FunctionAnalysisManager &AM) {
 
-  WorkitemHandlerType WIH = AM.getResult<WorkitemHandlerChooser>(F).WIH;
-  if (!needsPHIsToAllocas(F, WIH))
-    return PreservedAnalyses::all();
-
   VariableUniformityAnalysisResult VUA =
       AM.getResult<VariableUniformityAnalysis>(F);
 
@@ -158,7 +137,6 @@ llvm::PreservedAnalyses PHIsToAllocas::run(llvm::Function &F,
 
   PreservedAnalyses PAChanged = PreservedAnalyses::none();
   PAChanged.preserve<VariableUniformityAnalysis>();
-  PAChanged.preserve<WorkitemHandlerChooser>();
 
   typedef std::vector<llvm::Instruction *> InstructionVec;
 

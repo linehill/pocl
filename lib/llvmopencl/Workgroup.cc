@@ -55,7 +55,6 @@ POP_COMPILER_DIAGS
 #include "ProgramScopeVariables.h"
 #include "VariableUniformityAnalysis.h"
 #include "Workgroup.h"
-#include "WorkitemHandlerChooser.h"
 
 #include "pocl_file_util.h"
 #include "pocl_llvm_api.h"
@@ -1887,7 +1886,6 @@ llvm::PreservedAnalyses Workgroup::run(llvm::Module &M,
                                        llvm::ModuleAnalysisManager &AM) {
   WorkgroupImpl WGI;
   PreservedAnalyses PAChanged = PreservedAnalyses::none();
-  PAChanged.preserve<WorkitemHandlerChooser>();
   PAChanged.preserve<VariableUniformityAnalysis>();
 
   auto &FAM = AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();

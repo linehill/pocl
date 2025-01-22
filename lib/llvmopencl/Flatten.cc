@@ -3,6 +3,7 @@
 //
 // Copyright (c) 2011 Universidad Rey Juan Carlos
 //               2012-2015 Pekka Jääskeläinen
+//               2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -35,7 +36,6 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "Flatten.hh"
 #include "LLVMUtils.h"
 #include "Workgroup.h"
-#include "WorkitemHandlerChooser.h"
 POP_COMPILER_DIAGS
 
 #include <iostream>
@@ -120,7 +120,6 @@ static bool flattenAll(Module &M) {
 llvm::PreservedAnalyses FlattenAll::run(llvm::Module &M,
                                         llvm::ModuleAnalysisManager &AM) {
   PreservedAnalyses PAChanged = PreservedAnalyses::none();
-  PAChanged.preserve<WorkitemHandlerChooser>();
   return flattenAll(M) ? PAChanged : PreservedAnalyses::all();
 }
 

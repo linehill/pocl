@@ -36,7 +36,6 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 
 #include "LLVMUtils.h"
 #include "SanitizeUBofDivRem.h"
-#include "WorkitemHandlerChooser.h"
 POP_COMPILER_DIAGS
 
 #include <iostream>
@@ -163,9 +162,8 @@ static bool sanitizeUBofDivRem(llvm::Function &F) {
 
 llvm::PreservedAnalyses SanitizeUBofDivRem::run(llvm::Function &F,
                                            llvm::FunctionAnalysisManager &AM) {
-  PreservedAnalyses PAChanged = PreservedAnalyses::none();
-  PAChanged.preserve<WorkitemHandlerChooser>();
-  return sanitizeUBofDivRem(F) ? PAChanged : PreservedAnalyses::all();
+  return sanitizeUBofDivRem(F) ? PreservedAnalyses::none()
+                               : PreservedAnalyses::all();
 }
 
 REGISTER_NEW_FPASS(PASS_NAME, PASS_CLASS, PASS_DESC);

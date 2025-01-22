@@ -455,7 +455,6 @@ static void addStage1PassesToPipeline(cl_device_id Dev,
   addPass(Passes, "handle-samplers");
   addPass(Passes, "infer-address-spaces");
   addAnalysis(Passes, "domtree");
-  addAnalysis(Passes, "workitem-handler-chooser");
 
   if (Dev->spmd) {
     addPass(Passes, "flatten-inline-all", PassType::Module);
@@ -499,18 +498,9 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
 
     // Run loop-simplify to make more of the loops manageable by WILoops.
     addPass(Passes, "loop-simplify");
-    addAnalysis(Passes, "workitem-handler-chooser");
-
+    // TODO: Does the new pass manager require explicitly adding the analysis
+    // the passes need?
     addAnalysis(Passes, "pocl-vua");
-
-#if 0
-    // TODO: Call from DeSPMDPass.
-    // subcfgformation (for CBS) before workitemloops, as wiloops creates the
-    // loops for kernels without barriers, but after the transformation the
-    // kernel looks like it has barriers, so subcfg would do its thing.
-    addPass(Passes, "subcfgformation");
-#endif
-
     addPass(Passes, "despmd");
   } else {
     // Attempt to move all allocas to the entry block to avoid the need for

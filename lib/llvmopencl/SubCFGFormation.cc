@@ -1544,7 +1544,7 @@ SubCFGFormation::run(llvm::Function &F, llvm::FunctionAnalysisManager &AM) {
   if (!isKernelToProcess(F))
     return PreservedAnalyses::all();
 
-  WorkitemHandlerType WIH = AM.getResult<pocl::WorkitemHandlerChooser>(F).WIH;
+  WorkitemHandlerType WIH = getWorkitemHandler();
   if (WIH != WorkitemHandlerType::CBS)
     return PreservedAnalyses::all();
 
@@ -1571,12 +1571,9 @@ SubCFGFormation::run(llvm::Function &F, llvm::FunctionAnalysisManager &AM) {
   handleWorkitemFunctions();
   GenerateGlobalIdComputation();
   removeBarrierCalls();
-
   eraseInvalidLifetimeMarkers(&F);
 
-  PreservedAnalyses PAChanged = PreservedAnalyses::none();
-  PAChanged.preserve<WorkitemHandlerChooser>();
-  return PAChanged;
+  return PreservedAnalyses::none();
 }
 
 REGISTER_NEW_FPASS(PASS_NAME, PASS_CLASS, PASS_DESC);

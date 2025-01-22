@@ -714,7 +714,6 @@ void registerPassBuilderPasses(llvm::PassBuilder &PB) {
 
 void registerFunctionAnalyses(llvm::PassBuilder &PB) {
   VariableUniformityAnalysis::registerWithPB(PB);
-  WorkitemHandlerChooser::registerWithPB(PB);
 }
 
 llvm::Type *SizeT(llvm::Module *M) {

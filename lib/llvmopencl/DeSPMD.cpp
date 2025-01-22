@@ -108,6 +108,7 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
   Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
   REFRESH_LOOP_INFO();
 
+  // TODO: Run CBS if chosen.
   Changed = addWorkItemLoops(F, DT, PDT, LI, VUA) || Changed;
 
   return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();

@@ -2,6 +2,7 @@
 //
 // Copyright (c) 2012-2015 Pekka Jääskeläinen / TUT
 //               2024 Pekka Jääskeläinen / Intel Finland Oy
+//               2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -34,7 +35,6 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "LLVMUtils.h"
 #include "VariableUniformityAnalysis.h"
 #include "Workgroup.h"
-#include "WorkitemHandlerChooser.h"
 POP_COMPILER_DIAGS
 
 #include <iostream>
@@ -98,13 +98,10 @@ static void addDummyAfter(Region &R, llvm::BasicBlock *BB);
    
 */
 
-static bool isolateRegions(Region &R, WorkitemHandlerType WIH) {
+static bool isolateRegions(Region &R) {
 
   llvm::BasicBlock *Exit = R.getExit();
   if (Exit == nullptr)
-    return false;
-  if (WIH == WorkitemHandlerType::CBS &&
-      hasWorkgroupBarriers(*Exit->getParent()))
     return false;
 
 #ifdef DEBUG_ISOLATE_REGIONS
@@ -190,14 +187,12 @@ static void findRegionsDepthFirst(Region *Reg, std::vector<Region *> &Regions) {
 
 llvm::PreservedAnalyses IsolateRegions::run(llvm::Function &F,
                                             llvm::FunctionAnalysisManager &AM) {
-  WorkitemHandlerType WIH = AM.getResult<WorkitemHandlerChooser>(F).WIH;
   RegionInfo &RI = AM.getResult<RegionInfoAnalysis>(F);
 
   if (!isKernelToProcess(F))
     return PreservedAnalyses::all();
 
   PreservedAnalyses PAChanged = PreservedAnalyses::none();
-  PAChanged.preserve<WorkitemHandlerChooser>();
   PAChanged.preserve<VariableUniformityAnalysis>();
   bool ChangedAny = false;
 
@@ -210,7 +205,7 @@ llvm::PreservedAnalyses IsolateRegions::run(llvm::Function &F,
 
   unsigned NumRegions = Regions.size();
   for (unsigned i = 0; i < NumRegions; ++i) {
-    bool ChangedCurrent = isolateRegions(*Regions[i], WIH);
+    bool ChangedCurrent = isolateRegions(*Regions[i]);
     // changing a Region changes the pointers of the loop; retrieve them again
     if (ChangedCurrent) {
       Regions.clear();

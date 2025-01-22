@@ -1,7 +1,7 @@
-// Header for WorkitemHandlerChooser function pass.
+// Header for work-item handler choosing.
 //
 // Copyright (c) 2012 Pekka Jääskeläinen / TUT
-//               2024 Pekka Jääskeläinen / Intel Finland Oy
+//               2024-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -26,37 +26,17 @@
 
 #include "config.h"
 
-#include <llvm/Passes/PassBuilder.h>
-#include <llvm/IR/Function.h>
-#include <llvm/IR/PassManager.h>
-#include <llvm/Pass.h>
-
 #include "WorkitemHandler.h"
 
 namespace pocl {
 
 enum class WorkitemHandlerType { LOOPS, CBS, INVALID };
-// this is required because we can only return class/struct from LLVM Analysis
-struct WorkitemHandlerResult {
-  WorkitemHandlerType WIH;
-  WorkitemHandlerResult() : WIH(WorkitemHandlerType::LOOPS) {}
-  WorkitemHandlerResult(WorkitemHandlerType A) : WIH(A) {}
-  bool invalidate(llvm::Function &F, const llvm::PreservedAnalyses PA,
-                  llvm::AnalysisManager<llvm::Function>::Invalidator &Inv);
-};
 
-class WorkitemHandlerChooser
-    : public llvm::AnalysisInfoMixin<WorkitemHandlerChooser> {
-public:
-  static llvm::AnalysisKey Key;
-  using Result = WorkitemHandlerResult;
-
-  static void registerWithPB(llvm::PassBuilder &PB);
-  Result run(llvm::Function &F, llvm::FunctionAnalysisManager &AM);
-  static bool isRequired() { return true; }
-};
-
-WorkitemHandlerType ChooseWorkitemHandler(llvm::Function &F);
+/// Selects the work-group generator to use for handling the given kernel.
+///
+/// This is controlled by the POCL_WORK_GROUP_METHOD environment variable.
+/// The "auto" selector is a WiP in the new organization of passes.
+WorkitemHandlerType getWorkitemHandler();
 
 } // namespace pocl
 
