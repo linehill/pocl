@@ -503,9 +503,6 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
 
     addAnalysis(Passes, "pocl-vua");
 
-    // required for OLD PM
-    addAnalysis(Passes, "wi-aa");
-
 #if 0
     // TODO: Call from DeSPMDPass.
     // subcfgformation (for CBS) before workitemloops, as wiloops creates the

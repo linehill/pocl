@@ -61,7 +61,6 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "SubCFGFormation.h"
 #include "UnreachablesToReturns.h"
 #include "VariableUniformityAnalysis.h"
-#include "WorkItemAliasAnalysis.h"
 #include "Workgroup.h"
 #include "WorkitemHandlerChooser.h"
 #include "WorkitemLoops.h"
@@ -716,7 +715,6 @@ void registerPassBuilderPasses(llvm::PassBuilder &PB) {
 void registerFunctionAnalyses(llvm::PassBuilder &PB) {
   VariableUniformityAnalysis::registerWithPB(PB);
   WorkitemHandlerChooser::registerWithPB(PB);
-  WorkItemAliasAnalysis::registerWithPB(PB);
 }
 
 llvm::Type *SizeT(llvm::Module *M) {
