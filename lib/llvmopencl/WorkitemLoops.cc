@@ -132,6 +132,7 @@ private:
 
   bool processFunction(llvm::Function &F);
 
+  void localizePrivateVariables();
   void fixMultiRegionVariables();
   void addContextSaveRestore(llvm::Instruction *Instruction);
   void releaseParallelRegions();
@@ -145,9 +146,6 @@ private:
                                 ParallelRegion *Region);
   llvm::Instruction *addContextSave(llvm::Instruction *Def,
                                     llvm::AllocaInst *AllocaI);
-  llvm::Value *tryToRematerialize(llvm::Instruction *Before, llvm::Value *Def,
-                                  const std::string &NamePrefix,
-                                  bool *CanDoIt = nullptr, int *Depth = 0);
 
   llvm::Instruction *
   addContextRestore(llvm::Value *Val, llvm::AllocaInst *AllocaI,
@@ -463,11 +461,7 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
 ///
 /// This helps the context data analysis to decide not to add the alloca to the
 /// context data.
-///
-/// TOFIX: Check that the destination is not inside a (work-item) loop,
-/// which would change the semantics due to the loop scope vs. function
-/// scope.
-void WorkitemLoopsImpl::localizePrivateVariables() {
+bool WorkitemLoopsImpl::localizePrivateVariables() {
 
   struct AllocaMotion {
     // The alloca to move.
@@ -493,7 +487,7 @@ void WorkitemLoopsImpl::localizePrivateVariables() {
       ParallelRegion *UsageRegion = nullptr;
       ParallelRegion *AnotherUsageRegion = nullptr;
 
-      llvm::StoreInst *Initializer = nullptr;
+      llvm::StoreInst *InitializerCandidate = nullptr;
 
       for (Instruction::use_iterator UI = Alloca->use_begin(),
                                      UE = Alloca->use_end();
@@ -507,10 +501,14 @@ void WorkitemLoopsImpl::localizePrivateVariables() {
 
         ParallelRegion *Region = regionOfBlock(User->getParent());
 
-        if (Store != nullptr && Region == AllocaRegion) {
-          // Allow an initialization store in the original region.
-          Initializer = Store;
-          continue;
+        if (Store != nullptr) {
+          if (isa<Constant>(Store->getValueOperand())) {
+            // Allow only a constant initialization store in the usage region.
+            InitializerCandidate = Store;
+            continue;
+          }
+          UsageRegion = nullptr;
+          break;
         }
 
         assert(Region != nullptr);
@@ -519,7 +517,8 @@ void WorkitemLoopsImpl::localizePrivateVariables() {
           // Either already private alloca or a multi-region variable.
           UsageRegion = Region;
           break;
-        } else if (UsageRegion != nullptr && UsageRegion != Region) {
+        }
+        if (UsageRegion != nullptr && UsageRegion != Region) {
           // Multi-region variable.
           AnotherUsageRegion = Region;
           break;
@@ -528,8 +527,10 @@ void WorkitemLoopsImpl::localizePrivateVariables() {
         }
       }
       if (UsageRegion != nullptr && UsageRegion != AllocaRegion &&
-          AnotherUsageRegion == nullptr)
-        AllocasToMove.push_back({Alloca, Initializer, UsageRegion});
+          AnotherUsageRegion == nullptr &&
+          (InitializerCandidate == nullptr ||
+           regionOfBlock(InitializerCandidate->getParent()) == UsageRegion))
+        AllocasToMove.push_back({Alloca, InitializerCandidate, UsageRegion});
     }
   }
   for (auto &M : AllocasToMove) {
