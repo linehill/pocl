@@ -196,8 +196,6 @@ bool WorkitemLoopsImpl::runOnFunction(Function &Func) {
 
   bool Changed = processFunction(Func);
 
-  Changed |= handleLocalMemAllocas();
-
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
   dumpCFG(*F, F->getName().str() + "_after_wiloops.dot", nullptr,
           &OriginalParallelRegions);
@@ -307,7 +305,7 @@ WorkitemLoopsImpl::createLoopAround(ParallelRegion &Region,
   Instruction *LoopBranch =
       Builder.CreateCondBr(CmpResult, LoopBodyEntryBB, LoopEndBB);
 
-  if (canAnnotateParallelLoops()) {
+  if (canAnnotateParallelLoops() && !Region.shouldBeSerialized()) {
     // Add the metadata to mark a parallel loop. The metadata refers to
     // a loop-unique dummy metadata that is not merged automatically.
     // TODO: Merge with the similar code in SubCFGFormation.
@@ -383,6 +381,7 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
           nullptr, nullptr);
 
   K->getParallelRegions(LI, &OriginalParallelRegions);
+  handleLocalMemAllocas();
   handleWorkitemFunctions();
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
@@ -390,8 +389,19 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
           &OriginalParallelRegions);
 #endif
 
-  IRBuilder<> Builder(&*(F.getEntryBlock().getFirstInsertionPt()));
+  localizePrivateVariables();
+
+#ifdef DEBUG_WORK_ITEM_LOOPS
+  std::cerr << "#### after private variable localization:\n";
+  F.dump();
+#endif
+
   fixMultiRegionVariables();
+
+#ifdef DEBUG_WORK_ITEM_LOOPS
+  std::cerr << "#### after multi-region variable fixing:\n";
+  F.dump();
+#endif
 
   for (ParallelRegion::ParallelRegionVector::iterator
            PRI = OriginalParallelRegions.begin(),
@@ -446,8 +456,91 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
   return true;
 }
 
-/// Add context save/restore code to variables that are defined in
-/// the given region and are used outside the region.
+/// If there are allocas that are _actually_ used only inside a single PR, but
+/// the actual alloca and a potentially single initialization write is in
+/// another PR, this function moves the alloca to the PR where it's actually
+/// used.
+///
+/// This helps the context data analysis to decide not to add the alloca to the
+/// context data.
+///
+/// TOFIX: Check that the destination is not inside a (work-item) loop,
+/// which would change the semantics due to the loop scope vs. function
+/// scope.
+void WorkitemLoopsImpl::localizePrivateVariables() {
+
+  struct AllocaMotion {
+    // The alloca to move.
+    llvm::AllocaInst *Alloca;
+    // Store the initializer (optional) to move.
+    llvm::StoreInst *Initializer;
+    // The destination parallel region.
+    ParallelRegion *Dest;
+  };
+
+  std::vector<AllocaMotion> AllocasToMove;
+
+  for (auto &BB : *K) {
+    for (auto &I : BB) {
+      AllocaInst *Alloca = dyn_cast_or_null<AllocaInst>(&I);
+      if (Alloca == nullptr)
+        continue;
+
+      ParallelRegion *AllocaRegion = regionOfBlock(Alloca->getParent());
+      if (AllocaRegion == nullptr)
+        continue;
+
+      ParallelRegion *UsageRegion = nullptr;
+      ParallelRegion *AnotherUsageRegion = nullptr;
+
+      llvm::StoreInst *Initializer = nullptr;
+
+      for (Instruction::use_iterator UI = Alloca->use_begin(),
+                                     UE = Alloca->use_end();
+           UI != UE; ++UI) {
+        llvm::Instruction *User = dyn_cast<Instruction>(UI->getUser());
+
+        if (User == NULL)
+          continue;
+
+        llvm::StoreInst *Store = dyn_cast_or_null<StoreInst>(User);
+
+        ParallelRegion *Region = regionOfBlock(User->getParent());
+
+        if (Store != nullptr && Region == AllocaRegion) {
+          // Allow an initialization store in the original region.
+          Initializer = Store;
+          continue;
+        }
+
+        assert(Region != nullptr);
+
+        if (Region == AllocaRegion) {
+          // Either already private alloca or a multi-region variable.
+          UsageRegion = Region;
+          break;
+        } else if (UsageRegion != nullptr && UsageRegion != Region) {
+          // Multi-region variable.
+          AnotherUsageRegion = Region;
+          break;
+        } else {
+          UsageRegion = Region;
+        }
+      }
+      if (UsageRegion != nullptr && UsageRegion != AllocaRegion &&
+          AnotherUsageRegion == nullptr)
+        AllocasToMove.push_back({Alloca, Initializer, UsageRegion});
+    }
+  }
+  for (auto &M : AllocasToMove) {
+    M.Alloca->moveBefore(M.Dest->entryBB()->getTerminator());
+    if (M.Initializer != nullptr)
+      M.Initializer->moveAfter(M.Alloca);
+  }
+}
+
+/// Add context save/restore code to variables that are defined in the given
+/// region and are used outside the region.
 void WorkitemLoopsImpl::fixMultiRegionVariables() {
 
   InstructionVec ValuesToContextSave;
@@ -738,10 +831,7 @@ static llvm::Value *tryToRematerialize(llvm::Instruction *Before,
     // original directly.
     return Def;
   } else if (isa<AllocaInst>(Def) &&
-             dyn_cast<AllocaInst>(Def)->getParent() != &K->getEntryBlock()) {
-    // The allocas in the pure uniform entry block can be referred to without
-    // rematerialization. But other than that we do not yet handle recursive
-    // alloca references. Should be an easy and valuable low hanging fruit.
+             !isPureUniformBlock(dyn_cast<AllocaInst>(Def)->getParent())) {
     UNABLE_TO_REMAT("accesses another alloca that we cannot remat");
   }
 

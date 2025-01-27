@@ -788,3 +788,27 @@ void ParallelRegion::localizeIDLoads() {
     }
   }
 }
+
+bool ParallelRegion::shouldBeSerialized() const {
+  return false;
+  // We need to scan the instructions as the contents might be changed during
+  // transformations.
+  for (auto *BB : BBs_) {
+    for (auto &I : *BB) {
+      if (llvm::StoreInst *Store = dyn_cast_or_null<llvm::StoreInst>(&I)) {
+        if (llvm::AllocaInst *Alloca = dyn_cast_or_null<llvm::AllocaInst>(
+                Store->getPointerOperand())) {
+          if (Alloca->getParent() == &BB->getParent()->getEntryBlock()) {
+#ifdef DEBUG_CREATE
+            std::cerr
+                << "#### serializing a region due to use of wg variables:\n";
+            Store->dump();
+#endif
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}

@@ -192,7 +192,8 @@ llvm::Error PoCLModulePassManager::build(std::string PoclPipeline,
   // might want to enable it in the default case.
   PTO.LoopUnrolling = false;
   PTO.UnifiedLTO = false;
-  PTO.SLPVectorization = PTO.LoopVectorization = Vectorize = EnableVectorizers;
+  PTO.LoopInterleaving = PTO.SLPVectorization = PTO.LoopVectorization =
+      Vectorize = EnableVectorizers;
   OptimizeLevel = OLevel;
   SizeLevel = SLevel;
 
@@ -495,6 +496,9 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     // might generate UIs.
     if (!Dev->spmd)
       addPass(Passes, "unreachables-to-returns");
+    // TODO: We might want to run reg2mem (which should do what the old
+    // phistoallocas did) in case of SPIR-V inputs which can be optimized
+    // to some extent and produce PHIs.
 
     // Run loop-simplify to make more of the loops manageable by WILoops.
     addPass(Passes, "loop-simplify");

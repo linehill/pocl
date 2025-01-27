@@ -1,6 +1,6 @@
 /* OpenCL built-in library: internal work group memory allocation functionality
 
-   Copyright (c) 2022-2023 Pekka Jääskeläinen / Intel Finland Oy
+   Copyright (c) 2022-2025 Pekka Jääskeläinen / Intel Finland Oy
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to

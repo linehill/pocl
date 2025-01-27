@@ -252,7 +252,7 @@ bool enforceOuterLoopParIfBeneficial(llvm::Function &F, llvm::LoopInfo &LI,
   if (Changed) {
 #ifdef DEBUG_ILOOP_BARRIERS
     std::cerr << "### After ImplicitLoopBarriers\n";
-    F->dump();
+    F.dump();
 #endif
   }
   return Changed;

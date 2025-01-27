@@ -1,0 +1,4 @@
+# This case should get outer loop parallelized and there should no be
+# work-item context as the loop iterator should get shared as well.
+
+# CHECK-NOT: wi_context

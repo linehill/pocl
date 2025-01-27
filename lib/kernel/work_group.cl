@@ -1,6 +1,6 @@
 /* OpenCL built-in library: work-group collective functions
 
-   Copyright (c) 2024 Pekka Jääskeläinen / Intel Finland Oy
+   Copyright (c) 2024-2025 Pekka Jääskeläinen / Intel Finland Oy
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to
@@ -91,23 +91,23 @@ WORK_GROUP_BROADCAST_T (float)
 WORK_GROUP_BROADCAST_T (double)
 
 #define WORK_GROUP_REDUCE_OT(OPNAME, OPERATION, TYPE)                         \
-  __attribute__ ((always_inline))                                             \
-  TYPE _CL_OVERLOADABLE work_group_reduce_##OPNAME (TYPE val)                 \
+  __attribute__ ((always_inline)) TYPE _CL_OVERLOADABLE                       \
+    work_group_reduce_##OPNAME (TYPE val)                                     \
   {                                                                           \
-    volatile TYPE *temp_storage = __pocl_work_group_alloca (                  \
-        sizeof (TYPE), ALIGN_ELEMENT_MULTIPLE * sizeof (TYPE), 0);            \
-    temp_storage[get_local_linear_id ()] = val;                               \
+    TYPE *result = __pocl_local_mem_alloca (sizeof (TYPE), sizeof (TYPE));    \
+                                                                              \
     work_group_barrier (CLK_LOCAL_MEM_FENCE);                                 \
+    /* Serial WI-Loop generated here because of the access to result. */      \
     if (get_local_linear_id () == 0)                                          \
-      {                                                                       \
-        for (uint i = 1; i < get_total_local_size (); ++i)                    \
-          {                                                                   \
-            TYPE a = temp_storage[0], b = temp_storage[i];                    \
-            temp_storage[0] = OPERATION;                                      \
-          }                                                                   \
-      }                                                                       \
+      *result = 0;                                                            \
+    /* Add another WI-loop here to make sure LLVM doesn't get confused of the \
+     * initializer.                                                           \
+     */                                                                       \
     work_group_barrier (CLK_LOCAL_MEM_FENCE);                                 \
-    return temp_storage[0];                                                   \
+    TYPE a = *result, b = val;                                                \
+    *result = OPERATION;                                                      \
+    work_group_barrier (CLK_LOCAL_MEM_FENCE);                                 \
+    return *result;                                                           \
   }
 
 #define WORK_GROUP_REDUCE_T(OPNAME, OPERATION)                                \

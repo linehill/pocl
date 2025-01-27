@@ -112,6 +112,14 @@ class Kernel;
         llvm::MDNode *Identifier,
         std::function<bool(llvm::Instruction *)> IsLoadUnconditionallySafe);
 
+    /// Checks if the work-items of the \p Region should be executed serially.
+    ///
+    /// Currently this occurs only in case of some regions in group-level
+    /// built-ins such as work_group_reduce*() which write to cross-work-item
+    /// variables to define the semantics in Loop Vectorizer understandable
+    /// format.
+    bool shouldBeSerialized() const;
+
     bool hasBlock(llvm::BasicBlock *Block);
 
     void InjectRegionPrintF();
@@ -152,7 +160,6 @@ class Kernel;
     /// Identifier for the parallel region.
     int pRegionId;
     static int idGen;
-
   };
 
 }

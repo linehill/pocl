@@ -131,6 +131,12 @@ add_test_pocl(NAME "workgroup/outerloop_intelligence"
               COMMAND "run_kernel" "outerlooppar_intelligence.cl" 1 2 1 1
               WORKITEM_HANDLER "loopvec")
 
+add_test_pocl(NAME "workgroup/reduce"
+              EXPECTED_OUTPUT "reduce_2_512_1_1.stdout"
+              COMMAND "run_kernel" "reduce.cl" 2 512 1 1
+              LLVM_FILECHECK "reduce.fc"
+              WORKITEM_HANDLER "loopvec")
+
 add_test_pocl(NAME "workgroup/loop_with_two_paths_to_the_latch"
               EXPECTED_OUTPUT "for_bug_1_2_1_1.stdout"
               COMMAND "run_kernel" "for_bug.cl" 1 2 1 1)

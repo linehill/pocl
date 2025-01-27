@@ -566,11 +566,13 @@ bool WorkitemHandler::handleLocalMemAllocas() {
     Value *Size = Call->getArgOperand(0);
     Align Alignment =
         cast<ConstantInt>(Call->getArgOperand(1))->getAlignValue();
-    Value *ExtraSize = Call->getArgOperand(2);
 
+    // Push the alloca to the pure uniform entry block so it's called only once
+    // per WG launch.
     IRBuilder<> Builder(K->getEntryBlock().getTerminator());
 
     if (Call->getCalledFunction() == WorkGroupAllocaFuncDecl) {
+      Value *ExtraSize = Call->getArgOperand(2);
       Instruction *WGSize = getWorkGroupSizeInstr();
       Size = Builder.CreateBinOp(Instruction::Mul, WGSize, Size);
       Size = Builder.CreateBinOp(Instruction::Add, Size, ExtraSize);

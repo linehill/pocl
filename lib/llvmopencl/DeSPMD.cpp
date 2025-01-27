@@ -75,6 +75,19 @@ namespace llvm {
 DeSPMDPass::DeSPMDPass() {
 }
 
+static bool removeLifetimeMarkers(Function &F) {
+  std::set<llvm::Instruction *> InstrsToDelete;
+  for (auto &BB : F) {
+    for (auto &I : BB) {
+      if (I.isLifetimeStartOrEnd())
+        InstrsToDelete.insert(&I);
+    }
+  }
+  for (auto *I : InstrsToDelete)
+    I->eraseFromParent();
+  return InstrsToDelete.size() > 0;
+}
+
 PreservedAnalyses DeSPMDPass::run(Function &F,
                                   FunctionAnalysisManager &AM) {
 
@@ -87,7 +100,6 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
   auto &DT = AM.getResult<llvm::DominatorTreeAnalysis>(F);
 
   bool Changed = false;
-
   Changed = enforceOuterLoopParIfBeneficial(F, LI, VUA) || Changed;
   REFRESH_LOOP_INFO();
 
@@ -107,6 +119,8 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
   // conditional barrier cases that must be handled.
   Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
   REFRESH_LOOP_INFO();
+
+  Changed = removeLifetimeMarkers(F);
 
   // TODO: Run CBS if chosen.
   Changed = addWorkItemLoops(F, DT, PDT, LI, VUA) || Changed;
