@@ -849,7 +849,7 @@ static llvm::Value *tryToRematerialize(llvm::Instruction *Before,
   // If we end up referring to instructions in pure uniform blocks (at
   // least work group allocas are such), let's stop the cloning there
   // and refer to the original.
-  if (Inst->getParent() == &K->getEntryBlock())
+  if (isPureUniformBlock(Inst->getParent()))
     return Inst;
 
   llvm::Instruction *Copy = CanDoIt == nullptr ? Inst->clone() : nullptr;
