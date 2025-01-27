@@ -1,4 +1,8 @@
 # The rematerialization feature should help removing all of the context data
-# arrays from this case.
+# arrays except 'a'. It used to save the index computation to context as
+# well as the same indices are used after the barrier.
 
-# CHECK-NOT: wi_context
+# The array is the only context data that cannot be rematerialized.
+# CHECK: .a.wi_context
+# CHECK-NOT: {{[^a]}}.wi_context
+
