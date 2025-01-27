@@ -128,7 +128,7 @@ add_test_pocl(NAME "workgroup/forcing_horizontal_parallelization_to_some_outer_l
 
 add_test_pocl(NAME "workgroup/outerloop_intelligence"
               EXPECTED_OUTPUT "outerloop_intelligence_1_2_1_1.stdout"
-              COMMAND "run_kernel" "outerlooppar_intelligence.cl" 1 2 1 1
+              COMMAND "run_kernel" "outerloop_intelligence.cl" 1 2 1 1
               WORKITEM_HANDLER "loopvec")
 
 add_test_pocl(NAME "workgroup/reduce"
