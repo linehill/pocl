@@ -72,7 +72,7 @@ protected:
 
   /// Removes (pseudo)barrier calls from the current kernel.
   bool removeBarrierCalls();
-  void handleWorkitemFunctions();
+  bool handleWorkitemFunctions();
 
   llvm::Instruction *getWorkGroupSizeInstr();
 

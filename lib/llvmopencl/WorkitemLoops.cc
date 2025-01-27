@@ -132,8 +132,8 @@ private:
 
   bool processFunction(llvm::Function &F);
 
-  void localizePrivateVariables();
-  void fixMultiRegionVariables();
+  bool localizePrivateVariables();
+  bool fixMultiRegionVariables();
   void addContextSaveRestore(llvm::Instruction *Instruction);
   void releaseParallelRegions();
 
@@ -379,27 +379,32 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
           nullptr, nullptr);
 
   K->getParallelRegions(LI, &OriginalParallelRegions);
-  handleLocalMemAllocas();
-  handleWorkitemFunctions();
+
+  bool Changed = false;
+
+  Changed = handleLocalMemAllocas() || Changed;
+  Changed = handleWorkitemFunctions() || Changed;
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
   dumpCFG(F, F.getName().str() + "_before_wiloops" + DotSuffix + ".dot", nullptr,
           &OriginalParallelRegions);
 #endif
 
-  localizePrivateVariables();
-
+  if (localizePrivateVariables()) {
+    Changed = true;
 #ifdef DEBUG_WORK_ITEM_LOOPS
-  std::cerr << "#### after private variable localization:\n";
-  F.dump();
+    std::cerr << "#### after private variable localization:\n";
+    F.dump();
 #endif
+  }
 
-  fixMultiRegionVariables();
-
+  if (fixMultiRegionVariables()) {
+    Changed = true;
 #ifdef DEBUG_WORK_ITEM_LOOPS
-  std::cerr << "#### after multi-region variable fixing:\n";
-  F.dump();
+    std::cerr << "#### after multi-region variable fixing:\n";
+    F.dump();
 #endif
+  }
 
   for (ParallelRegion::ParallelRegionVector::iterator
            PRI = OriginalParallelRegions.begin(),
@@ -499,6 +504,13 @@ bool WorkitemLoopsImpl::localizePrivateVariables() {
 
         llvm::StoreInst *Store = dyn_cast_or_null<StoreInst>(User);
 
+        if (Store != nullptr && LI.getLoopFor(Store->getParent())) {
+          // Cannot localize the alloca as it would break the multiple
+          // update semantics.
+          UsageRegion = nullptr;
+          break;
+        }
+
         ParallelRegion *Region = regionOfBlock(User->getParent());
 
         if (Store != nullptr) {
@@ -537,12 +549,18 @@ bool WorkitemLoopsImpl::localizePrivateVariables() {
     M.Alloca->moveBefore(M.Dest->entryBB()->getTerminator());
     if (M.Initializer != nullptr)
       M.Initializer->moveAfter(M.Alloca);
+
+#ifdef DEBUG_WORK_ITEM_LOOPS
+    std::cerr << "#### localized a private variable:\n";
+    M.Alloca->dump();
+#endif
   }
+  return AllocasToMove.size() > 0;
 }
 
 /// Add context save/restore code to variables that are defined in the given
 /// region and are used outside the region.
-void WorkitemLoopsImpl::fixMultiRegionVariables() {
+bool WorkitemLoopsImpl::fixMultiRegionVariables() {
 
   InstructionVec ValuesToContextSave;
   for (ParallelRegion::ParallelRegionVector::iterator
@@ -599,6 +617,7 @@ void WorkitemLoopsImpl::fixMultiRegionVariables() {
     LLVM_DEBUG(I->dump());
     addContextSaveRestore(I);
   }
+  return ValuesToContextSave.size() > 0;
 }
 
 // TO CLEAN: Refactor into getLinearWIIndexInRegion.
@@ -832,7 +851,7 @@ static llvm::Value *tryToRematerialize(llvm::Instruction *Before,
     // original directly.
     return Def;
   } else if (isa<AllocaInst>(Def) &&
-             !isPureUniformBlock(dyn_cast<AllocaInst>(Def)->getParent())) {
+             dyn_cast<AllocaInst>(Def)->getParent() == &K->getEntryBlock()) {
     UNABLE_TO_REMAT("accesses another alloca that we cannot remat");
   }
 

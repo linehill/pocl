@@ -593,7 +593,7 @@ bool WorkitemHandler::handleLocalMemAllocas() {
 /// Currently handles get_global_size(), get_local_id(), get_global_id() and
 /// get_group_id() calls. Expands the calls next to their users for easier
 /// analysis.
-void WorkitemHandler::handleWorkitemFunctions() {
+bool WorkitemHandler::handleWorkitemFunctions() {
   std::set<llvm::Instruction *> InstrsToDelete;
 
   for (Function::iterator BBI = K->begin(), BBE = K->end(); BBI != BBE; ++BBI) {
@@ -651,6 +651,8 @@ void WorkitemHandler::handleWorkitemFunctions() {
   }
   for (auto I : InstrsToDelete)
     I->eraseFromParent();
+
+  return InstrsToDelete.size() > 0;
 }
 
 bool WorkitemHandler::removeBarrierCalls() {
