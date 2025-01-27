@@ -1518,6 +1518,13 @@ static const cl_image_format supported_image_formats[] = {
 };
 #endif
 
+// For the scheduler of fiber wg-method.
+static const char *basic_native_device_aux_funcs[] =
+    {"__pocl_fiber_sched_init","__pocl_fiber_schedule_work_item",
+    "__pocl_fiber_wg_barrier_reached", "__pocl_fiber_sg_barrier_reached",
+    NULL};
+
+
 /** Initializes device info defaults.
  *
  * It setups the most generic defaults applicable to most devices,
@@ -1536,6 +1543,7 @@ pocl_init_default_device_infos (cl_device_id dev,
   dev->type = CL_DEVICE_TYPE_CPU;
   dev->max_work_item_dimensions = 3;
   dev->extensions = device_extensions;
+  dev->device_aux_functions = basic_native_device_aux_funcs;
 
   /*
     The hard restriction will be the context data which is

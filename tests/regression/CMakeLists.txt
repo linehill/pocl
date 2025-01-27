@@ -59,7 +59,7 @@ if (MSVC)
 else ()
   add_compile_options("-Wno-deprecated" "-Wno-deprecated-declarations" ${OPENCL_CFLAGS})
 endif ()
- 
+
 add_definitions("-DSRCDIR=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 include_directories("${CMAKE_SOURCE_DIR}/lib/CL")
 
@@ -143,34 +143,34 @@ add_test_pocl(NAME "regression/test_issue_893" COMMAND "test_issue_893")
 
 add_test_pocl(NAME "regression/test_flatten_barrier_subs" COMMAND "test_flatten_barrier_subs" EXPECTED_OUTPUT "test_flatten_barrier_subs.output")
 
-add_test_pocl(NAME "regression/issues_with_local_pointers" WORKITEM_HANDLER "loopvec;cbs;" COMMAND "test_locals")
+add_test_pocl(NAME "regression/issues_with_local_pointers" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_locals")
 
-add_test_pocl(NAME "regression/barrier_between_two_for_loops" WORKITEM_HANDLER "loopvec;cbs;" COMMAND "test_barrier_between_for_loops")
+add_test_pocl(NAME "regression/barrier_between_two_for_loops" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_barrier_between_for_loops")
 
-add_test_pocl(NAME "regression/simple_for-loop_with_a_barrier_inside" WORKITEM_HANDLER "loopvec;cbs;" COMMAND "test_simple_for_with_a_barrier")
+add_test_pocl(NAME "regression/simple_for-loop_with_a_barrier_inside" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_simple_for_with_a_barrier")
 
-add_test_pocl(NAME "regression/for-loop_with_computation_after_the_brexit" WORKITEM_HANDLER "loopvec;cbs;" COMMAND "test_multi_level_loops_with_barriers")
+add_test_pocl(NAME "regression/for-loop_with_computation_after_the_brexit" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_multi_level_loops_with_barriers")
 
-add_test_pocl(NAME "regression/for-loop_with_a_variable_iteration_count" WORKITEM_HANDLER "loopvec;cbs;" COMMAND "test_for_with_var_iteration_count")
+add_test_pocl(NAME "regression/for-loop_with_a_variable_iteration_count" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_for_with_var_iteration_count")
 
-add_test_pocl(NAME "regression/early_return_before_a_barrier_region" WORKITEM_HANDLER "loopvec;cbs;" COMMAND "test_early_return")
+add_test_pocl(NAME "regression/early_return_before_a_barrier_region" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_early_return")
 
-add_test_pocl(NAME "regression/id-dependent_computation_before_kernel_exit" WORKITEM_HANDLER "loopvec;cbs;" COMMAND "test_id_dependent_computation")
+add_test_pocl(NAME "regression/id-dependent_computation_before_kernel_exit" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_id_dependent_computation")
 
-add_test_pocl(NAME "regression/barrier_just_before_return" WORKITEM_HANDLER "loopvec;cbs;" COMMAND "test_barrier_before_return")
+add_test_pocl(NAME "regression/barrier_just_before_return" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_barrier_before_return")
 
-add_test_pocl(NAME "regression/infinite_loop" WORKITEM_HANDLER "loopvec;cbs;" COMMAND "test_infinite_loop")
+add_test_pocl(NAME "regression/infinite_loop" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_infinite_loop")
 
 add_test_pocl(NAME "regression/undominated_variable_from_conditional_barrier_handling"
-  WORKITEM_HANDLER "loopvec;cbs;" COMMAND "test_undominated_variable")
+  WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_undominated_variable")
 
 add_test_pocl(NAME "regression/assigning_a_loop_iterator_variable_to_a_private_makes_it_local"
-  WORKITEM_HANDLER "loopvec;cbs;" COMMAND "test_assign_loop_variable_to_privvar_makes_it_local")
+  WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_assign_loop_variable_to_privvar_makes_it_local")
 
 add_test_pocl(NAME "regression/assigning_a_loop_iterator_variable_to_a_private_makes_it_local_2"
-  WORKITEM_HANDLER "loopvec;cbs;" COMMAND "test_assign_loop_variable_to_privvar_makes_it_local_2")
+  WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_assign_loop_variable_to_privvar_makes_it_local_2")
 
-add_test_pocl(NAME "regression/test_program_from_binary_with_local_1_1_1" WORKITEM_HANDLER "loopvec;cbs;"
+add_test_pocl(NAME "regression/test_program_from_binary_with_local_1_1_1" WORKITEM_HANDLER "loopvec;cbs;fiber;"
   COMMAND "test_program_from_binary_with_local_1_1_1")
 
 add_test_pocl(NAME "regression/test_rematerialized_alloca_load_with_outside_pr_users"
@@ -239,7 +239,7 @@ add_test_pocl(NAME "regression/test_alignment_with_dynamic_wg2" COMMAND "test_al
 
 add_test_pocl(NAME "regression/test_alignment_with_dynamic_wg3" COMMAND "test_alignment_with_dynamic_wg3")
 
-set(VARIANTS "loopvec;cbs")
+set(VARIANTS "loopvec;cbs;fiber")
 foreach(VARIANT ${VARIANTS})
 set_tests_properties(
   "regression/test_alignment_with_dynamic_wg_114_${VARIANT}"
@@ -286,7 +286,13 @@ list(REMOVE_ITEM TCE_TESTS "regression/barrier_between_two_for_loops_loopvec" )
 
 set_property(TEST ${TCE_TESTS} APPEND PROPERTY LABELS "tce")
 
-set(VARIANTS "loopvec;cbs")
+# TODO fails on windows with "access violation"
+unset(ADDITIONAL_CPU_TESTS)
+if(NOT WIN32)
+  set(ADDITIONAL_CPU_TESTS "regression/test_issue_1525")
+endif()
+
+set(VARIANTS "loopvec;cbs;fiber")
 foreach(VARIANT ${VARIANTS})
   set_tests_properties("regression/setting_a_buffer_argument_to_NULL_causes_a_segfault_${VARIANT}"
     "regression/clSetKernelArg_overwriting_the_previous_kernel's_args_${VARIANT}"

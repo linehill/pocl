@@ -112,7 +112,7 @@ private:
 //#define DEBUG_WORK_ITEM_LOOPS
 
 // Enable CFG dumps from various spots during the kernel compilation.
-//#define POCL_KERNEL_COMPILER_DUMP_CFGS
+#define POCL_KERNEL_COMPILER_DUMP_CFGS
 
 #ifndef POCL_KERNEL_COMPILER_DUMP_CFGS
 #define dumpCFG(...)                                                           \

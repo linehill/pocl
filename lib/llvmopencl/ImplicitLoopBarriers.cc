@@ -54,6 +54,8 @@ POP_COMPILER_DIAGS
 
 #include <iostream>
 
+//#define DEBUG_ILOOP_BARRIERS
+
 namespace pocl {
 
 using namespace llvm;

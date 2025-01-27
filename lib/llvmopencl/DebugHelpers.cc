@@ -20,7 +20,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-
+#include <iostream>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -39,6 +39,8 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 #include "Barrier.h"
+#include "SubgroupBarrier.h"
+#include "WorkgroupBarrier.h"
 #include "DebugHelpers.h"
 
 #ifdef dumpCFG
@@ -80,13 +82,17 @@ static void printBasicBlock(
 
   S << getDotBasicBlockID(B);
   S << "[shape=rect,style=";
-  if (Barrier::hasBarrier(B) || isPureUniformBlock(B))
-      S << "dotted";
+  if (WorkgroupBarrier::hasWGBarrier(B) || isPureUniformBlock(B))
+    S << "dotted";
+  else if (SubgroupBarrier::hasSGBarrier(B) || isPureUniformBlock(B))
+    S << "dashed";
   else
     S << "solid";
 
-  if (Barrier::hasBarrier(B)) {
+  if (WorkgroupBarrier::hasWGBarrier(B)) {
     S << ",fillcolor=red,style=filled";
+  } else if (SubgroupBarrier::hasSGBarrier(B)) {
+    S << ", fillcolor=blue,style=filled";
   } else if (isPureUniformBlock(B)) {
     S << ",fillcolor=grey,style=filled";
   }
@@ -144,8 +150,11 @@ static void printBasicBlock(
         }
         S << "\\\", ...)\\n";
         PreviousNonHighlighted = 0;
-      } else if (isa<Barrier>(Instr)) {
-        S << "BARRIER\\n";
+      } else if (isa<WorkgroupBarrier>(Instr)) {
+        S << "WG-BARRIER\\n";
+        PreviousNonHighlighted = 0;
+      } else if (isa<SubgroupBarrier>(Instr)) {
+        S << "SG-BARRIER\\n";
         PreviousNonHighlighted = 0;
       } else if (isa<BranchInst>(Instr)) {
         S << "branch\\n";
@@ -175,7 +184,6 @@ void dumpCFG(llvm::Function &F, std::string FileName,
              const std::vector<llvm::Region *> *Regions,
              const ParallelRegion::ParallelRegionVector *ParRegions,
              const std::set<llvm::BasicBlock *> *Highlights) {
-
   unsigned LastRegID = 0;
 
   // By default dump the dots to the kernel compiler cache/tmp directory,

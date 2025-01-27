@@ -140,6 +140,7 @@ vstore_half.cl
 wait_group_events.cl
 work_group.cl
 write_image.cl
+fiber_scheduler.c
 
 ###################################################################
 

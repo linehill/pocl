@@ -100,6 +100,13 @@ namespace pocl {
       return (llvm::isa<User>(V) &&
               classof(llvm::cast<llvm::User>(V)));
     }
+    static bool hasWGBarrier(const llvm::BasicBlock *BB) {
+      for (llvm::BasicBlock::const_iterator I = BB->begin(), E = BB->end();
+           I != E; ++I)
+        if (llvm::isa<WorkgroupBarrier>(I))
+          return true;
+      return false;
+    }
   };
 
 }

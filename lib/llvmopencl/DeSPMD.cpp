@@ -46,6 +46,7 @@
 #include "LoopBarriers.h"
 #include "PHIsToAllocas.h"
 #include "WorkitemLoops.h"
+#include "Fiber.h"
 
 // TODO: recheck if we can reuse an existing analysis from LLVM:
 #include "VariableUniformityAnalysis.h"
@@ -130,6 +131,8 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
 
   // TODO: Run CBS if chosen.
   Changed = addWorkItemLoops(F, DT, PDT, LI, VUA) || Changed;
+
+  Changed = addFiber(F, DT, PDT, LI, VUA) || Changed;
 
   return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }

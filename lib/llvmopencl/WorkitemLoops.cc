@@ -181,6 +181,7 @@ bool WorkitemLoopsImpl::runOnFunction(Function &Func) {
 
   M = Func.getParent();
   F = &Func;
+
   Initialize(cast<Kernel>(&Func));
 
   LLVM_DEBUG(dbgs() << "Before WILoops:\n");
@@ -1316,8 +1317,13 @@ llvm::BasicBlock *WorkitemLoopsImpl::appendIncBlock(llvm::BasicBlock *After,
 bool addWorkItemLoops(llvm::Function &F, llvm::DominatorTree &DT,
                       llvm::PostDominatorTree &PDT, llvm::LoopInfo &LI,
                       VariableUniformityAnalysisResult &VUA) {
+  
+  WorkitemHandlerType WIH = getWorkitemHandler();
+  if(WIH != WorkitemHandlerType::LOOPS && WIH != WorkitemHandlerType::CBS)
+    return false;
 
   WorkitemLoopsImpl WIL(DT, LI, PDT, VUA);
+
   return WIL.runOnFunction(F);
 }
 

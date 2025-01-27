@@ -46,7 +46,7 @@ POP_COMPILER_DIAGS
 
 #include <set>
 
-// #define DEBUG_CANON_BARRIERS
+//#define DEBUG_CANON_BARRIERS
 
 namespace pocl {
 

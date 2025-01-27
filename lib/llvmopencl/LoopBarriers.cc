@@ -55,6 +55,8 @@ POP_COMPILER_DIAGS
 #define PASS_CLASS pocl::LoopBarriers
 #define PASS_DESC "Add needed barriers to loops"
 
+//#define DEBUG_LOOP_BARRIERS
+
 namespace pocl {
 
 using namespace llvm;

@@ -37,7 +37,8 @@ namespace pocl{
         C->getCalledFunction()->getName() == SGBARRIER_FUNCTION_NAME;
     }
     static bool classof(const llvm::Instruction *I) {
-      return llvm::isa<SubgroupBarrier>(I);
+      return (llvm::isa<llvm::CallInst>(I) &&
+              classof(llvm::cast<llvm::CallInst>(I)));
     }
     static bool classof(const User *U) {
       return (llvm::isa<Instruction>(U) &&

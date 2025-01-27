@@ -30,7 +30,7 @@
 
 namespace pocl {
 
-enum class WorkitemHandlerType { LOOPS, CBS, INVALID };
+enum class WorkitemHandlerType { LOOPS, CBS, FIBER, INVALID };
 
 /// Selects the work-group generator to use for handling the given kernel.
 ///

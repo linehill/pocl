@@ -71,6 +71,8 @@ fast_distance.cl
 fast_length.cl
 fast_normalize.cl
 fdim.cl
+fiber_scheduler.h
+fiber_scheduler.c
 floor.cl
 fma.cl
 fmax.cl

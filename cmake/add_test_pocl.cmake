@@ -57,7 +57,7 @@ function(add_test_pocl)
   if(POCL_TEST_WORKITEM_HANDLER)
     set(VARIANTS ${POCL_TEST_WORKITEM_HANDLER})
   else()
-    set(VARIANTS "loopvec" "cbs")
+    set(VARIANTS "loopvec" "cbs" "fiber")
   endif()
 
   list(LENGTH VARIANTS VARIANTS_COUNT)

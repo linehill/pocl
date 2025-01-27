@@ -420,6 +420,13 @@ bool replicateBarrierPathTails(Function &F, llvm::LoopInfo &LI,
 
   bool Changed = false;
 
+  WorkitemHandlerType WIH = getWorkitemHandler();
+
+  // running BTR on fiber removes segfault on issue 553
+  /* if (WIH == WorkitemHandlerType::FIBER) {
+    return Changed;
+  } */
+
 #ifdef DEBUG_BARRIER_REPL
   std::cerr << "### Before barrier tail replication:\n";
   F.dump();

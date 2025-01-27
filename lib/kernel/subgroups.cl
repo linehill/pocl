@@ -38,12 +38,9 @@ size_t _CL_OVERLOADABLE get_local_linear_id (void);
 size_t _CL_OVERLOADABLE get_local_size (unsigned int dimindx);
 
 void _CL_OVERLOADABLE _CL_CONVERGENT work_group_barrier(cl_mem_fence_flags);
-void _CL_OVERLOADABLE
+/* void _CL_OVERLOADABLE
 sub_group_barrier (cl_mem_fence_flags flags)
 {
-  /* This should work as long as there are no diverging
-     subgroups -- right? It models all subgroups of the WG
-     stepping in lockstep. */
   work_group_barrier (flags);
 }
 
@@ -52,7 +49,7 @@ sub_group_barrier (cl_mem_fence_flags flags, memory_scope scope)
     __attribute__ ((noduplicate))
 {
   work_group_barrier (flags);
-}
+} */
 
 uint _CL_OVERLOADABLE _CL_CONVERGENT sub_group_reduce_max(uint );
 int _CL_OVERLOADABLE

@@ -105,7 +105,7 @@ add_test_pocl(NAME "kernel/test_halfs"
 # and Level Zero can timeout executing kernels.
 # enable the tests but add "long" label so ctest can skip easily
 
-set(VARIANTS "loopvec;cbs")
+set(VARIANTS "loopvec;cbs;fiber")
 foreach(VARIANT ${VARIANTS})
   set_tests_properties( "kernel/test_as_type_${VARIANT}" "kernel/test_bitselect_${VARIANT}"
     "kernel/test_convert_type_1_${VARIANT}" "kernel/test_convert_type_2_${VARIANT}" "kernel/test_convert_type_4_${VARIANT}"

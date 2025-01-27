@@ -1,7 +1,7 @@
-// LLVM function pass that ensures corner cases of integer division
-// do not trigger undefined behavior
+
+// Header for fiber work-group method.
 //
-// Copyright (c) 2024 Michal Babej / Intel Finland Oy
+// Copyright (c) 2025 Tapio Nevalainen / Tampere University
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -21,27 +21,28 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
-
-#ifndef POCL_SANITIZE_UB_DIV_REM
-#define POCL_SANITIZE_UB_DIV_REM
+#ifndef POCL_FIBER_H
+#define POCL_FIBER_H
 
 #include "config.h"
 
-#include <llvm/IR/Module.h>
-#include <llvm/IR/PassManager.h>
-#include <llvm/Pass.h>
-#include <llvm/Passes/PassBuilder.h>
+#include "llvm/Analysis/PostDominators.h"
+#include "VariableUniformityAnalysis.h"
+#include "VariableUniformityAnalysisResult.hh"
+
+namespace llvm {
+class DominatorTreeAnalysis;
+class Function;
+class LoopAnalysis;
+class PostDominatorTreeAnalysis;
+class VariableUniformityAnalysisResult;
+} // namespace llvm
 
 namespace pocl {
 
-class SanitizeUBofDivRem : public llvm::PassInfoMixin<SanitizeUBofDivRem> {
-public:
-  static void registerWithPB(llvm::PassBuilder &B);
-  llvm::PreservedAnalyses run(llvm::Function &F,
-                              llvm::FunctionAnalysisManager &AM);
-  static bool isRequired() { return true; }
-};
-
+bool addFiber(llvm::Function &F, llvm::DominatorTree &DT,
+              llvm::PostDominatorTree &PDT, llvm::LoopInfo &LI,
+              VariableUniformityAnalysisResult &VUA);
 } // namespace pocl
 
 #endif

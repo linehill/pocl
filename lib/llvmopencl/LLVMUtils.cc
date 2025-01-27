@@ -42,6 +42,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "CanonicalizeBarriers.h"
 #include "DeSPMD.h"
 #include "DebugHelpers.h"
+#include "Fiber.h"
 #include "Flatten.hh"
 #include "FlattenBarrierSubs.hh"
 #include "FlattenGlobals.hh"
