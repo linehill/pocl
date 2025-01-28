@@ -3,7 +3,7 @@
 //
 // Copyright (c) 2011-2012 Carlos Sánchez de La Lama / URJC and
 //               2012-2019 Pekka Jääskeläinen
-//               2023-2024 Pekka Jääskeläinen / Intel Finland Oy
+//               2023-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -540,8 +540,9 @@ llvm::Instruction *WorkitemHandler::getWorkGroupSizeInstr() {
 /// functions to allocas in the current kernel.
 ///
 /// These compiler-expanded functions are used to allocate temporary
-/// storage for subgroup implementation. Search for their usage in the
-/// bitcode library for examples.
+/// storage for (sub)group-level built-in implementation. Search for their
+/// usage in the bitcode library for examples. They are converted to
+/// allocas and placed in the entry of the function.
 bool WorkitemHandler::handleLocalMemAllocas() {
 
   std::vector<CallInst *> InstructionsToFix;
@@ -577,11 +578,30 @@ bool WorkitemHandler::handleLocalMemAllocas() {
       Size = Builder.CreateBinOp(Instruction::Mul, WGSize, Size);
       Size = Builder.CreateBinOp(Instruction::Add, Size, ExtraSize);
     }
-    AllocaInst *Alloca = new AllocaInst(
+    AllocaInst *WGAlloca = new AllocaInst(
         llvm::Type::getInt8Ty(Call->getContext()), 0, Size, Alignment,
         "__pocl_wg_alloca", Inst2InsertPt(K->getEntryBlock().getTerminator()));
-    Call->replaceAllUsesWith(Alloca);
+    Call->replaceAllUsesWith(WGAlloca);
     Call->eraseFromParent();
+
+    // Also move the variable the allocation result is saved to.
+    for (Instruction::use_iterator UI = WGAlloca->use_begin(),
+                                   UE = WGAlloca->use_end();
+         UI != UE; ++UI) {
+      llvm::StoreInst *InitializerStore =
+          dyn_cast_or_null<StoreInst>(UI->getUser());
+      if (InitializerStore == nullptr ||
+          InitializerStore->getValueOperand() != WGAlloca)
+        continue;
+
+      llvm::AllocaInst *TempVariableAlloca =
+          dyn_cast_or_null<AllocaInst>(InitializerStore->getPointerOperand());
+      if (TempVariableAlloca == nullptr)
+        continue;
+      TempVariableAlloca->moveAfter(WGAlloca);
+      InitializerStore->moveAfter(TempVariableAlloca);
+    }
+
     Changed = true;
   }
   return Changed;

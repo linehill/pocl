@@ -1123,15 +1123,6 @@ bool WorkitemLoopsImpl::shouldNotBeContextSaved(llvm::Instruction *Instr) {
       return true;
   }
 
-  // The local memory allocation call is uniform, the same pointer to the
-  // work-group shared memory area is returned to all work-items. It must
-  // not be replicated.
-  if (isa<CallInst>(Instr)) {
-    Function *F = cast<CallInst>(Instr)->getCalledFunction();
-    if (F && (F == LocalMemAllocaFuncDecl || F == WorkGroupAllocaFuncDecl))
-      return true;
-  }
-
   // Generated id loads should not be replicated as it leads to problems in
   // conditional branch case where the header node of the region is shared
   // across the peeled branches and thus the header node's ID loads might get
