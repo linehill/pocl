@@ -952,7 +952,10 @@ static llvm::Value *tryToRematerialize(llvm::Instruction *Before,
     // original directly.
     return Def;
   } else if (isa<AllocaInst>(Def) &&
-             dyn_cast<AllocaInst>(Def)->getParent() == &K->getEntryBlock()) {
+             dyn_cast<AllocaInst>(Def)->getParent() != &K->getEntryBlock()) {
+    // The allocas in the pure uniform entry block can be referred to without
+    // rematerialization. But other than that we do not yet handle recursive
+    // alloca references. Should be an easy and valuable low hanging fruit.
     UNABLE_TO_REMAT("accesses another alloca that we cannot remat");
   }
 
