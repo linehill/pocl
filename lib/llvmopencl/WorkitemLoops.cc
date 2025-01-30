@@ -132,6 +132,7 @@ private:
 
   bool processFunction(llvm::Function &F);
 
+  bool foldTrivialAllocas();
   bool localizePrivateVariables();
   bool fixMultiRegionVariables();
   void addContextSaveRestore(llvm::Instruction *Instruction);
@@ -390,6 +391,14 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
           &OriginalParallelRegions);
 #endif
 
+  if (foldTrivialAllocas()) {
+    Changed = true;
+#ifdef DEBUG_WORK_ITEM_LOOPS
+    std::cerr << "#### after trivial alloca folding:\n";
+    F.dump();
+#endif
+  }
+
   if (localizePrivateVariables()) {
     Changed = true;
 #ifdef DEBUG_WORK_ITEM_LOOPS
@@ -457,6 +466,98 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
 
   removeBarrierCalls();
   return true;
+}
+
+/// Gets rid of trivial temporary variable usages by replacing alloca uses with
+/// the written value in the simple cases.
+///
+/// Currently we consider the alloca "trivial" if gets a single store with
+/// a function argument or a constant value.
+bool WorkitemLoopsImpl::foldTrivialAllocas() {
+
+  struct AllocaFolding {
+    // The alloca to fold.
+    llvm::AllocaInst *Alloca;
+    // The initializer store.
+    llvm::StoreInst *Initializer;
+  };
+
+  std::vector<AllocaFolding> Foldings;
+  for (auto &BB : *K) {
+    for (auto &I : BB) {
+      AllocaInst *Alloca = dyn_cast_or_null<AllocaInst>(&I);
+      if (Alloca == nullptr)
+        continue;
+
+      llvm::StoreInst *Initializer = nullptr;
+      for (Instruction::use_iterator UI = Alloca->use_begin(),
+                                     UE = Alloca->use_end();
+           UI != UE; ++UI) {
+        llvm::StoreInst *Store = dyn_cast_or_null<StoreInst>(UI->getUser());
+        llvm::LoadInst *Load = dyn_cast_or_null<LoadInst>(UI->getUser());
+
+        if (Store == nullptr && Load == nullptr) {
+          // Can handle only stores and loads.
+          Initializer = nullptr;
+          break;
+        }
+
+        if (Store == nullptr)
+          continue; // A load.
+
+        if (Initializer != nullptr) {
+          // Multiple stores.
+          Initializer = nullptr;
+          break;
+        }
+
+        if (isa<Constant>(Store->getValueOperand()) ||
+            isa<Argument>(Store->getValueOperand())) {
+          Initializer = Store;
+          // Keep scanning so we make sure there are no more writes.
+        } else {
+          // Unsupported value written.
+          Initializer = nullptr;
+          break;
+        }
+      }
+      if (Initializer != nullptr)
+        Foldings.push_back({Alloca, Initializer});
+    }
+  }
+
+  for (auto &M : Foldings) {
+    for (Instruction::use_iterator UI = M.Alloca->use_begin(),
+                                   UE = M.Alloca->use_end();
+         UI != UE;) {
+      llvm::Instruction *Inst = dyn_cast_or_null<Instruction>(UI->getUser());
+      if (Inst == nullptr || Inst == M.Initializer) {
+        ++UI;
+        continue;
+      }
+      assert(isa<LoadInst>(Inst));
+      // Replace the uses of the alloca load with the value written to the
+      // alloca. Note that it's legal to do a wide load from a vector,
+      // e.g. 2 x i8 can be loaded to a i16 type. This is why we have to
+      // perform a bitcast here sometimes.
+      Value *Replacement = M.Initializer->getValueOperand();
+      if (Replacement->getType() != Inst->getType()) {
+        llvm::IRBuilder<> Builder(Inst);
+        Replacement = Builder.CreateBitCast(Replacement, Inst->getType());
+      }
+      Inst->replaceAllUsesWith(Replacement);
+      Inst->eraseFromParent();
+      UI = M.Alloca->use_begin();
+      UE = M.Alloca->use_end();
+    }
+#ifdef DEBUG_WORK_ITEM_LOOPS
+    std::cerr << "#### folded an alloca:\n";
+    M.Alloca->dump();
+#endif
+    M.Initializer->eraseFromParent();
+    M.Alloca->eraseFromParent();
+  }
+  return Foldings.size() > 0;
 }
 
 /// If there are allocas that are _actually_ used only inside a single PR, but
