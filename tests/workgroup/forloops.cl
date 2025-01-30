@@ -11,7 +11,7 @@ test_kernel (global int *output)
   output[flat_id] = 0;
 
   /* Volatile operand here so LLVM doesn't optimize the loop away. */
-  volatile int add = 1;
+  volatile int add = 2;
 
   for (int i = 0; i < gid; ++i)
     output[flat_id] += add;

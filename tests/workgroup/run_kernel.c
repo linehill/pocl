@@ -164,7 +164,9 @@ main (int argc, char **argv)
 
       size_t i;
       for (i = 0; i < grid_size; ++i)
-        printf ("%zu: %d\n", i, kern_output[i]);
+        /* Print only the changed values for less output to validate. */
+        if (kern_output[i] != i)
+          printf ("%zu: %d\n", i, kern_output[i]);
     }
 
   err = clFinish (cmd_queue);
