@@ -869,8 +869,8 @@ static int convertBCorSPV(char *InputPath,
                    static_cast<unsigned>(TargetVersion.major),
                    static_cast<unsigned>(TargetVersion.minor));
       assert(!"Unrecognized SPIR-V version!");
-      break;
     }
+    break;
   case 100:
     SPIRV::VersionNumber::SPIRV_1_0;
     break;
