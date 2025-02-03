@@ -53,3 +53,4 @@ function(add_unit_test MAIN_SOURCE)
 endfunction()
 
 add_unit_test(test_fs.cc)
+add_unit_test(test_runcmds.cc)
