@@ -624,9 +624,9 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
       return false;
     }
     auto CalleeName = Callee->getName();
-    bool IsUniformBuiltin = CalleeName == GROUP_ID_BUILTIN_NAME ||
-                            CalleeName == GS_BUILTIN_NAME ||
-                            CalleeName == LS_BUILTIN_NAME;
+    bool IsUniformBuiltin =
+        isa<Barrier>(Call) || CalleeName == GROUP_ID_BUILTIN_NAME ||
+        CalleeName == GS_BUILTIN_NAME || CalleeName == LS_BUILTIN_NAME;
 #ifdef DEBUG_UNIFORMITY_ANALYSIS
     std::cerr << "### VUA: call to " << CalleeName.str() << " is "
               << (IsUniformBuiltin ? "" : "not ") << "uniform\n";

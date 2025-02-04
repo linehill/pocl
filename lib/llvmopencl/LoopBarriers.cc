@@ -60,7 +60,8 @@ using namespace llvm;
 
 /// Finds the basic block in a loop that contains the loop condition check.
 /// \return nullptr if unable to analyze the loop.
-static BasicBlock *getConditionCheckBlock(Loop &L) {
+static BasicBlock *getConditionCheckBlock(Loop &L,
+                                          ICmpInst **CondCmpI = nullptr) {
 
   BasicBlock *CondComp = nullptr;
   if (BasicBlock *Exit = L.getExitingBlock()) {
@@ -78,9 +79,26 @@ static BasicBlock *getConditionCheckBlock(Loop &L) {
   } else {
     return nullptr;
   }
-  if (CondComp != nullptr &&
-      isa<ICmpInst>(CondComp->getTerminator()->getPrevNonDebugInstruction())) {
-    return CondComp;
+
+  if (CondComp != nullptr) {
+
+    ICmpInst *Temp;
+    if (CondCmpI == nullptr)
+      CondCmpI = &Temp;
+
+    auto *Instr = CondComp->getTerminator()->getPrevNonDebugInstruction();
+    *CondCmpI = dyn_cast_or_null<ICmpInst>(Instr);
+    if (*CondCmpI != nullptr)
+      return CondComp;
+
+    // We might have added implicit barriers to the block. They should be fine
+    // in the condition check block of a b-loop. Just skip them.
+    if (isa<Barrier>(Instr)) {
+      Instr = Instr->getPrevNonDebugInstruction();
+      *CondCmpI = dyn_cast_or_null<ICmpInst>(Instr);
+      if (*CondCmpI != nullptr)
+        return CondComp;
+    }
   }
   return nullptr;
 }
@@ -95,7 +113,8 @@ isSuitableForBLoopStructureSharing(Loop &L,
   // TODO: Expand the coverage of loop cases incrementally.
   // Currently assumes unoptimized non-SSA (no PHIs) input.
 
-  BasicBlock *CondComp = getConditionCheckBlock(L);
+  ICmpInst *CondCmpI = nullptr;
+  BasicBlock *CondComp = getConditionCheckBlock(L, &CondCmpI);
 
   BasicBlock *Latch = L.getLoopLatch();
   BasicBlock *Header = L.getHeader();
@@ -105,8 +124,6 @@ isSuitableForBLoopStructureSharing(Loop &L,
       VUA.hasDivergingInstructions(*Latch))
     return false;
 
-  ICmpInst *CondCmpI = dyn_cast_or_null<ICmpInst>(
-      CondComp->getTerminator()->getPrevNonDebugInstruction());
   if (CondCmpI == nullptr)
     return false;
 

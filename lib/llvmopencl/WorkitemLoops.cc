@@ -612,7 +612,15 @@ bool WorkitemLoopsImpl::localizePrivateVariables() {
           break;
         }
 
-        ParallelRegion *Region = regionOfBlock(User->getParent());
+        BasicBlock *UserBB = User->getParent();
+        if (isPureUniformBlock(UserBB)) {
+          // Variables used in pure unifrom cannot and should not be localized,
+          // since they won't be context saved either.
+          UsageRegion = nullptr;
+          break;
+        }
+
+        ParallelRegion *Region = regionOfBlock(UserBB);
 
         if (Store != nullptr) {
           if (isa<Constant>(Store->getValueOperand())) {
@@ -635,9 +643,8 @@ bool WorkitemLoopsImpl::localizePrivateVariables() {
           // Multi-region variable.
           AnotherUsageRegion = Region;
           break;
-        } else {
-          UsageRegion = Region;
         }
+        UsageRegion = Region;
       }
       if (UsageRegion != nullptr && UsageRegion != AllocaRegion &&
           AnotherUsageRegion == nullptr &&
