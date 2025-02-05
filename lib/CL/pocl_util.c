@@ -1892,7 +1892,7 @@ pocl_run_command_capture_output (char *capture_string,
    * attempt to stop it.  */
   CloseHandle (child_stdout_rd);
 
-  int exit_code = EXIT_FAILURE;
+  DWORD exit_code = EXIT_FAILURE;
   DWORD wait_rc = WaitForSingleObject (process_info.hProcess, INFINITE);
   if (wait_rc != WAIT_FAILED)
     if (!GetExitCodeProcess (process_info.hProcess, &exit_code))
