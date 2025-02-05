@@ -28,12 +28,6 @@
 #include <string>
 #include <vector>
 
-#if _WIN32
-#define EXE_SUFFIX ".exe"
-#else
-#define EXE_SUFFIX
-#endif
-
 #define TEST_ASSERT(expr)                                                      \
   if (!(expr)) {                                                               \
     std::cout << __FILE__ << ":" << __LINE__ << ": "                           \
@@ -43,12 +37,13 @@
 
 int main() {
   std::vector<char> CaptureBuffer(20, 'A');
-  const char *ArgList[] = {"cmake" EXE_SUFFIX, "-E", "echo", "Hello, World!",
+  const char *ArgList[] = {CMAKE_COMMAND, "-E", "echo", "Hello, World!",
                            nullptr};
 
   size_t CaptureSize = CaptureBuffer.size();
   int ExitCode = pocl_run_command_capture_output(CaptureBuffer.data(),
                                                  &CaptureSize, ArgList);
+
   // CMake commands return 0 on success, not EXIT_SUCCESS.
   TEST_ASSERT(ExitCode == 0);
   // The size of the message + newline from echo.

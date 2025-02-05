@@ -1671,7 +1671,9 @@ pocl_run_command (const char **args)
   pid_t p = fork ();
   if (p == 0)
     {
-      return execv (args[0], (char *const *)args);
+      execv (args[0], (char *const *)args);
+      POCL_MSG_ERR ("execv failed!");
+      abort ();
     }
   else
     {
@@ -1756,7 +1758,9 @@ pocl_run_command_capture_output (char *capture_string,
       dup2 (out[1], STDOUT_FILENO);
       dup2 (out[1], STDERR_FILENO);
 
-      return execv (args[0], (char *const *)args);
+      execv (args[0], (char *const *)args);
+      POCL_MSG_ERR ("execv failed!");
+      abort ();
     }
   else
     {
@@ -1807,6 +1811,7 @@ pocl_run_command_capture_output (char *capture_string,
       else
         return EXIT_FAILURE;
     }
+  assert (!"UNREACHABLE!");
 #elif _WIN32 // ^ HAVE_FORK ^
   char *cmd = build_cmd_from_arglist (args);
   if (!cmd)

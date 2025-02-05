@@ -335,8 +335,8 @@ pocl_command_to_str (cl_command_type cmd);
 /**
  * Wrapper for running commands.
  *
- * \param args The list of arguments terminated by NULL, including the
- *        executed program.
+ * \param args The list of arguments terminated by NULL, including the path to
+ *        the program to be run.
  * \return The return value from the executed command.
  */
 POCL_EXPORT
@@ -352,8 +352,8 @@ int pocl_run_command (const char **args);
  * \param capture_string The target for storing the stdout and stderr.
  * \param captured_bytes [in/out] Input the number of bytes allocated in
  *        capture_string, outputs the number of bytes written there.
- * \param args The list of arguments terminated by NULL, including the
- *        executed program.
+ * \param args The list of arguments terminated by NULL, including the path to
+ *        the program to be run.
  * \return The return value from the executed command.
  */
 POCL_EXPORT
