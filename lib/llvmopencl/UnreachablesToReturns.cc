@@ -55,7 +55,6 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 
 #include "LLVMUtils.h"
 #include "UnreachablesToReturns.h"
-#include "WorkitemHandlerChooser.h"
 POP_COMPILER_DIAGS
 
 #include <iostream>
@@ -315,7 +314,6 @@ llvm::PreservedAnalyses
 ConvertUnreachablesToReturns::run(llvm::Function &F,
                                   llvm::FunctionAnalysisManager &AM) {
   PreservedAnalyses PAChanged = PreservedAnalyses::none();
-  PAChanged.preserve<WorkitemHandlerChooser>();
 
   if (!isKernelToProcess(F))
     return PreservedAnalyses::all();

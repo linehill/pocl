@@ -120,7 +120,7 @@ bool canonicalizeBarriers(Function &F) {
       else
         Exit = SplitBlock(BB, T);
       Exit->setName("exit.barrier");
-      Barrier::create(Inst2InsertPt(t));
+      Barrier::create(Inst2InsertPt(T));
       Changed = true;
     }
   }
