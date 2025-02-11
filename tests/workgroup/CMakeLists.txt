@@ -87,19 +87,13 @@ foreach(VARIANT ${VARIANTS})
     "workgroup/b_loop_with_none_of_the_WIs_reaching_the_barrier_cbs"
     "workgroup/for_with_divergent_return_${VARIANT}"
     "workgroup/cond_barriers_in_for_${VARIANT}"
+    "workgroup/different_implicit_barrier_injection_scenarios"
+    "workgroup/cond_barrier_in_var_for_cbs"
     PROPERTIES
       COST 2.0
       PROCESSORS 1
       DEPENDS "pocl_version_check")
 endforeach()
-
-set_tests_properties(
-  "workgroup/different_implicit_barrier_injection_scenarios"
-  "workgroup/cond_barrier_in_var_for_cbs"
-  PROPERTIES
-    COST 2.0
-    PROCESSORS 1
-    DEPENDS "pocl_version_check")
 
 add_test_pocl(NAME "workgroup/unconditional_barriers"
               EXPECTED_OUTPUT "basic_barriers_2_2_2_2.stdout"
