@@ -51,10 +51,11 @@ add_test_pocl(NAME "workgroup/switch_case"
 
 # This is a case CBS was motivated for. Loopvec falls back to CBS currently,
 # later on we add the simpler fiber-based fallback.
-add_test_pocl(NAME "workgroup/b_loop_with_none_of_the_WIs_reaching_the_barrier_cbs"
-              EXPECTED_OUTPUT "tricky_for_1_2_1_1.stdout"
-              COMMAND "run_kernel" "tricky_for.cl" 1 2 1 1
-              WORKITEM_HANDLER "cbs")
+# TODO: Re-enable after CBS is brought back.
+#add_test_pocl(NAME "workgroup/b_loop_with_none_of_the_WIs_reaching_the_barrier_cbs"
+#              EXPECTED_OUTPUT "tricky_for_1_2_1_1.stdout"
+#              COMMAND "run_kernel" "tricky_for.cl" 1 2 1 1
+#              WORKITEM_HANDLER "cbs")
 
 add_test_pocl(NAME "workgroup/for_with_divergent_return"
               EXPECTED_OUTPUT "for_with_divergent_return_1_6_1_1.stdout"
@@ -70,10 +71,10 @@ add_test_pocl(NAME "workgroup/outerlooppar_multiple_exits"
               LLVM_FILECHECK "outerlooppar_multiple_exits.fc"
               WORKITEM_HANDLER "loopvec")
 
-add_test_pocl(NAME "workgroup/cond_barrier_in_var_for_cbs"
-              EXPECTED_OUTPUT "cond_barrier_in_var_for_2_4_1_1.stdout"
-              COMMAND "run_kernel" "cond_barrier_in_var_for.cl" 2 4 1 1
-              WORKITEM_HANDLER "cbs")
+#add_test_pocl(NAME "workgroup/cond_barrier_in_var_for_cbs"
+#              EXPECTED_OUTPUT "cond_barrier_in_var_for_2_4_1_1.stdout"
+#              COMMAND "run_kernel" "cond_barrier_in_var_for.cl" 2 4 1 1
+#              WORKITEM_HANDLER "cbs")
 
 # Cases which are not dependent on the work-group or work-item
 # execution (printout) order or the method (use the default method
@@ -84,11 +85,11 @@ foreach(VARIANT ${VARIANTS})
     "workgroup/unbarriered_for_loops_${VARIANT}"
     "workgroup/barriered_for_loops_${VARIANT}"
     "workgroup/switch_case_${VARIANT}"
-    "workgroup/b_loop_with_none_of_the_WIs_reaching_the_barrier_cbs"
+#    "workgroup/b_loop_with_none_of_the_WIs_reaching_the_barrier_cbs"
     "workgroup/for_with_divergent_return_${VARIANT}"
     "workgroup/cond_barriers_in_for_${VARIANT}"
     "workgroup/different_implicit_barrier_injection_scenarios"
-    "workgroup/cond_barrier_in_var_for_cbs"
+#    "workgroup/cond_barrier_in_var_for_cbs"
     PROPERTIES
       COST 2.0
       PROCESSORS 1
@@ -104,10 +105,11 @@ add_test_pocl(NAME "workgroup/conditional_barrier_loopvec"
               COMMAND "run_kernel" "conditional_barriers.cl" 1 2 1 1
               WORKITEM_HANDLER "loopvec")
 
-add_test_pocl(NAME "workgroup/conditional_barrier_cbs"
-              EXPECTED_OUTPUT "cond_barriers_1_2_1_1_cbs.stdout"
-              COMMAND "run_kernel" "conditional_barriers.cl" 1 2 1 1
-              WORKITEM_HANDLER "cbs")
+# TODO: Re-enable after CBS is brought back.
+#add_test_pocl(NAME "workgroup/conditional_barrier_cbs"
+#              EXPECTED_OUTPUT "cond_barriers_1_2_1_1_cbs.stdout"
+#              COMMAND "run_kernel" "conditional_barriers.cl" 1 2 1 1
+#              WORKITEM_HANDLER "cbs")
 
 add_test_pocl(NAME "workgroup/conditional_barrier_dynamic"
               EXPECTED_OUTPUT "cond_barriers_dynamic_1_16_1_1_loopvec.stdout"
@@ -174,7 +176,8 @@ add_test_pocl(NAME "workgroup/ballot"
 # These tests are now always ran with the basic device with a predefined
 # work-group execution order. Their printout verification depends
 # on it.
-set(VARIANTS "loopvec;cbs")
+# # TODO: add "cbs" after CBS is brought back.
+set(VARIANTS "loopvec")
 foreach(VARIANT ${VARIANTS})
   set(TEST_LIST     "workgroup/unconditional_barriers_${VARIANT}"
   "workgroup/conditional_barrier_${VARIANT}"
@@ -203,31 +206,16 @@ set_property(TEST
   APPEND PROPERTY LABELS "mingw_fail")
 
 set_property(TEST
-  "workgroup/unconditional_barriers_loopvec"
   "workgroup/unbarriered_for_loops_loopvec"
   "workgroup/barriered_for_loops_loopvec"
-  "workgroup/conditional_barrier_loopvec"
-  "workgroup/b_loop_with_none_of_the_WIs_reaching_the_barrier_cbs"
-  "workgroup/forcing_horizontal_parallelization_to_some_outer_loopvec"
-  "workgroup/loop_with_two_paths_to_the_latch_loopvec"
-  "workgroup/b_loop_with_two_latches_loopvec"
-  "workgroup/workgroup_sizes_work_items_get_wrong_ids_loopvec"
-  "workgroup/issue_548_convergent_propagation_loopvec"
-  "workgroup/different_implicit_barrier_injection_scenarios"
-  "workgroup/cond_barrier_in_var_for_cbs"
-  APPEND PROPERTY LABELS "hsa-native")
-
-set_property(TEST
-  "workgroup/unbarriered_for_loops_loopvec"
-  "workgroup/barriered_for_loops_loopvec"
-  "workgroup/b_loop_with_none_of_the_WIs_reaching_the_barrier_cbs"
+#  "workgroup/b_loop_with_none_of_the_WIs_reaching_the_barrier_cbs"
   APPEND PROPERTY LABELS "proxy")
 
 set_property(TEST
   "workgroup/unbarriered_for_loops_loopvec"
   "workgroup/barriered_for_loops_loopvec"
   "workgroup/switch_case_loopvec"
-  "workgroup/b_loop_with_none_of_the_WIs_reaching_the_barrier_cbs"
+#  "workgroup/b_loop_with_none_of_the_WIs_reaching_the_barrier_cbs"
   APPEND PROPERTY LABELS "vulkan")
 
 # broken:  "workgroup/for_with_divergent_return"
@@ -235,7 +223,7 @@ set_property(TEST
   "workgroup/unbarriered_for_loops_loopvec"
   "workgroup/barriered_for_loops_loopvec"
   "workgroup/switch_case_loopvec"
-  "workgroup/b_loop_with_none_of_the_WIs_reaching_the_barrier_cbs"
+#  "workgroup/b_loop_with_none_of_the_WIs_reaching_the_barrier_cbs"
   "workgroup/cond_barriers_in_for_loopvec"
   APPEND PROPERTY LABELS "level0")
 
