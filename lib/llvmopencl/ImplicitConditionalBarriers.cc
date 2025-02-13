@@ -30,7 +30,6 @@ IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 #include "Barrier.h"
-#include "WorkgroupBarrier.h"
 #include "CanonicalizeBarriers.h"
 #include "DebugHelpers.h"
 #include "ImplicitConditionalBarriers.h"
@@ -39,16 +38,13 @@ IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
 #include "VariableUniformityAnalysis.h"
 #include "VariableUniformityAnalysisResult.hh"
 #include "Workgroup.h"
+#include "WorkgroupBarrier.h"
 #include "WorkitemHandlerChooser.h"
 POP_COMPILER_DIAGS
 
 #include <iostream>
 
 #include "pocl.h"
-
-#define PASS_NAME "implicit-cond-barriers"
-#define PASS_CLASS pocl::ImplicitConditionalBarriers
-#define PASS_DESC "Adds implicit barriers to branches."
 
 namespace pocl {
 

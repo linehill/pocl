@@ -38,7 +38,6 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Transforms/Scalar/LoopPassManager.h>
 
 #include "Barrier.h"
-#include "WorkgroupBarrier.h"
 #include "DebugHelpers.h"
 #include "KernelCompilerUtils.h"
 #include "LLVMUtils.h"
@@ -46,6 +45,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "VariableUniformityAnalysis.h"
 #include "VariableUniformityAnalysisResult.hh"
 #include "Workgroup.h"
+#include "WorkgroupBarrier.h"
 #include "WorkitemHandlerChooser.h"
 POP_COMPILER_DIAGS
 
@@ -55,7 +55,7 @@ POP_COMPILER_DIAGS
 #define PASS_CLASS pocl::LoopBarriers
 #define PASS_DESC "Add needed barriers to loops"
 
-//#define DEBUG_LOOP_BARRIERS
+// #define DEBUG_LOOP_BARRIERS
 
 namespace pocl {
 

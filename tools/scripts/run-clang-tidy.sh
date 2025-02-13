@@ -23,4 +23,5 @@ clang-tidy -extra-arg=-Wno-unknown-warning-option --config-file=$SCRIPTDIR/clang
 ../lib/llvmopencl/ImplicitLoopBarriers.cc \
 ../lib/llvmopencl/LoopBarriers.cc \
 ../lib/llvmopencl/PHIsToAllocas.cc \
-../lib/llvmopencl/WorkitemLoops.cc
+../lib/llvmopencl/WorkitemLoops.cc \
+../lib/llvmopencl/Fiber.cc

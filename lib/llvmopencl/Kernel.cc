@@ -35,11 +35,11 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 #include "Barrier.h"
-#include "WorkgroupBarrier.h"
 #include "DebugHelpers.h"
 #include "Kernel.h"
 #include "KernelCompilerUtils.h"
 #include "LLVMUtils.h"
+#include "WorkgroupBarrier.h"
 
 #include "pocl.h"
 #include "pocl_llvm_api.h"

@@ -36,17 +36,17 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 #include "Barrier.h"
-#include "WorkgroupBarrier.h"
 #include "CanonicalizeBarriers.h"
 #include "DebugHelpers.h"
 #include "LLVMUtils.h"
 #include "Workgroup.h"
+#include "WorkgroupBarrier.h"
 
 POP_COMPILER_DIAGS
 
 #include <set>
 
-//#define DEBUG_CANON_BARRIERS
+// #define DEBUG_CANON_BARRIERS
 
 namespace pocl {
 

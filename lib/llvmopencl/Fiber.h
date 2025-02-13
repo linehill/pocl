@@ -26,9 +26,9 @@
 
 #include "config.h"
 
-#include "llvm/Analysis/PostDominators.h"
 #include "VariableUniformityAnalysis.h"
 #include "VariableUniformityAnalysisResult.hh"
+#include "llvm/Analysis/PostDominators.h"
 
 namespace llvm {
 class DominatorTreeAnalysis;
@@ -40,9 +40,21 @@ class VariableUniformityAnalysisResult;
 
 namespace pocl {
 
-bool addFiber(llvm::Function &F, llvm::DominatorTree &DT,
-              llvm::PostDominatorTree &PDT, llvm::LoopInfo &LI,
-              VariableUniformityAnalysisResult &VUA);
+/// Fallback method to handle all types of subgroup configurations and
+/// barrier-usage corner cases in general.
+///
+/// Modifies the LLVM IR so that each workgroup/subgroup barrier call
+/// is registered and the next workitem is scheduled. Registering barriers and
+/// scheduling workitems are handled by separate scheduler functionality
+/// in fiber_scheduler.c, which is exposed through the kernel library.
+///
+/// Each barrier call is followed by a jump to the 'Scheduler' block, which
+/// determines the next block for the newly scheduled workitem, and jumps
+/// there. The logic is very robust and does not require pre-modifications.
+bool addFiberExecution(llvm::Function &F, llvm::DominatorTree &DT,
+                       llvm::PostDominatorTree &PDT, llvm::LoopInfo &LI,
+                       VariableUniformityAnalysisResult &VUA);
+
 } // namespace pocl
 
 #endif

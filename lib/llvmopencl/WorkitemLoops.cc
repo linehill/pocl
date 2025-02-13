@@ -1317,7 +1317,7 @@ llvm::BasicBlock *WorkitemLoopsImpl::appendIncBlock(llvm::BasicBlock *After,
 bool addWorkItemLoops(llvm::Function &F, llvm::DominatorTree &DT,
                       llvm::PostDominatorTree &PDT, llvm::LoopInfo &LI,
                       VariableUniformityAnalysisResult &VUA) {
-  
+
   WorkitemLoopsImpl WIL(DT, LI, PDT, VUA);
 
   return WIL.runOnFunction(F);

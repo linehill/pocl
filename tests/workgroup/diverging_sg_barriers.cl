@@ -23,8 +23,7 @@
 
 #define SG_SIZE 4
 
-__attribute ((intel_reqd_sub_group_size(SG_SIZE)))
-__kernel void
+__attribute ((intel_reqd_sub_group_size (SG_SIZE))) __kernel void
 test_kernel (void)
 {
   int gid_x = get_global_id (0);
@@ -33,27 +32,28 @@ test_kernel (void)
 
   int sg_id = get_sub_group_id ();
   int sg_local_id = get_sub_group_local_id ();
-  
-  if (sg_id % 2 == 0) {
-    printf ("WI:(%d %d %d) SG:[%d %d] - at subgroup barrier 1\n",
-            gid_x, gid_y, gid_z, sg_id, sg_local_id);
 
-    sub_group_barrier (CLK_LOCAL_MEM_FENCE);
+  if (sg_id % 2 == 0)
+    {
+      printf ("WI:(%d %d %d) SG:[%d %d] - at subgroup barrier 1\n", gid_x,
+              gid_y, gid_z, sg_id, sg_local_id);
 
-    printf ("WI:(%d %d %d) SG:[%d %d] - after subgroup barrier 1\n",
-            gid_x, gid_y, gid_z, sg_id, sg_local_id);
+      sub_group_barrier (CLK_LOCAL_MEM_FENCE);
 
-    printf ("WI:(%d %d %d) SG:[%d %d] - at subgroup barrier 2\n",
-            gid_x, gid_y, gid_z, sg_id, sg_local_id);
+      printf ("WI:(%d %d %d) SG:[%d %d] - after subgroup barrier 1\n", gid_x,
+              gid_y, gid_z, sg_id, sg_local_id);
 
-    sub_group_barrier (CLK_LOCAL_MEM_FENCE);
+      printf ("WI:(%d %d %d) SG:[%d %d] - at subgroup barrier 2\n", gid_x,
+              gid_y, gid_z, sg_id, sg_local_id);
 
-    printf ("WI:(%d %d %d) SG:[%d %d] - after subgroup barrier 2\n",
-            gid_x, gid_y, gid_z, sg_id, sg_local_id);
+      sub_group_barrier (CLK_LOCAL_MEM_FENCE);
 
-  } else {
-    printf ("WI:(%d %d %d) SG:[%d %d] - avoided sg barrier\n",
-            gid_x, gid_y, gid_z, sg_id, sg_local_id);
-  }
-  
+      printf ("WI:(%d %d %d) SG:[%d %d] - after subgroup barrier 2\n", gid_x,
+              gid_y, gid_z, sg_id, sg_local_id);
+    }
+  else
+    {
+      printf ("WI:(%d %d %d) SG:[%d %d] - avoided sg barrier\n", gid_x, gid_y,
+              gid_z, sg_id, sg_local_id);
+    }
 }

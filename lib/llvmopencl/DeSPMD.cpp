@@ -40,6 +40,7 @@
 // LLVM prefers self-contained files for passes (even if they grow large).
 #include "BarrierTailReplication.h"
 #include "CanonicalizeBarriers.h"
+#include "Fiber.h"
 #include "ImplicitConditionalBarriers.h"
 #include "ImplicitLoopBarriers.h"
 #include "LLVMUtils.h"
@@ -47,7 +48,6 @@
 #include "WorkitemHandlerChooser.h"
 #include "PHIsToAllocas.h"
 #include "WorkitemLoops.h"
-#include "Fiber.h"
 
 // TODO: recheck if we can reuse an existing analysis from LLVM:
 #include "VariableUniformityAnalysis.h"
@@ -119,7 +119,7 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
   Changed = addLoopConstructIsolationBarriers(F, LI, VUA, DT) || Changed;
   REFRESH_LOOP_INFO();
 
-  if (WIH != WorkitemHandlerType::FIBER){
+  if (WIH != WorkitemHandlerType::FIBER) {
     Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
     REFRESH_LOOP_INFO();
   }
@@ -132,7 +132,7 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
 
   // Run implicit conditional barriers again since BTR might have added new
   // conditional barrier cases that must be handled.
-  if (WIH != WorkitemHandlerType::FIBER){
+  if (WIH != WorkitemHandlerType::FIBER) {
     Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
     REFRESH_LOOP_INFO();
   }
@@ -144,7 +144,7 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
     Changed = addWorkItemLoops(F, DT, PDT, LI, VUA) || Changed;
 
   if (WIH == WorkitemHandlerType::FIBER)
-    Changed = addFiber(F, DT, PDT, LI, VUA) || Changed;
+    Changed = addFiberExecution(F, DT, PDT, LI, VUA) || Changed;
 
   return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }

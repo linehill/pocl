@@ -111,6 +111,9 @@ private:
 // Controls the debug output from WorkitemLoops.cc parallel region generation.
 //#define DEBUG_WORK_ITEM_LOOPS
 
+// Controls the debug output from Fiber.cc.
+// #define DEBUG_FIBER
+
 // Enable CFG dumps from various spots during the kernel compilation.
 //#define POCL_KERNEL_COMPILER_DUMP_CFGS
 

@@ -39,110 +39,90 @@
 
 namespace pocl {
 
-  // Base class for work-group and sub-group barrier instructions modelled as
-  // CallInstr.
-  // Barrier has been made base class due to introduction of explicit sub-group
-  // barriers. Previously sub-group barriers were treated like work-group
-  // barriers, which was a problem in the case of diverging subgroups.
-  // Now work-group/sub-group barriers both identify as "barrier" which allows
-  // passes to work as before. Additionally, fiber-pass can differentiate
-  // between the two types of barriers, which allows the correct handling
-  // of sub-groups.
-  class Barrier : public llvm::CallInst {
-  public:
-    // NOTE: Is this method still relevant? It's not used anywhere.
-    static void GetBarriers(llvm::SmallVectorImpl<Barrier *> &B,
-                            llvm::Module &M) {
-      // For work-group barriers.                      
-      llvm::Function *F = M.getFunction(WGBARRIER_FUNCTION_NAME);
-      if (F != NULL) {
-        for (llvm::Function::use_iterator I = F->use_begin(), E = F->use_end();
-             I != E; ++I)
-          B.push_back(llvm::cast<Barrier>(*I));
-      }
-      // For sub-group barriers.
-      llvm::Function *Fsg = M.getFunction(SGBARRIER_FUNCTION_NAME);
-      if (Fsg != NULL) {
-        for (llvm::Function::use_iterator I = Fsg->use_begin(),
-                                          E = Fsg->use_end();
-            I != E; ++I)
-          B.push_back(llvm::cast<Barrier>(*I));
-      }
-    }
-
-    static bool isLoopWithBarrier(llvm::Loop &L) {
-      for (llvm::Loop::block_iterator i = L.block_begin(), e = L.block_end();
-           i != e; ++i) {
-        for (llvm::BasicBlock::iterator j = (*i)->begin(), e = (*i)->end();
-             j != e; ++j) {
-          if (llvm::isa<Barrier>(j)) {
-            return true;
-          }
+/// The base class for work-group and sub-group barrier instructions
+/// modeled as CallInstr.
+///
+/// This is an abstraction of the subgroup/workgroup barrier and should
+/// not be instantiated. Workgroup and subgroup barriers both identify as
+/// Barrier, which allows common pass manipulations such as 'removeBarriers'.
+class Barrier : public llvm::CallInst {
+public:
+  static bool isLoopWithBarrier(llvm::Loop &L) {
+    for (llvm::Loop::block_iterator i = L.block_begin(), e = L.block_end();
+         i != e; ++i) {
+      for (llvm::BasicBlock::iterator j = (*i)->begin(), e = (*i)->end();
+           j != e; ++j) {
+        if (llvm::isa<Barrier>(j)) {
+          return true;
         }
       }
+    }
+    return false;
+  }
+
+  static bool classof(const Barrier *) { return true; }
+
+  // isa<Barrier> returns true for workgroup barrier and subgroup barrier.
+  static bool classof(const llvm::CallInst *C) {
+    return C->getCalledFunction() != NULL &&
+           (C->getCalledFunction()->getName() == WGBARRIER_FUNCTION_NAME ||
+            C->getCalledFunction()->getName() == SGBARRIER_FUNCTION_NAME);
+  }
+
+  static bool classof(const Instruction *I) {
+    return (llvm::isa<llvm::CallInst>(I) &&
+            classof(llvm::cast<llvm::CallInst>(I)));
+  }
+
+  static bool classof(const User *U) {
+    return (llvm::isa<Instruction>(U) &&
+            classof(llvm::cast<llvm::Instruction>(U)));
+  }
+
+  static bool classof(const Value *V) {
+    return (llvm::isa<User>(V) && classof(llvm::cast<llvm::User>(V)));
+  }
+
+  static bool hasOnlyBarrier(const llvm::BasicBlock *BB) {
+    return endsWithBarrier(BB) && BB->size() == 2;
+  }
+
+  static bool hasBarrier(const llvm::BasicBlock *BB) {
+    for (llvm::BasicBlock::const_iterator I = BB->begin(), E = BB->end();
+         I != E; ++I)
+      if (llvm::isa<Barrier>(I))
+        return true;
+    return false;
+  }
+
+  static Barrier *findInBasicBlock(llvm::BasicBlock *BB) {
+    for (llvm::BasicBlock::iterator I = BB->begin(), E = BB->end(); I != E;
+         ++I) {
+      if (llvm::isa<pocl::Barrier>(I))
+        return llvm::cast<pocl::Barrier>(I);
+    }
+    return nullptr;
+  }
+
+  // Returns true in case the given basic block starts with a barrier,
+  // that is, contains a branch instruction after possible PHI nodes.
+  static bool startsWithBarrier(const llvm::BasicBlock *BB) {
+    const llvm::Instruction *Inst = BB->getFirstNonPHI();
+    if (Inst == NULL)
       return false;
-    }
+    return llvm::isa<Barrier>(Inst);
+  }
 
-    static bool classof(const Barrier *) { return true; }
-    static bool classof(const llvm::CallInst *C) {
-      return C->getCalledFunction() != NULL &&
-        (C->getCalledFunction()->getName() == WGBARRIER_FUNCTION_NAME ||
-        C->getCalledFunction()->getName() == SGBARRIER_FUNCTION_NAME);
-    }
-    static bool classof(const Instruction *I) {
-      return (llvm::isa<llvm::CallInst>(I) &&
-              classof(llvm::cast<llvm::CallInst>(I)));
-    }
-    static bool classof(const User *U) {
-      return (llvm::isa<Instruction>(U) &&
-              classof(llvm::cast<llvm::Instruction>(U)));
-    }
-    static bool classof(const Value *V) {
-      return (llvm::isa<User>(V) &&
-              classof(llvm::cast<llvm::User>(V)));
-    }
-
-    static bool hasOnlyBarrier(const llvm::BasicBlock *BB) {
-      return endsWithBarrier(BB) && BB->size() == 2;
-    }
-
-    static bool hasBarrier(const llvm::BasicBlock *BB) {
-      for (llvm::BasicBlock::const_iterator I = BB->begin(), E = BB->end();
-           I != E; ++I)
-        if (llvm::isa<Barrier>(I))
-          return true;
+  // Returns true in case the given basic block ends with a barrier,
+  // that is, contains only a branch instruction after a barrier call.
+  static bool endsWithBarrier(const llvm::BasicBlock *BB) {
+    const llvm::Instruction *Inst = BB->getTerminator();
+    if (Inst == NULL)
       return false;
-    }
-
-    static Barrier *findInBasicBlock(llvm::BasicBlock *BB) {
-      for (llvm::BasicBlock::iterator I = BB->begin(), E = BB->end(); I != E;
-           ++I) {
-        if (llvm::isa<pocl::Barrier>(I))
-          return llvm::cast<pocl::Barrier>(I);
-      }
-      return nullptr;
-    }
-
-    // Returns true in case the given basic block starts with a barrier,
-    // that is, contains a branch instruction after possible PHI nodes.
-    static bool startsWithBarrier(const llvm::BasicBlock *BB) {
-      const llvm::Instruction *Inst = BB->getFirstNonPHI();
-      if (Inst == NULL)
-        return false;
-      return llvm::isa<Barrier>(Inst);
-    }
-
-    // Returns true in case the given basic block ends with a barrier,
-    // that is, contains only a branch instruction after a barrier call.
-    static bool endsWithBarrier(const llvm::BasicBlock *BB) {
-      const llvm::Instruction *Inst = BB->getTerminator();
-      if (Inst == NULL)
-        return false;
-      return BB->size() > 1 && Inst->getPrevNode() != NULL &&
-          llvm::isa<Barrier>(Inst->getPrevNode());
-    }
-  };
-
+    return BB->size() > 1 && Inst->getPrevNode() != NULL &&
+           llvm::isa<Barrier>(Inst->getPrevNode());
+  }
+};
 }
 
 #endif

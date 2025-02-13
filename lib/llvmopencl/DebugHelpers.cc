@@ -20,11 +20,10 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-#include <iostream>
 #include <fstream>
 #include <iostream>
-#include <sstream>
 #include <set>
+#include <sstream>
 
 #include "CompilerWarnings.h"
 IGNORE_COMPILER_WARNING("-Wunused-parameter")
@@ -39,9 +38,9 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 #include "Barrier.h"
+#include "DebugHelpers.h"
 #include "SubgroupBarrier.h"
 #include "WorkgroupBarrier.h"
-#include "DebugHelpers.h"
 
 #ifdef dumpCFG
 #undef dumpCFG
@@ -83,9 +82,9 @@ static void printBasicBlock(
   S << getDotBasicBlockID(B);
   S << "[shape=rect,style=";
   if (WorkgroupBarrier::hasWGBarrier(B) || isPureUniformBlock(B))
-    S << "dotted";
+      S << "dotted";
   else if (SubgroupBarrier::hasSGBarrier(B) || isPureUniformBlock(B))
-    S << "dashed";
+      S << "dashed";
   else
     S << "solid";
 
