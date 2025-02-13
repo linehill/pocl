@@ -28,13 +28,17 @@
 #include "config.h"
 
 #include "Kernel.h"
-
+#include "VariableUniformityAnalysis.h"
+#include "VariableUniformityAnalysisResult.hh"
+#include <iostream>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/PassManager.h>
 #include <llvm/Pass.h>
 #include <llvm/Support/CommandLine.h>
 
 namespace pocl {
+
+enum class WorkitemHandlerType;
 
 // Common base class for work-group function generators that includes
 // utility functionality.
@@ -44,8 +48,15 @@ public:
   void Initialize(pocl::Kernel *K);
 
 protected:
+  WorkitemHandlerType WIH;
+
+  using StrInstructionMap = std::map<std::string, llvm::AllocaInst *>;
+  using InstructionVec = std::vector<llvm::Instruction *>;
+  ParallelRegion::ParallelRegionVector OriginalParallelRegions;
+
   llvm::Instruction *getGlobalSize(int Dim);
   llvm::Instruction *getGlobalIdOrigin(int dim);
+
   void GenerateGlobalIdComputation();
 
   llvm::AllocaInst *createAlignedAndPaddedContextAlloca(
@@ -56,12 +67,32 @@ protected:
   // work-item index in the parallel region with the given \param Instr.
   // The Value should be reachable by the given \param Instr.
   virtual llvm::Value *getLinearWIIndexInRegion(llvm::Instruction *Instr) {
+    assert(false && "Derived class should not call getLinearWIIndexInRegion!");
     return nullptr;
   };
   virtual llvm::Instruction *getLocalIdInRegion(llvm::Instruction *Instr,
                                                 size_t Dim) {
     return nullptr;
   };
+
+  bool shouldNotBeContextSaved(llvm::Instruction *Instr,
+                               VariableUniformityAnalysisResult &VUA,
+                               WorkitemHandlerType WIH);
+  llvm::AllocaInst *getContextArray(llvm::Instruction *Inst,
+                                    bool &PoclWrapperStructAdded);
+  llvm::Value *getLinearWiIndex(llvm::IRBuilder<> &Builder, llvm::Module *M,
+                                ParallelRegion *Region,
+                                WorkitemHandlerType WIH);
+  llvm::Instruction *addContextSave(llvm::Instruction *Def,
+                                    llvm::AllocaInst *AllocaI,
+                                    ParallelRegion *Region);
+  llvm::Instruction *
+  addContextRestore(llvm::Value *Val, llvm::AllocaInst *AllocaI,
+                    llvm::Type *LoadInstType, bool PaddingWasAdded,
+                    llvm::Instruction *Before = nullptr, bool IsAlloca = false);
+  ParallelRegion *regionOfBlock(llvm::BasicBlock *BB);
+
+  void addContextSaveRestore(llvm::Instruction *Instruction, llvm::LoopInfo &LI);
 
   llvm::GetElementPtrInst *
   createContextArrayGEP(llvm::AllocaInst *CtxArrayAlloca,
@@ -75,6 +106,10 @@ protected:
   bool handleWorkitemFunctions();
 
   llvm::Instruction *getWorkGroupSizeInstr();
+
+  llvm::Value *tryToRematerialize(llvm::Instruction *Before, llvm::Value *Def,
+    std::string NamePrefix,
+    bool *CanDoIt = nullptr, int *Depth = 0);
 
   // The type of size_t for the current target.
   llvm::Type *ST;
@@ -126,6 +161,10 @@ protected:
   unsigned long WGLocalSizeY;
   unsigned long WGLocalSizeZ;
   unsigned long WGMaxGridDimWidth;
+
+  std::map<llvm::Instruction *, unsigned> TempInstructionIds;
+  size_t TempInstructionIndex;
+  StrInstructionMap ContextArrays;
 };
 
 }

@@ -111,8 +111,9 @@ protected:
 private:
   using BasicBlockVector = std::vector<llvm::BasicBlock *>;
   using InstructionIndex = std::set<llvm::Instruction *>;
-  using InstructionVec = std::vector<llvm::Instruction *>;
   using StrInstructionMap = std::map<std::string, llvm::AllocaInst *>;
+
+  WorkitemHandlerType WIH;
 
   llvm::DominatorTree &DT;
   llvm::LoopInfo &LI;
@@ -121,10 +122,6 @@ private:
   llvm::Function *F;
 
   VariableUniformityAnalysisResult &VUA;
-
-  ParallelRegion::ParallelRegionVector OriginalParallelRegions;
-
-  StrInstructionMap ContextArrays;
 
   // Temporary global_id_* iteration variables updated by the work-item
   // loops.
@@ -135,25 +132,12 @@ private:
   bool foldTrivialAllocas();
   bool localizePrivateVariables();
   bool fixMultiRegionVariables();
-  void addContextSaveRestore(llvm::Instruction *Instruction);
   void releaseParallelRegions();
 
   // Returns an instruction in the entry block which computes the
   // total size of work-items in the work-group. If it doesn't
   // exist, creates it to the end of the entry block.
   llvm::Instruction *getWorkGroupSizeInstr(llvm::Function &F);
-
-  llvm::Value *getLinearWiIndex(llvm::IRBuilder<> &Builder, llvm::Module *M,
-                                ParallelRegion *Region);
-  llvm::Instruction *addContextSave(llvm::Instruction *Def,
-                                    llvm::AllocaInst *AllocaI);
-
-  llvm::Instruction *
-  addContextRestore(llvm::Value *Val, llvm::AllocaInst *AllocaI,
-                    llvm::Type *LoadInstType, bool PaddingWasAdded,
-                    llvm::Instruction *Before = nullptr, bool IsAlloca = false);
-  llvm::AllocaInst *getContextArray(llvm::Instruction *Inst,
-                                    bool &PoclWrapperStructAdded);
 
   std::pair<llvm::BasicBlock *, llvm::BasicBlock *>
   createLoopAround(ParallelRegion &Region, llvm::BasicBlock *EntryBB,
@@ -164,23 +148,18 @@ private:
                                    llvm::BasicBlock *Before = nullptr,
                                    const std::string &BBName = "");
 
-  ParallelRegion *regionOfBlock(llvm::BasicBlock *BB);
-
-  bool shouldNotBeContextSaved(llvm::Instruction *Instr);
-
   llvm::Type *recursivelyAlignArrayType(llvm::Type *ArrayType,
                                         llvm::Type *ElementType,
                                         size_t Alignment,
                                         const llvm::DataLayout &Layout);
-
-  std::map<llvm::Instruction *, unsigned> TempInstructionIds;
-  size_t TempInstructionIndex;
 };
 
 bool WorkitemLoopsImpl::runOnFunction(Function &Func) {
 
   M = Func.getParent();
   F = &Func;
+
+  WIH = getWorkitemHandler();
 
   Initialize(cast<Kernel>(&Func));
 
@@ -344,18 +323,6 @@ WorkitemLoopsImpl::createLoopAround(ParallelRegion &Region,
   Builder.CreateBr(OldExit);
 
   return std::make_pair(ForInitBB, LoopEndBB);
-}
-
-ParallelRegion *WorkitemLoopsImpl::regionOfBlock(llvm::BasicBlock *BB) {
-  for (ParallelRegion::ParallelRegionVector::iterator
-           PRI = OriginalParallelRegions.begin(),
-           PRE = OriginalParallelRegions.end();
-       PRI != PRE; ++PRI) {
-    ParallelRegion *PRegion = (*PRI);
-    if (PRegion->hasBlock(BB))
-      return PRegion;
-  }
-  return nullptr;
 }
 
 void WorkitemLoopsImpl::releaseParallelRegions() {
@@ -699,7 +666,7 @@ bool WorkitemLoopsImpl::fixMultiRegionVariables() {
 
         llvm::Instruction *Instr = &*I;
 
-        if (shouldNotBeContextSaved(&*Instr))
+        if (shouldNotBeContextSaved(&*Instr, VUA, WIH))
           continue;
 
         for (Instruction::use_iterator UI = Instr->use_begin(),
@@ -729,51 +696,12 @@ bool WorkitemLoopsImpl::fixMultiRegionVariables() {
   return ValuesToContextSave.size() > 0;
 }
 
-// TO CLEAN: Refactor into getLinearWIIndexInRegion.
-llvm::Value *WorkitemLoopsImpl::getLinearWiIndex(llvm::IRBuilder<> &Builder,
-                                                 llvm::Module *M,
-                                                 ParallelRegion *Region) {
-  GlobalVariable *LocalSizeXPtr =
-      cast<GlobalVariable>(M->getOrInsertGlobal("_local_size_x", ST));
-  GlobalVariable *LocalSizeYPtr =
-      cast<GlobalVariable>(M->getOrInsertGlobal("_local_size_y", ST));
-
-  assert(LocalSizeXPtr != NULL && LocalSizeYPtr != NULL);
-
-  LoadInst *LoadX = Builder.CreateLoad(ST, LocalSizeXPtr, "ls_x");
-  LoadInst *LoadY = Builder.CreateLoad(ST, LocalSizeYPtr, "ls_y");
-
-  /* Form linear index from xyz coordinates:
-       local_size_x * local_size_y * local_id_z  (z dimension)
-     + local_size_x * local_id_y                 (y dimension)
-     + local_id_x                                (x dimension)
-  */
-  Value* LocalSizeXTimesY =
-    Builder.CreateBinOp(Instruction::Mul, LoadX, LoadY, "ls_xy");
-
-  Value *ZPart =
-      Builder.CreateBinOp(Instruction::Mul, LocalSizeXTimesY,
-                          Region->getOrCreateIDLoad(LID_G_NAME(2)), "tmp");
-
-  Value *YPart =
-      Builder.CreateBinOp(Instruction::Mul, LoadX,
-                          Region->getOrCreateIDLoad(LID_G_NAME(1)), "ls_x_y");
-
-  Value* ZYSum =
-    Builder.CreateBinOp(Instruction::Add, ZPart, YPart,
-                        "zy_sum");
-
-  return Builder.CreateBinOp(Instruction::Add, ZYSum,
-                             Region->getOrCreateIDLoad(LID_G_NAME(0)),
-                             "linear_xyz_idx");
-}
-
 llvm::Value *
 WorkitemLoopsImpl::getLinearWIIndexInRegion(llvm::Instruction *Instr) {
   ParallelRegion *ParRegion = regionOfBlock(Instr->getParent());
   assert(ParRegion != nullptr);
   IRBuilder<> Builder(Instr);
-  return getLinearWiIndex(Builder, M, ParRegion);
+  return getLinearWiIndex(Builder, M, ParRegion, WIH);
 }
 
 llvm::Instruction *
@@ -784,72 +712,6 @@ WorkitemLoopsImpl::getLocalIdInRegion(llvm::Instruction *Instr, size_t Dim) {
   }
   IRBuilder<> Builder(Instr);
   return Builder.CreateLoad(ST, LocalIdGlobals[Dim]);
-}
-
-/// Adds a value store to the context array after the given defining
-/// instruction.
-///
-/// \param Def The instruction that defines the original value.
-/// \param AllocaI The alloca created for for the context array.
-llvm::Instruction *
-WorkitemLoopsImpl::addContextSave(llvm::Instruction *Def,
-                                  llvm::AllocaInst *AllocaI) {
-
-  if (isa<AllocaInst>(Def)) {
-    // If the variable to be context saved is itself an alloca, we have created
-    // one big alloca that stores the data of all the work-items and return
-    // pointers to that array. Thus, we need no initialization code other than
-    // the context data alloca itself.
-    return NULL;
-  }
-
-  /* Save the produced variable to the array. */
-  BasicBlock::iterator Definition = (dyn_cast<Instruction>(Def))->getIterator();
-  ++Definition;
-  while (isa<PHINode>(Definition))
-    ++Definition;
-
-  // TO CLEAN: Refactor by calling CreateContextArrayGEP.
-  IRBuilder<> Builder(&*Definition);
-  std::vector<llvm::Value *> GepArgs;
-
-  /* Reuse the id loads earlier in the region, if possible, to
-     avoid messy output with lots of redundant loads. */
-  ParallelRegion *Region = regionOfBlock(Def->getParent());
-  assert("Adding context save outside any region produces illegal code." &&
-         Region != NULL);
-
-  if (WGDynamicLocalSize) {
-    Module *M = AllocaI->getParent()->getParent()->getParent();
-    GepArgs.push_back(getLinearWiIndex(Builder, M, Region));
-  } else {
-    GepArgs.push_back(ConstantInt::get(ST, 0));
-    GepArgs.push_back(Region->getOrCreateIDLoad(LID_G_NAME(2)));
-    GepArgs.push_back(Region->getOrCreateIDLoad(LID_G_NAME(1)));
-    GepArgs.push_back(Region->getOrCreateIDLoad(LID_G_NAME(0)));
-  }
-
-  return Builder.CreateStore(
-      Def,
-      builder.CreateGEP(AllocaI->getAllocatedType(), AllocaI, gepArgs));
-}
-
-llvm::Instruction *WorkitemLoopsImpl::addContextRestore(
-    llvm::Value *Val, llvm::AllocaInst *AllocaI, llvm::Type *LoadInstType,
-    bool PaddingWasAdded, llvm::Instruction *Before, bool IsAlloca) {
-
-  assert(Before != nullptr);
-
-  llvm::Instruction *GEP =
-      createContextArrayGEP(AllocaI, Before, PaddingWasAdded);
-  if (IsAlloca) {
-    // In case the context saved instruction was an alloca, we created a
-    // context array with pointed-to elements, and now want to return a
-    // pointer to the elements to emulate the original alloca.
-    return GEP;
-  }
-  IRBuilder<> Builder(Before);
-  return Builder.CreateLoad(LoadInstType, GEP);
 }
 
 /// Returns the context array (alloca) for the given \param Inst, creates it if
@@ -886,386 +748,6 @@ llvm::AllocaInst *WorkitemLoopsImpl::getContextArray(llvm::Instruction *Inst,
   BasicBlock &Entry = K->getEntryBlock();
   return ContextArrays[CArrayName] = createAlignedAndPaddedContextAlloca(
              Inst, &*(Entry.getFirstInsertionPt()), CArrayName, PaddingAdded);
-}
-
-/// Tries to rematerialize the given value-defining instruction.
-///
-/// Rematerialization in this context means recomputing the value produced
-/// in the use site instead of storing and loading a once-computed variable
-/// from the context.
-///
-/// \param Before the instruction before which the cloned instructions should
-/// be added. Can be nullptr if only testing for rematerialization-ability.
-/// \param Def is the produced value to attempt to clone recursively.
-/// \param NamePrefix a prefix string to add to the name of the cloned
-/// instructions.
-/// \param CanDoIt can be set to a true-initialized boolean in which case the
-/// cloning is not actually done, but only its possibility is investigated.
-/// \param Depth the recursion depth. Used to limit rematerialization size.
-/// \return The rematerialized instruction if possible and beneficial.
-static llvm::Value *tryToRematerialize(llvm::Instruction *Before,
-                                       llvm::Value *Def,
-                                       const std::string &NamePrefix,
-                                       bool *CanDoIt = nullptr,
-                                       int *Depth = 0) {
-
-  auto DbgRemat = [=](const std::string &Reason) {
-    LLVM_DEBUG(dbgs() << "##### " << Reason << "\n");
-    LLVM_DEBUG(Def->dump());
-  };
-
-#define UNABLE_TO_REMAT(REASON)                                                \
-  do {                                                                         \
-    DbgRemat("cannot remat: " REASON);                                         \
-    if (CanDoIt != nullptr)                                                    \
-      *CanDoIt = false;                                                        \
-    return nullptr;                                                            \
-  } while (0)
-
-#define ABLE_TO_REMAT()                                                        \
-  do {                                                                         \
-    if (CanDoIt != nullptr)                                                    \
-      return nullptr;                                                          \
-  } while (0)
-
-  // A call without arguments: Setup a pre-check before cloning to see if we
-  // can succeed.
-  if (CanDoIt == nullptr && Depth == nullptr) {
-    bool Able = true;
-    int Depth = 0;
-    tryToRematerialize(Before, Def, NamePrefix, &Able, &Depth);
-    if (!Able)
-      return nullptr;
-    Depth = 0;
-    return tryToRematerialize(Before, Def, NamePrefix, nullptr, &Depth);
-  }
-
-  // Limit the height of the cloned instruction tree to avoid counter-
-  // productive rematerialization.
-  if (Depth != nullptr && *Depth > 10)
-    UNABLE_TO_REMAT("too deep");
-
-  if (llvm::CallInst *Call = dyn_cast<CallInst>(Def)) {
-    auto *Callee = Call->getCalledFunction();
-    if (Callee == nullptr || (Callee->getName() != GID_BUILTIN_NAME &&
-                              Callee->getName() != GS_BUILTIN_NAME &&
-                              Callee->getName() != GROUP_ID_BUILTIN_NAME &&
-                              Callee->getName() != LID_BUILTIN_NAME &&
-                              Callee->getName() != LS_BUILTIN_NAME)) {
-      UNABLE_TO_REMAT("called an unsupported function");
-    }
-  } else if (isa<Constant>(Def) || isa<Argument>(Def)) {
-    ABLE_TO_REMAT();
-    // No need to clone a constant or function argument, we can refer to the
-    // original directly.
-    return Def;
-  } else if (isa<AllocaInst>(Def) &&
-             !isPureUniformBlock(dyn_cast<AllocaInst>(Def)->getParent())) {
-    // The allocas in the pure uniform entry block can be referred to without
-    // rematerialization. But other than that we do not yet handle recursive
-    // alloca references. Should be an easy and valuable low hanging fruit.
-    UNABLE_TO_REMAT("accesses another alloca that we cannot remat");
-  }
-
-  llvm::Instruction *Inst = dyn_cast<Instruction>(Def);
-  if (Inst == nullptr)
-    UNABLE_TO_REMAT("unsupported value type");
-
-  if (Inst->mayWriteToMemory() || Inst->mayHaveSideEffects())
-    UNABLE_TO_REMAT("has side-effects");
-
-  if (Depth != nullptr)
-    (*Depth)++;
-
-  // If we end up referring to instructions in pure uniform blocks (at
-  // least work group allocas are such), let's stop the cloning there
-  // and refer to the original.
-  if (isPureUniformBlock(Inst->getParent()))
-    return Inst;
-
-  llvm::Instruction *Copy = CanDoIt == nullptr ? Inst->clone() : nullptr;
-  if (Copy != nullptr) {
-    Copy->setName(NamePrefix + ".remat");
-    Copy->insertBefore(Inst2InsertPt(Before));
-  }
-  for (unsigned I = 0; I < Inst->getNumOperands(); ++I) {
-    llvm::Value *ClonedArg = tryToRematerialize(Copy, Inst->getOperand(I),
-                                                NamePrefix, CanDoIt, Depth);
-    if (CanDoIt == nullptr)
-      Copy->setOperand(I, ClonedArg);
-    else if (!CanDoIt)
-      return nullptr;
-  }
-  return Copy;
-}
-
-/// Adds context save/restore code for the value produced by the given
-/// instruction.
-///
-/// First try to rematerialize the value instead of storing it to memory.
-/// \todo Refactor to subfunctions one of which handles AllocaInsts and another
-/// for the rest.
-void WorkitemLoopsImpl::addContextSaveRestore(llvm::Instruction *Def) {
-
-  InstructionVec Uses;
-  // Restore the produced variable before each use to ensure the correct
-  // context copy is used.
-
-  bool RematCandidate = pocl_get_bool_option("POCL_PREGION_VALUE_REMAT", true);
-
-  // In case of a rematerialized alloca with only a single store, this will have
-  // the store that initializes it.
-  StoreInst *InitializerStore = nullptr;
-  size_t Stores = 0;
-  ParallelRegion *PrevStoreRegion = nullptr;
-
-  // Find out the uses to fix first as fixing them invalidates the iterator.
-  for (Instruction::use_iterator UI = Def->use_begin(), UE = Def->use_end();
-       UI != UE; ++UI) {
-
-    llvm::Instruction *User = cast<Instruction>(UI->getUser());
-    if (User == NULL)
-      continue;
-
-    ParallelRegion *PRegion = regionOfBlock(User->getParent());
-
-    if (StoreInst *ST = dyn_cast<StoreInst>(User)) {
-      // Stores of undefined values need not to be counted as actual stores
-      // since what we read from that location after that is undefined,
-      // thus could be as well the defined value of the another store.
-      if (isa<UndefValue>(ST->getValueOperand()))
-        continue;
-
-      Stores++;
-
-      // Another corner case to consider here is the case when an alloca
-      // is written inside a conditional block which could be even inside
-      // a diverging BB. The first intuition in that case would be to not
-      // allow rematerialization since we generally don't know at compile
-      // time if the branch is taken or not. However, when it comes to
-      // undefined behavior, reads from uninitialized allocas produce undefined,
-      // values, meaning that it should be fine to recompute the value
-      // unconditionally at its use location, as long as the rematerialized
-      // instructions are safe to execute speculatively: The value in the
-      // conditional is just one possible value in the set of possible values
-      // case the branch was not taken.
-      if (Stores == 1) {
-        InitializerStore = ST;
-      } else {
-        InitializerStore = nullptr;
-        RematCandidate = false;
-        LLVM_DEBUG(dbgs() << "Multiple stores\n");
-        LLVM_DEBUG(User->dump());
-      }
-      if (PrevStoreRegion == nullptr) {
-        PrevStoreRegion = PRegion;
-      } else if (PrevStoreRegion != PRegion) {
-        RematCandidate = false;
-        LLVM_DEBUG(dbgs() << "Stores from multiple regions\n");
-        LLVM_DEBUG(User->dump());
-      }
-      if (LI.getLoopFor(ST->getParent()) != nullptr) {
-        RematCandidate = false;
-        LLVM_DEBUG(dbgs() << "Stores inside a loop\n");
-        LLVM_DEBUG(User->dump());
-      }
-    }
-
-    // If the user is in a block that doesn't belong to a region, the variable
-    // itself must be a "work group variable", that is, not dependent on the
-    // work item. Most likely an iteration variable of a for loop with a
-    // barrier.
-    if (PRegion == nullptr) {
-      LLVM_DEBUG(dbgs() << "User in a pure uniform block?\n");
-      LLVM_DEBUG(User->dump());
-      continue;
-    }
-
-    if (isa<CallInst>(User)) {
-      if (!User->isLifetimeStartOrEnd()) {
-        RematCandidate = false;
-        LLVM_DEBUG(dbgs() << "Using in an unknown call\n");
-        LLVM_DEBUG(User->dump());
-      }
-    } else if (llvm::AllocaInst *Alloca = dyn_cast<AllocaInst>(Def)) {
-      if (!isa<StoreInst>(User) && !isa<LoadInst>(User)) {
-        RematCandidate = false;
-        LLVM_DEBUG(dbgs() << "Taking address of the alloca?\n");
-        LLVM_DEBUG(User->dump());
-      } else {
-        // If we perform reinterpret casts, let's not rematerialize as it might
-        // require to store the value temporarily to stack.
-        if ((isa<LoadInst>(User) &&
-             User->getType() != Alloca->getAllocatedType()) ||
-            (isa<StoreInst>(User) &&
-             User->getOperand(0)->getType() != Alloca->getAllocatedType())) {
-          LLVM_DEBUG(dbgs() << "Found a user with a different pointee type\n");
-          LLVM_DEBUG(User->dump());
-          LLVM_DEBUG(Def->dump());
-          RematCandidate = false;
-        }
-      }
-    }
-    Uses.push_back(User);
-  }
-
-  if (RematCandidate && isa<AllocaInst>(Def)) {
-    bool CanRemat = true;
-    int Depth = 0;
-    tryToRematerialize(nullptr, InitializerStore->getValueOperand(), "",
-                       &CanRemat, &Depth);
-
-    if (!CanRemat) {
-      LLVM_DEBUG(dbgs() << "Cannot remat the initializer.\n");
-      LLVM_DEBUG(InitializerStore->getValueOperand());
-      RematCandidate = false;
-    }
-  }
-
-  // Used for tracking the alloca load the instruction refers to.
-  std::map<Instruction *, Instruction *> OrigAllocaLoads;
-  if (RematCandidate && isa<AllocaInst>(Def)) {
-    // When rematerializing an Alloca, rematerialize the users of all loads
-    // from the alloca to ensure the values will be resurrected in correct PRs.
-    InstructionVec AllocaContentUses;
-
-    for (Instruction *User : Uses) {
-      auto *Load = dyn_cast<LoadInst>(User);
-      if (Load == nullptr)
-        continue;
-
-      for (Use &LU : Load->uses()) {
-
-        llvm::Instruction *LoadResUser = cast<Instruction>(LU.getUser());
-        if (LoadResUser == NULL)
-          continue;
-
-        LLVM_DEBUG(dbgs() << "Remat at the load result usage.\n");
-        LLVM_DEBUG(LoadResUser->dump());
-        AllocaContentUses.push_back(LoadResUser);
-        OrigAllocaLoads[LoadResUser] = Load;
-      }
-      continue;
-    }
-    Uses = AllocaContentUses;
-  }
-
-  llvm::AllocaInst *ContextArrayAlloca = nullptr;
-  bool PaddingAdded = false;
-
-  for (Instruction *UserI : Uses) {
-    Instruction *ContextRestoreLocation = UserI;
-
-    // We break down the PHIs, shouldn't see them here.
-    assert(!isa<PHINode>(UserI));
-
-    llvm::Value *RematerializedValue = nullptr;
-    if (RematCandidate) {
-      if (isa<AllocaInst>(Def)) {
-        LLVM_DEBUG(dbgs() << "Rematerializing an alloca use which has a single "
-                             "initializer store.\n");
-        LLVM_DEBUG(dbgs() << "     Alloca:"; Def->dump());
-        LLVM_DEBUG(dbgs() << "Initializer:"; InitializerStore->dump());
-        LLVM_DEBUG(dbgs() << "        Use:"; UserI->dump());
-        RematerializedValue = tryToRematerialize(
-            ContextRestoreLocation, InitializerStore->getValueOperand(),
-            Def->getName().str());
-        assert(RematerializedValue != nullptr);
-      } else {
-        RematerializedValue = tryToRematerialize(ContextRestoreLocation, Def,
-                                                 Def->getName().str());
-      }
-    }
-
-    if (RematerializedValue != nullptr) {
-      LLVM_DEBUG(dbgs() << "Successful rematerialization:\n");
-      LLVM_DEBUG(Def->dump());
-      LLVM_DEBUG(RematerializedValue->dump());
-
-      if (isa<AllocaInst>(Def)) {
-        if (StoreInst *Store = dyn_cast<StoreInst>(UserI)) {
-          // The original store could be left intact, but then we'd need to
-          // figure out the materialization-ability beforehand.
-          Store->setOperand(0, RematerializedValue);
-        } else if (UserI->isLifetimeStartOrEnd()) {
-          // We can leave the original lifetime marker for the alloca as is.
-        } else {
-          // We can get rid of the alloca load altogether and use the
-          // rematerialized value directly. Replace the uses of the original
-          // load value with the particular rematerialized one.
-          UserI->replaceUsesOfWith(OrigAllocaLoads[UserI], RematerializedValue);
-          LLVM_DEBUG(dbgs()
-                     << "Alloca load's use was converted to a remat value:\n");
-          LLVM_DEBUG(UserI->dump());
-          LLVM_DEBUG(RematerializedValue->dump());
-        }
-      } else {
-        UserI->replaceUsesOfWith(Def, RematerializedValue);
-        LLVM_DEBUG(dbgs() << "The user was converted to a remat value:\n");
-        LLVM_DEBUG(UserI->dump());
-      }
-    } else {
-      // Unable to rematerialize the value.
-      // Allocate a context data array for the variable.
-      if (ContextArrayAlloca == nullptr) {
-        ContextArrayAlloca = getContextArray(Def, PaddingAdded);
-        addContextSave(Def, ContextArrayAlloca);
-      }
-
-      llvm::Value *ContextArrayLoad = addContextRestore(
-          UserI, ContextArrayAlloca, Def->getType(), PaddingAdded,
-          ContextRestoreLocation, isa<AllocaInst>(Def));
-
-      UserI->replaceUsesOfWith(Def, ContextArrayLoad);
-
-      LLVM_DEBUG(dbgs() << "the user was converted to a context load:\n");
-      LLVM_DEBUG(UserI->dump());
-    }
-  }
-}
-
-bool WorkitemLoopsImpl::shouldNotBeContextSaved(llvm::Instruction *Instr) {
-
-  if (isa<BranchInst>(Instr)) return true;
-
-  if (AllocaInst *Alloca = dyn_cast<AllocaInst>(Instr)) {
-    // Some of the variables such as B-loop iterators must not be
-    // replicated for correctness.
-    if (VUA.isPureUniformAlloca(Alloca))
-      return true;
-  }
-
-  // Generated id loads should not be replicated as it leads to problems in
-  // conditional branch case where the header node of the region is shared
-  // across the peeled branches and thus the header node's ID loads might get
-  // context saved which leads to egg-chicken problems.
-  auto *Load = dyn_cast<llvm::LoadInst>(Instr);
-  if (Load != NULL && (Load->getPointerOperand() == LocalIdGlobals[0] ||
-                       Load->getPointerOperand() == LocalIdGlobals[1] ||
-                       Load->getPointerOperand() == LocalIdGlobals[2] ||
-                       Load->getPointerOperand() == GlobalIdGlobals[0] ||
-                       Load->getPointerOperand() == GlobalIdGlobals[1] ||
-                       Load->getPointerOperand() == GlobalIdGlobals[2]))
-    return true;
-
-  // In case of uniform variables (same value for all work-items), there is no
-  // point to create a context array slot for them, but just use the original
-  // value everywhere.
-
-  // Allocas are problematic since they include the de-phi induction variables
-  // of the b-loops. In those case each work item has a separate loop iteration
-  // variable in LLVM IR but which is really a parallel region loop invariant.
-  // But because we cannot separate such loop invariant variables at this point
-  // sensibly, let's just replicate the iteration variable to each work item
-  // and hope the latter optimizations reduce them back to a single induction
-  // variable outside the parallel loop.
-  if (!VUA.shouldBePrivatized(Instr->getParent()->getParent(), Instr)) {
-    LLVM_DEBUG(dbgs() << "Based on VUA, not context saving:\n");
-    LLVM_DEBUG(Instr->dump());
-    return true;
-  }
-
-  return false;
 }
 
 /// Appends a local id loop incrementing basic block.

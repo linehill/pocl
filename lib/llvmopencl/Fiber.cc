@@ -46,13 +46,12 @@ using namespace llvm;
 class FiberImpl : public pocl::WorkitemHandler {
 
 public:
-  FiberImpl(llvm::DominatorTree &DT, VariableUniformityAnalysisResult &VUA)
-      : WorkitemHandler(), DT(DT), VUA(VUA) {}
+  FiberImpl(llvm::DominatorTree &DT, VariableUniformityAnalysisResult &VUA, llvm::LoopInfo &LI)
+      : WorkitemHandler(), DT(DT), VUA(VUA), LI(LI) {}
 
   virtual bool runOnFunction(llvm::Function &F);
 
 protected:
-  llvm::Value *getLinearWIIndexInRegion(llvm::Instruction *Instr) override;
   llvm::Instruction *getLocalIdInRegion(llvm::Instruction *Instr,
                                         size_t Dim) override;
 
@@ -61,9 +60,12 @@ private:
   using InstructionVec = std::vector<llvm::Instruction *>;
   using StrInstructionMap = std::map<std::string, llvm::AllocaInst *>;
 
+  WorkitemHandlerType WIH;
+
   llvm::Module *M;
   llvm::Function *F;
   llvm::DominatorTree &DT;
+  llvm::LoopInfo &LI;
   VariableUniformityAnalysisResult &VUA;
 
   StrInstructionMap ContextArrays;
@@ -79,200 +81,38 @@ private:
 
   std::map<llvm::Instruction *, unsigned> TempInstructionIds;
 
-  std::vector<llvm::Instruction *> ContextVars;
   std::vector<llvm::AllocaInst *> ContextAllocas;
 
-  void identifyContextVars();
+  void handleWIContextVariables();
 
   llvm::AllocaInst *allocateStorage(llvm::IRBuilder<> &Builder,
                                     std::string VarName, llvm::Value *Nwi);
 
   llvm::Value *getNumberOfWIs(llvm::IRBuilder<> &Builder);
 
-  llvm::AllocaInst *getContextArray(llvm::Instruction *Inst,
-                                    bool &PoclWrapperStructAdded);
-
-  void addContextSaveRestore(llvm::Instruction *Instruction);
-
-  llvm::Instruction *addContextSave(llvm::Instruction *Def,
-                                    llvm::AllocaInst *AllocaI);
-
-  llvm::Instruction *
-  addContextRestore(llvm::Value *Val, llvm::AllocaInst *AllocaI,
-                    llvm::Type *LoadInstType, bool PaddingWasAdded,
-                    llvm::Instruction *Before = nullptr, bool IsAlloca = false);
+  /* void addContextSaveRestore(llvm::Instruction *Instruction); */
 
   void initializeLocalIds(llvm::BasicBlock *Entry, llvm::IRBuilder<> *Builder);
 
   void initializeGlobalIterators();
 };
 
-llvm::Instruction *
-FiberImpl::addContextRestore(llvm::Value *Val, llvm::AllocaInst *AllocaI,
-                             llvm::Type *LoadInstType, bool PaddingWasAdded,
-                             llvm::Instruction *Before, bool IsAlloca) {
+/// Handles context save/restore of workitem variables.
+///
+/// Uses WorkitemHandlers functionality to identify variables that should be
+/// context saved. In addition, checks that variable candidate has users,
+/// and that the user is not in the same block.
+void FiberImpl::handleWIContextVariables() {
 
-  assert(Before != nullptr);
+  InstructionVec ValuesToContextSave;
 
-  llvm::Instruction *GEP =
-      createContextArrayGEP(AllocaI, Before, PaddingWasAdded);
-  if (IsAlloca) {
-    return GEP;
-  }
-  llvm::IRBuilder<> Builder(Before);
-  return Builder.CreateLoad(LoadInstType, GEP);
-}
+  WorkitemHandlerType WIH = getWorkitemHandler();
 
-llvm::Instruction *FiberImpl::addContextSave(llvm::Instruction *Def,
-                                             llvm::AllocaInst *AllocaI) {
-
-  if (llvm::isa<llvm::AllocaInst>(Def)) {
-    return NULL;
-  }
-
-  /* Save the produced variable to the array. */
-  llvm::BasicBlock::iterator Definition =
-      (llvm::dyn_cast<llvm::Instruction>(Def))->getIterator();
-  ++Definition;
-  while (llvm::isa<llvm::PHINode>(Definition))
-    ++Definition;
-
-  llvm::IRBuilder<> Builder(&*Definition);
-  std::vector<llvm::Value *> GepArgs;
-
-  if (WGDynamicLocalSize) {
-    GepArgs.push_back(getLinearWIIndexInRegion(Def));
-  } else {
-    llvm::Value *LocalX = Builder.CreateLoad(ST, LocalIdIterators[0], "LocalX");
-    llvm::Value *LocalY = Builder.CreateLoad(ST, LocalIdIterators[1], "LocalY");
-    llvm::Value *LocalZ = Builder.CreateLoad(ST, LocalIdIterators[2], "LocalZ");
-    GepArgs.push_back(llvm::ConstantInt::get(ST, 0));
-    GepArgs.push_back(LocalZ);
-    GepArgs.push_back(LocalY);
-    GepArgs.push_back(LocalX);
-  }
-  return Builder.CreateStore(
-      Def,
-#if LLVM_MAJOR < 15
-      Builder.CreateGEP(AllocaI->getType()->getPointerElementType(), AllocaI,
-                        gepArgs));
-#else
-      Builder.CreateGEP(AllocaI->getAllocatedType(), AllocaI, GepArgs));
-#endif
-}
-
-// This is slightly modified version of context save from WIloops.
-void FiberImpl::addContextSaveRestore(llvm::Instruction *Def) {
-
-  // Allocate the context data array for the variable.
-  bool PaddingAdded = false;
-  llvm::AllocaInst *Alloca = getContextArray(Def, PaddingAdded);
-  llvm::Instruction *TheStore = addContextSave(Def, Alloca);
-
-  InstructionVec Uses;
-
-  // Find out the uses to fix first as fixing them invalidates the iterator.
-  for (llvm::Instruction::use_iterator UI = Def->use_begin(),
-                                       UE = Def->use_end();
-       UI != UE; ++UI) {
-    llvm::Instruction *User = llvm::cast<llvm::Instruction>(UI->getUser());
-    if (User == NULL || User == TheStore)
-      continue;
-    Uses.push_back(User);
-  }
-
-  for (InstructionVec::iterator I = Uses.begin(); I != Uses.end(); ++I) {
-    llvm::Instruction *UserI = *I;
-    llvm::Instruction *ContextRestoreLocation = UserI;
-
-    llvm::PHINode *Phi = llvm::dyn_cast<llvm::PHINode>(UserI);
-    if (Phi != NULL) {
-
-      llvm::BasicBlock *IncomingBB = NULL;
-      for (unsigned Incoming = 0; Incoming < Phi->getNumIncomingValues();
-           ++Incoming) {
-        llvm::Value *Val = Phi->getIncomingValue(Incoming);
-        llvm::BasicBlock *BB = Phi->getIncomingBlock(Incoming);
-        if (Val == Def)
-          IncomingBB = BB;
-      }
-      assert(IncomingBB != NULL);
-      ContextRestoreLocation = IncomingBB->getTerminator();
-    }
-    llvm::Value *LoadedValue =
-        addContextRestore(UserI, Alloca, Def->getType(), PaddingAdded,
-                          ContextRestoreLocation, isa<llvm::AllocaInst>(Def));
-    UserI->replaceUsesOfWith(Def, LoadedValue);
-  }
-}
-
-// Override of WIHandler function, not needed in this pass.
-llvm::Instruction *FiberImpl::getLocalIdInRegion(llvm::Instruction *Instr,
-                                                 size_t Dim) {
-
-  llvm::IRBuilder<> Builder(Instr);
-  return Builder.CreateLoad(ST, LocalIdGlobals[Dim]);
-}
-
-// Calculate and return the linear WI id.
-llvm::Value *FiberImpl::getLinearWIIndexInRegion(llvm::Instruction *Instr) {
-
-  assert(LocalSizeIterators[0] != NULL && LocalSizeIterators[1] != NULL);
-
-  llvm::IRBuilder<> Builder(Instr);
-
-  llvm::LoadInst *LoadXSize =
-      Builder.CreateLoad(ST, LocalSizeIterators[0], "ls_x");
-  llvm::LoadInst *LoadYSize =
-      Builder.CreateLoad(ST, LocalSizeIterators[1], "ls_y");
-
-  llvm::LoadInst *LoadXId = Builder.CreateLoad(ST, LocalIdIterators[0], "id_x");
-  llvm::LoadInst *LoadYId = Builder.CreateLoad(ST, LocalIdIterators[1], "id_y");
-  llvm::LoadInst *LoadZId = Builder.CreateLoad(ST, LocalIdIterators[2], "id_z");
-
-  llvm::Value *LocalSizeXTimesY = Builder.CreateBinOp(
-      llvm::Instruction::Mul, LoadXSize, LoadYSize, "ls_xy");
-  llvm::Value *ZPart = Builder.CreateBinOp(llvm::Instruction::Mul,
-                                           LocalSizeXTimesY, LoadZId, "tmp");
-  llvm::Value *YPart =
-      Builder.CreateBinOp(llvm::Instruction::Mul, LoadXSize, LoadYId, "ls_x_y");
-
-  llvm::Value *ZYSum =
-      Builder.CreateBinOp(llvm::Instruction::Add, ZPart, YPart, "zy_sum");
-  return Builder.CreateBinOp(llvm::Instruction::Add, ZYSum, LoadXId,
-                             "linear_xyz_idx");
-}
-
-// Collect variables that should be context saved.
-void FiberImpl::identifyContextVars() {
-
+  // Identify variables to save.
   for (auto &BB : *F) {
     for (auto &Instr : BB) {
 
-      if (isa<GetElementPtrInst>(&Instr)) {
-        GetElementPtrInst *GEP = cast<GetElementPtrInst>(&Instr);
-        ContextVars.push_back(&Instr);
-        continue;
-      }
-      if (isa<BranchInst>(&Instr))
-        continue;
-
-      if (isa<CallInst>(Instr)) {
-        Function *F = cast<CallInst>(&Instr)->getCalledFunction();
-        if (F && (F == LocalMemAllocaFuncDecl || F == WorkGroupAllocaFuncDecl))
-          continue;
-      }
-
-      llvm::LoadInst *Load = dyn_cast<llvm::LoadInst>(&Instr);
-      if (Load != NULL && (Load->getPointerOperand() == LocalIdGlobals[0] ||
-                           Load->getPointerOperand() == LocalIdGlobals[1] ||
-                           Load->getPointerOperand() == LocalIdGlobals[2] ||
-                           Load->getPointerOperand() == GlobalIdGlobals[0] ||
-                           Load->getPointerOperand() == GlobalIdGlobals[1] ||
-                           Load->getPointerOperand() == GlobalIdGlobals[2]))
-        continue;
-
-      if (!VUA.shouldBePrivatized(Instr.getParent()->getParent(), &Instr))
+      if (shouldNotBeContextSaved(&Instr, VUA, WIH))
         continue;
 
       for (llvm::Instruction::use_iterator UI = Instr.use_begin(),
@@ -289,44 +129,26 @@ void FiberImpl::identifyContextVars() {
 
         llvm::BasicBlock *UserBlock = User->getParent();
 
-        // Context save not needed if user is in same block
+        // Context save should not be applied if User is in same block.
         if (CurrentBlock == UserBlock) {
           continue;
         }
-        ContextVars.push_back(&Instr);
+        ValuesToContextSave.push_back(&Instr);
         break;
       }
     }
   }
+
+  for (auto &Instr : ValuesToContextSave) {
+    addContextSaveRestore(Instr, LI);
+  }
 }
 
-// Return pointer to 'context array'
-llvm::AllocaInst *FiberImpl::getContextArray(llvm::Instruction *Inst,
-                                             bool &PaddingAdded) {
-  PaddingAdded = false;
-  std::ostringstream Var;
-  Var << ".";
-
-  if (std::string(Inst->getName().str()) != "") {
-    Var << Inst->getName().str();
-  } else if (TempInstructionIds.find(Inst) != TempInstructionIds.end()) {
-    Var << TempInstructionIds[Inst];
-  } else {
-    // Unnamed temp instructions need a name generated for the context array.
-    // Create one using a running integer.
-    TempInstructionIds[Inst] = TempInstructionIndex++;
-    Var << TempInstructionIds[Inst];
-  }
-
-  Var << ".pocl_context";
-  std::string CArrayName = Var.str();
-
-  if (ContextArrays.find(CArrayName) != ContextArrays.end())
-    return ContextArrays[CArrayName];
-
-  llvm::BasicBlock &Entry = K->getEntryBlock();
-  return ContextArrays[CArrayName] = createAlignedAndPaddedContextAlloca(
-             Inst, &*(Entry.getFirstInsertionPt()), CArrayName, PaddingAdded);
+// Override of WIHandler function, not needed in this pass.
+llvm::Instruction *FiberImpl::getLocalIdInRegion(llvm::Instruction *Instr,
+                                                 size_t Dim) {
+  llvm::IRBuilder<> Builder(Instr);
+  return Builder.CreateLoad(ST, LocalIdGlobals[Dim]);
 }
 
 // Initialize local ids as zero
@@ -454,6 +276,8 @@ bool FiberImpl::runOnFunction(llvm::Function &Func) {
   M = Func.getParent();
   F = &Func;
 
+  WIH = getWorkitemHandler();
+
   Initialize(llvm::cast<Kernel>(&Func));
 
 #ifdef DEBUG_FIBER
@@ -476,10 +300,7 @@ bool FiberImpl::runOnFunction(llvm::Function &Func) {
   TempInstructionIndex = 0;
 
   // Context save/restore
-  identifyContextVars();
-  for (auto &Instr : ContextVars) {
-    addContextSaveRestore(Instr);
-  }
+  handleWIContextVariables();
 
   llvm::BasicBlock *EntryBlock = nullptr;
 
@@ -601,6 +422,9 @@ bool FiberImpl::runOnFunction(llvm::Function &Func) {
 
   // Scheduler functions.
   llvm::Function *SchedulerInit = M->getFunction("__pocl_fiber_sched_init");
+
+  llvm::FunctionType *FTy = SchedulerInit->getFunctionType();
+
   llvm::Function *WgbarrierReached =
       M->getFunction("__pocl_fiber_wg_barrier_reached");
   llvm::Function *SgbarrierReached =
@@ -691,7 +515,7 @@ bool FiberImpl::runOnFunction(llvm::Function &Func) {
       // Get the
       if (WGDynamicLocalSize) {
         llvm::Value *LinearID =
-            getLinearWIIndexInRegion(BBlock->getTerminator());
+            getLinearWiIndex(OldExitBuilder, M, nullptr, WIH);
         NextBlockPtr = OldExitBuilder.CreateGEP(
             NextJumpIndices->getAllocatedType(), NextJumpIndices, {LinearID},
             "exit_block_ptr");
@@ -736,7 +560,7 @@ bool FiberImpl::runOnFunction(llvm::Function &Func) {
 
       if (WGDynamicLocalSize) {
         llvm::Value *LinearID =
-            getLinearWIIndexInRegion(BBlock->getTerminator());
+            getLinearWiIndex(BarrierBlockBuilder, M, nullptr, WIH);
         NextBlockPtr = BarrierBlockBuilder.CreateGEP(
             NextJumpIndices->getAllocatedType(), NextJumpIndices, {LinearID},
             "exit_block_ptr");
@@ -838,7 +662,7 @@ bool FiberImpl::runOnFunction(llvm::Function &Func) {
   // Pointer to next block for current WI.
   llvm::Value *NextBlockPtr;
   if (WGDynamicLocalSize) {
-    llvm::Value *LinearID = getLinearWIIndexInRegion(LastInst);
+    llvm::Value *LinearID = getLinearWiIndex(DBuilder, M, nullptr, WIH);
     NextBlockPtr =
         DBuilder.CreateGEP(NextJumpIndices->getAllocatedType(), NextJumpIndices,
                            {LinearID}, "exit_block_ptr");
@@ -934,7 +758,7 @@ bool addFiberExecution(llvm::Function &F, llvm::DominatorTree &DT,
                        llvm::PostDominatorTree &PDT, llvm::LoopInfo &LI,
                        VariableUniformityAnalysisResult &VUA) {
 
-  FiberImpl Fiber(DT, VUA);
+  FiberImpl Fiber(DT, VUA, LI);
   return Fiber.runOnFunction(F);
 }
 
