@@ -27,7 +27,7 @@ include("bitcode_rules")
 
 set(KERNEL_SOURCES ${SOURCES_GENERIC})
 
-foreach(FILE printf.c printf_base.c barrier.ll)
+foreach(FILE printf.c printf_base.c workgroup_barrier.ll subgroup_barrier)
   list(REMOVE_ITEM KERNEL_SOURCES "${FILE}")
 endforeach()
 

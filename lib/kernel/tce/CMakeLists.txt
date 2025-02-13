@@ -41,7 +41,6 @@ any.cl
 as_type.cl
 async_work_group_copy.cl
 async_work_group_strided_copy.cl
-barrier.ll
 bitselect.cl
 cbrt.cl
 clamp.cl
@@ -137,6 +136,7 @@ sign.cl
 smoothstep.cl
 step.cl
 sqrt.cl
+subgroup_barrier.ll
 sub_sat.cl
 upsample.cl
 vload.cl
@@ -145,6 +145,7 @@ vload_store_half_f16c.c
 vstore.cl
 vstore_half.cl
 wait_group_events.cl
+workgroup_barrier.ll
 write_image.cl
 
 ###################################################################

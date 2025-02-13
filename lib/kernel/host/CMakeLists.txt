@@ -242,9 +242,13 @@ sleef-pocl/trunc.cl
 )
 
 if(KERNEL_TRIPLE_TARGETS_MSVC_TOOLCHAIN)
-  list(APPEND SOURCES_WITH_SLEEF barrier-msvc.ll)
+  list(APPEND SOURCES_WITH_SLEEF
+    workgroup_barrier-msvc.ll
+    subgroup_barrier-msvc.ll)
 else()
-  list(APPEND SOURCES_WITH_SLEEF barrier.ll)
+  list(APPEND SOURCES_WITH_SLEEF
+    workgroup_barrier.ll
+    subgroup_barrier.ll)
 endif()
 
 list(APPEND SOURCES_WITH_SLEEF "host/addrspace_operators.ll" "host/addrspace_operators_spir.ll")

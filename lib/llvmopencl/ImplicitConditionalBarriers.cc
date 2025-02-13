@@ -30,6 +30,7 @@ IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 #include "Barrier.h"
+#include "WorkgroupBarrier.h"
 #include "CanonicalizeBarriers.h"
 #include "DebugHelpers.h"
 #include "ImplicitConditionalBarriers.h"
@@ -146,7 +147,7 @@ bool addImplicitBranchBarriers(llvm::Function &F, llvm::LoopInfo &LI,
     // TODO: investigate. It might related to the alloca-converted
     // PHIs. It has a loop that is autoconverted to a b-loop and the
     // conditional barrier is inserted after the loop short cut check.
-    Barrier::createAtStart(Pos);
+    WorkgroupBarrier::createAtStart(Pos);
 
     Changed = true;
 
@@ -155,7 +156,7 @@ bool addImplicitBranchBarriers(llvm::Function &F, llvm::LoopInfo &LI,
     Pos->dump();
 #endif
     if (BasicBlock *Source = Pos->getSinglePredecessor()) {
-      Barrier::createAtEnd(Source);
+      WorkgroupBarrier::createAtEnd(Source);
 #ifdef DEBUG_COND_BARRIERS
       std::cerr << "### added an implicit barrier to a source of the BB as well"
                 << std::endl;

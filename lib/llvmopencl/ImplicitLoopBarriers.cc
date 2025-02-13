@@ -38,6 +38,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Transforms/Scalar/LoopPassManager.h>
 
 #include "Barrier.h"
+#include "WorkgroupBarrier.h"
 #include "CanonicalizeBarriers.h"
 #include "DebugHelpers.h"
 #include "ImplicitLoopBarriers.h"
@@ -187,11 +188,11 @@ static bool convertToLoopWithBarriers(Loop &L) {
   SmallVector<BasicBlock *> ExitingBlocks;
   L.getExitingBlocks(ExitingBlocks);
   for (BasicBlock *ExitingBlock : ExitingBlocks) {
-    Barrier::create(ExitingBlock->getTerminator());
+    WorkgroupBarrier::create(ExitingBlock->getTerminator());
     Highlights.insert(ExitingBlock);
   }
 
-  Barrier::create(HeaderBlock->getFirstNonPHI());
+  WorkgroupBarrier::create(HeaderBlock->getFirstNonPHI());
 
 #ifdef DEBUG_ILOOP_BARRIERS
   std::cerr << "### added inner-loop barriers to loop " << L.getName().str()

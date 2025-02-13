@@ -35,6 +35,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 #include "Barrier.h"
+#include "WorkgroupBarrier.h"
 #include "DebugHelpers.h"
 #include "Kernel.h"
 #include "KernelCompilerUtils.h"
@@ -64,7 +65,7 @@ void Kernel::getRegionExitBlocks(SmallVectorImpl<llvm::BasicBlock *> &B) {
       // TO CLEAN: This should not be needed any more since CanonicalizeBarriers
       // adds them.
       if (!Barrier::hasBarrier(BB))
-        Barrier::createAtEnd(BB);
+        WorkgroupBarrier::createAtEnd(BB);
       B.push_back(BB);
     } else if (Barrier::hasBarrier(BB)) {
       B.push_back(BB);

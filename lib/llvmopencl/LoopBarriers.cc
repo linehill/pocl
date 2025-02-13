@@ -38,6 +38,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Transforms/Scalar/LoopPassManager.h>
 
 #include "Barrier.h"
+#include "WorkgroupBarrier.h"
 #include "DebugHelpers.h"
 #include "KernelCompilerUtils.h"
 #include "LLVMUtils.h"
@@ -215,7 +216,7 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
         std::cerr << "### before instr" << std::endl;
         Preheader->getTerminator()->dump();
 #endif
-        Barrier::createAtEnd(Preheader);
+        WorkgroupBarrier::createAtEnd(Preheader);
         Preheader->setName(Preheader->getName() + ".loopbarrier");
         Highlights.insert(Preheader);
 
@@ -227,7 +228,7 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
 #else
         if (Header->getFirstNonPHIIt() != Header->begin()) {
 #endif
-          Barrier::createAtStart(Header);
+          WorkgroupBarrier::createAtStart(Header);
           Header->setName(Header->getName() + ".phibarrier");
           Highlights.insert(Header);
         }
@@ -239,7 +240,7 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
         // after the exit decision.
         BasicBlock *BrExit = L.getExitingBlock();
         if (BrExit != NULL) {
-          Barrier::createAtEnd(BrExit);
+          WorkgroupBarrier::createAtEnd(BrExit);
           BrExit->setName(BrExit->getName() + ".brexitbarrier");
           Highlights.insert(BrExit);
         }
@@ -272,7 +273,7 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
 #endif
 
         if (Latch != NULL && BrExit != Latch) {
-          Barrier::create(Latch->getTerminator());
+          WorkgroupBarrier::create(Latch->getTerminator());
           Latch->setName(Latch->getName() + ".latchbarrier");
         }
 
@@ -312,7 +313,7 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
             // (otherwise if might not even belong to this "tail", see
             // forifbarrier1 graph test).
             if (DT.dominates(J->getParent(), Latch2)) {
-              Barrier::create(Latch2->getTerminator());
+              WorkgroupBarrier::create(Latch2->getTerminator());
               if (UniformLoopConstruct)
                 markAsPureUniformBlock(Latch2, "b-loop latch");
               Highlights.insert(Latch2);

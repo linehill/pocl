@@ -43,7 +43,6 @@ atan2pi.cl
 atanh.cl
 atanpi.cl
 atomics.cl
-barrier.ll
 bitselect.cl
 cbrt.cl
 ceil.cl
@@ -175,6 +174,7 @@ sinpi.cl
 smoothstep.cl
 sqrt.cl
 step.cl
+subgroup_barrier.ll
 sub_sat.cl
 tan.cl
 tanh.cl
@@ -187,7 +187,8 @@ vload_half.cl
 vstore.cl
 vstore_half.cl
 vload_store_half_f16c.c
-wait_group_events.cl)
+wait_group_events.cl
+workgroup_barrier.ll)
 
 #*********************************************************************
 

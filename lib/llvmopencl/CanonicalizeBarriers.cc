@@ -36,6 +36,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 #include "Barrier.h"
+#include "WorkgroupBarrier.h"
 #include "CanonicalizeBarriers.h"
 #include "DebugHelpers.h"
 #include "LLVMUtils.h"
@@ -89,7 +90,7 @@ bool canonicalizeBarriers(Function &F) {
 
     EffectiveEntry->takeName(FirstPRStart);
     FirstPRStart->setName("entry.barrier");
-    Barrier::createAtEnd(FirstPRStart);
+    WorkgroupBarrier::createAtEnd(FirstPRStart);
     Changed = true;
   }
 
@@ -120,7 +121,7 @@ bool canonicalizeBarriers(Function &F) {
       else
         Exit = SplitBlock(BB, T);
       Exit->setName("exit.barrier");
-      Barrier::create(Inst2InsertPt(T));
+      WorkgroupBarrier::create(Inst2InsertPt(T));
       Changed = true;
     }
   }
@@ -141,7 +142,7 @@ bool canonicalizeBarriers(Function &F) {
         if (!isPureUniformBlock(PredBB) && !Barrier::endsWithBarrier(PredBB)) {
           // Create the barrier to the beginning of the uniform block so
           // all predecessors can branch to it in case it's a join point.
-          Barrier::create(BB->getFirstNonPHI());
+          WorkgroupBarrier::create(BB->getFirstNonPHI());
           Changed = true;
           continue;
         }
@@ -153,7 +154,7 @@ bool canonicalizeBarriers(Function &F) {
             !Barrier::startsWithBarrier(SuccBB)) {
           // Create a barrier at the end of the uniform block which can then
           // potentially start multiple parallel regions.
-          Barrier::create(BB->getTerminator());
+          WorkgroupBarrier::create(BB->getTerminator());
           Changed = true;
           continue;
         }

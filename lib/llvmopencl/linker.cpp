@@ -779,7 +779,8 @@ int link(llvm::Module *Program, const llvm::Module *Lib, std::string &Log,
            // case not supporting the OpenCL 1.2 printf.
            F->getName() != "printf" && F->getName() != pocl_sampler_handler &&
            !F->getName().starts_with("llvm.") &&
-           F->getName() != BARRIER_FUNCTION_NAME &&
+           F->getName() != WGBARRIER_FUNCTION_NAME &&
+           F->getName() != SGBARRIER_FUNCTION_NAME &&
            F->getName() != "__pocl_local_mem_alloca" &&
            F->getName() != "__pocl_work_group_alloca")) {
         Log.append("Cannot find symbol ");
