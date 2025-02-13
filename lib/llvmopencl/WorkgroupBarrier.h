@@ -23,6 +23,7 @@
 #define POCL_WGBARRIER_H
 
 #include "Barrier.h"
+#include <iostream>
 
 namespace pocl {
   // Class for work-group barrier instructions, inherits from barrier class.

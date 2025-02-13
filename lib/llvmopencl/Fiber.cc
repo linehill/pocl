@@ -998,12 +998,6 @@ bool addFiber(llvm::Function &F, llvm::DominatorTree &DT,
               llvm::PostDominatorTree &PDT, llvm::LoopInfo &LI,
               VariableUniformityAnalysisResult &VUA) {
   
-  WorkitemHandlerType WIH = getWorkitemHandler();
-
-  if (WIH != WorkitemHandlerType::FIBER) {
-    return false;
-  }
-
   FiberImpl fiber(DT, VUA);
   return fiber.runOnFunction(F);
 }

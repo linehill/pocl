@@ -44,6 +44,7 @@
 #include "ImplicitLoopBarriers.h"
 #include "LLVMUtils.h"
 #include "LoopBarriers.h"
+#include "WorkitemHandlerChooser.h"
 #include "PHIsToAllocas.h"
 #include "WorkitemLoops.h"
 #include "Fiber.h"
@@ -103,6 +104,9 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
 
   bool Changed = false;
 
+  WorkitemHandlerType WIH = getWorkitemHandler();
+
+
   Changed = convertPHIsToAllocaAccesses(F, VUA) || Changed;
   REFRESH_LOOP_INFO();
 
@@ -115,7 +119,11 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
   Changed = addLoopConstructIsolationBarriers(F, LI, VUA, DT) || Changed;
   REFRESH_LOOP_INFO();
 
-  Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
+  if (WIH != WorkitemHandlerType::FIBER){
+    Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
+    REFRESH_LOOP_INFO();
+  }
+
   Changed = canonicalizeBarriers(F) || Changed;
   REFRESH_LOOP_INFO();
 
@@ -124,15 +132,19 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
 
   // Run implicit conditional barriers again since BTR might have added new
   // conditional barrier cases that must be handled.
-  Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
-  REFRESH_LOOP_INFO();
+  if (WIH != WorkitemHandlerType::FIBER){
+    Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
+    REFRESH_LOOP_INFO();
+  }
 
   Changed = removeLifetimeMarkers(F);
 
   // TODO: Run CBS if chosen.
-  Changed = addWorkItemLoops(F, DT, PDT, LI, VUA) || Changed;
+  if (WIH == WorkitemHandlerType::LOOPS || WIH == WorkitemHandlerType::CBS)
+    Changed = addWorkItemLoops(F, DT, PDT, LI, VUA) || Changed;
 
-  Changed = addFiber(F, DT, PDT, LI, VUA) || Changed;
+  if (WIH == WorkitemHandlerType::FIBER)
+    Changed = addFiber(F, DT, PDT, LI, VUA) || Changed;
 
   return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }

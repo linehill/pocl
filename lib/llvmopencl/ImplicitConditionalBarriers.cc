@@ -98,7 +98,7 @@ bool addImplicitBranchBarriers(llvm::Function &F, llvm::LoopInfo &LI,
     if (PDT.dominates(&BB, &F.getEntryBlock())) {
 #ifdef DEBUG_COND_BARRIERS
       std::cerr << "### BB postdominates the entry block" << std::endl;
-      BB->dump();
+      BB.dump();
 #endif
       continue;
     }
