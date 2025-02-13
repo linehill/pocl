@@ -44,7 +44,7 @@ namespace pocl {
   static Barrier *create(InstListType::iterator InsertBefore) {
     if (InsertBefore != InsertBefore->getParent()->begin() &&
 #endif
-        llvm::isa<Barrier>(InsertBefore->getPrevNode()))
+        llvm::isa<WorkgroupBarrier>(InsertBefore->getPrevNode()))
       return llvm::cast<WorkgroupBarrier>(InsertBefore->getPrevNode());
 
     llvm::Module *M = InsertBefore->getModule();

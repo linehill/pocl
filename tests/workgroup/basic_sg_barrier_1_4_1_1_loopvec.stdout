@@ -1,0 +1,9 @@
+WI:(0 0 0) SG:[0 0] - before subgroup barrier
+WI:(1 0 0) SG:[0 1] - before subgroup barrier
+WI:(2 0 0) SG:[1 0] - before subgroup barrier
+WI:(3 0 0) SG:[1 1] - before subgroup barrier
+WI:(0 0 0) SG:[0 0] - after subgroup barrier
+WI:(1 0 0) SG:[0 1] - after subgroup barrier
+WI:(2 0 0) SG:[1 0] - after subgroup barrier
+WI:(3 0 0) SG:[1 1] - after subgroup barrier
+OK

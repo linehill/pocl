@@ -1,0 +1,321 @@
+WI:(0 0 0) SG:[0 0] - at subgroup barrier 1
+WI:(1 0 0) SG:[0 1] - at subgroup barrier 1
+WI:(2 0 0) SG:[0 2] - at subgroup barrier 1
+WI:(3 0 0) SG:[0 3] - at subgroup barrier 1
+WI:(0 0 0) SG:[0 0] - after subgroup barrier 1
+WI:(0 0 0) SG:[0 0] - at subgroup barrier 2
+WI:(1 0 0) SG:[0 1] - after subgroup barrier 1
+WI:(1 0 0) SG:[0 1] - at subgroup barrier 2
+WI:(2 0 0) SG:[0 2] - after subgroup barrier 1
+WI:(2 0 0) SG:[0 2] - at subgroup barrier 2
+WI:(3 0 0) SG:[0 3] - after subgroup barrier 1
+WI:(3 0 0) SG:[0 3] - at subgroup barrier 2
+WI:(0 0 0) SG:[0 0] - after subgroup barrier 2
+WI:(1 0 0) SG:[0 1] - after subgroup barrier 2
+WI:(2 0 0) SG:[0 2] - after subgroup barrier 2
+WI:(3 0 0) SG:[0 3] - after subgroup barrier 2
+WI:(4 0 0) SG:[1 0] - avoided sg barrier
+WI:(5 0 0) SG:[1 1] - avoided sg barrier
+WI:(6 0 0) SG:[1 2] - avoided sg barrier
+WI:(7 0 0) SG:[1 3] - avoided sg barrier
+WI:(8 0 0) SG:[2 0] - at subgroup barrier 1
+WI:(9 0 0) SG:[2 1] - at subgroup barrier 1
+WI:(10 0 0) SG:[2 2] - at subgroup barrier 1
+WI:(11 0 0) SG:[2 3] - at subgroup barrier 1
+WI:(8 0 0) SG:[2 0] - after subgroup barrier 1
+WI:(8 0 0) SG:[2 0] - at subgroup barrier 2
+WI:(9 0 0) SG:[2 1] - after subgroup barrier 1
+WI:(9 0 0) SG:[2 1] - at subgroup barrier 2
+WI:(10 0 0) SG:[2 2] - after subgroup barrier 1
+WI:(10 0 0) SG:[2 2] - at subgroup barrier 2
+WI:(11 0 0) SG:[2 3] - after subgroup barrier 1
+WI:(11 0 0) SG:[2 3] - at subgroup barrier 2
+WI:(8 0 0) SG:[2 0] - after subgroup barrier 2
+WI:(9 0 0) SG:[2 1] - after subgroup barrier 2
+WI:(10 0 0) SG:[2 2] - after subgroup barrier 2
+WI:(11 0 0) SG:[2 3] - after subgroup barrier 2
+WI:(12 0 0) SG:[3 0] - avoided sg barrier
+WI:(13 0 0) SG:[3 1] - avoided sg barrier
+WI:(14 0 0) SG:[3 2] - avoided sg barrier
+WI:(15 0 0) SG:[3 3] - avoided sg barrier
+WI:(16 0 0) SG:[4 0] - at subgroup barrier 1
+WI:(17 0 0) SG:[4 1] - at subgroup barrier 1
+WI:(18 0 0) SG:[4 2] - at subgroup barrier 1
+WI:(19 0 0) SG:[4 3] - at subgroup barrier 1
+WI:(16 0 0) SG:[4 0] - after subgroup barrier 1
+WI:(16 0 0) SG:[4 0] - at subgroup barrier 2
+WI:(17 0 0) SG:[4 1] - after subgroup barrier 1
+WI:(17 0 0) SG:[4 1] - at subgroup barrier 2
+WI:(18 0 0) SG:[4 2] - after subgroup barrier 1
+WI:(18 0 0) SG:[4 2] - at subgroup barrier 2
+WI:(19 0 0) SG:[4 3] - after subgroup barrier 1
+WI:(19 0 0) SG:[4 3] - at subgroup barrier 2
+WI:(16 0 0) SG:[4 0] - after subgroup barrier 2
+WI:(17 0 0) SG:[4 1] - after subgroup barrier 2
+WI:(18 0 0) SG:[4 2] - after subgroup barrier 2
+WI:(19 0 0) SG:[4 3] - after subgroup barrier 2
+WI:(20 0 0) SG:[5 0] - avoided sg barrier
+WI:(21 0 0) SG:[5 1] - avoided sg barrier
+WI:(22 0 0) SG:[5 2] - avoided sg barrier
+WI:(23 0 0) SG:[5 3] - avoided sg barrier
+WI:(24 0 0) SG:[6 0] - at subgroup barrier 1
+WI:(25 0 0) SG:[6 1] - at subgroup barrier 1
+WI:(26 0 0) SG:[6 2] - at subgroup barrier 1
+WI:(27 0 0) SG:[6 3] - at subgroup barrier 1
+WI:(24 0 0) SG:[6 0] - after subgroup barrier 1
+WI:(24 0 0) SG:[6 0] - at subgroup barrier 2
+WI:(25 0 0) SG:[6 1] - after subgroup barrier 1
+WI:(25 0 0) SG:[6 1] - at subgroup barrier 2
+WI:(26 0 0) SG:[6 2] - after subgroup barrier 1
+WI:(26 0 0) SG:[6 2] - at subgroup barrier 2
+WI:(27 0 0) SG:[6 3] - after subgroup barrier 1
+WI:(27 0 0) SG:[6 3] - at subgroup barrier 2
+WI:(24 0 0) SG:[6 0] - after subgroup barrier 2
+WI:(25 0 0) SG:[6 1] - after subgroup barrier 2
+WI:(26 0 0) SG:[6 2] - after subgroup barrier 2
+WI:(27 0 0) SG:[6 3] - after subgroup barrier 2
+WI:(28 0 0) SG:[7 0] - avoided sg barrier
+WI:(29 0 0) SG:[7 1] - avoided sg barrier
+WI:(30 0 0) SG:[7 2] - avoided sg barrier
+WI:(31 0 0) SG:[7 3] - avoided sg barrier
+WI:(32 0 0) SG:[8 0] - at subgroup barrier 1
+WI:(33 0 0) SG:[8 1] - at subgroup barrier 1
+WI:(34 0 0) SG:[8 2] - at subgroup barrier 1
+WI:(35 0 0) SG:[8 3] - at subgroup barrier 1
+WI:(32 0 0) SG:[8 0] - after subgroup barrier 1
+WI:(32 0 0) SG:[8 0] - at subgroup barrier 2
+WI:(33 0 0) SG:[8 1] - after subgroup barrier 1
+WI:(33 0 0) SG:[8 1] - at subgroup barrier 2
+WI:(34 0 0) SG:[8 2] - after subgroup barrier 1
+WI:(34 0 0) SG:[8 2] - at subgroup barrier 2
+WI:(35 0 0) SG:[8 3] - after subgroup barrier 1
+WI:(35 0 0) SG:[8 3] - at subgroup barrier 2
+WI:(32 0 0) SG:[8 0] - after subgroup barrier 2
+WI:(33 0 0) SG:[8 1] - after subgroup barrier 2
+WI:(34 0 0) SG:[8 2] - after subgroup barrier 2
+WI:(35 0 0) SG:[8 3] - after subgroup barrier 2
+WI:(36 0 0) SG:[9 0] - avoided sg barrier
+WI:(37 0 0) SG:[9 1] - avoided sg barrier
+WI:(38 0 0) SG:[9 2] - avoided sg barrier
+WI:(39 0 0) SG:[9 3] - avoided sg barrier
+WI:(40 0 0) SG:[10 0] - at subgroup barrier 1
+WI:(41 0 0) SG:[10 1] - at subgroup barrier 1
+WI:(42 0 0) SG:[10 2] - at subgroup barrier 1
+WI:(43 0 0) SG:[10 3] - at subgroup barrier 1
+WI:(40 0 0) SG:[10 0] - after subgroup barrier 1
+WI:(40 0 0) SG:[10 0] - at subgroup barrier 2
+WI:(41 0 0) SG:[10 1] - after subgroup barrier 1
+WI:(41 0 0) SG:[10 1] - at subgroup barrier 2
+WI:(42 0 0) SG:[10 2] - after subgroup barrier 1
+WI:(42 0 0) SG:[10 2] - at subgroup barrier 2
+WI:(43 0 0) SG:[10 3] - after subgroup barrier 1
+WI:(43 0 0) SG:[10 3] - at subgroup barrier 2
+WI:(40 0 0) SG:[10 0] - after subgroup barrier 2
+WI:(41 0 0) SG:[10 1] - after subgroup barrier 2
+WI:(42 0 0) SG:[10 2] - after subgroup barrier 2
+WI:(43 0 0) SG:[10 3] - after subgroup barrier 2
+WI:(44 0 0) SG:[11 0] - avoided sg barrier
+WI:(45 0 0) SG:[11 1] - avoided sg barrier
+WI:(46 0 0) SG:[11 2] - avoided sg barrier
+WI:(47 0 0) SG:[11 3] - avoided sg barrier
+WI:(48 0 0) SG:[12 0] - at subgroup barrier 1
+WI:(49 0 0) SG:[12 1] - at subgroup barrier 1
+WI:(50 0 0) SG:[12 2] - at subgroup barrier 1
+WI:(51 0 0) SG:[12 3] - at subgroup barrier 1
+WI:(48 0 0) SG:[12 0] - after subgroup barrier 1
+WI:(48 0 0) SG:[12 0] - at subgroup barrier 2
+WI:(49 0 0) SG:[12 1] - after subgroup barrier 1
+WI:(49 0 0) SG:[12 1] - at subgroup barrier 2
+WI:(50 0 0) SG:[12 2] - after subgroup barrier 1
+WI:(50 0 0) SG:[12 2] - at subgroup barrier 2
+WI:(51 0 0) SG:[12 3] - after subgroup barrier 1
+WI:(51 0 0) SG:[12 3] - at subgroup barrier 2
+WI:(48 0 0) SG:[12 0] - after subgroup barrier 2
+WI:(49 0 0) SG:[12 1] - after subgroup barrier 2
+WI:(50 0 0) SG:[12 2] - after subgroup barrier 2
+WI:(51 0 0) SG:[12 3] - after subgroup barrier 2
+WI:(52 0 0) SG:[13 0] - avoided sg barrier
+WI:(53 0 0) SG:[13 1] - avoided sg barrier
+WI:(54 0 0) SG:[13 2] - avoided sg barrier
+WI:(55 0 0) SG:[13 3] - avoided sg barrier
+WI:(56 0 0) SG:[14 0] - at subgroup barrier 1
+WI:(57 0 0) SG:[14 1] - at subgroup barrier 1
+WI:(58 0 0) SG:[14 2] - at subgroup barrier 1
+WI:(59 0 0) SG:[14 3] - at subgroup barrier 1
+WI:(56 0 0) SG:[14 0] - after subgroup barrier 1
+WI:(56 0 0) SG:[14 0] - at subgroup barrier 2
+WI:(57 0 0) SG:[14 1] - after subgroup barrier 1
+WI:(57 0 0) SG:[14 1] - at subgroup barrier 2
+WI:(58 0 0) SG:[14 2] - after subgroup barrier 1
+WI:(58 0 0) SG:[14 2] - at subgroup barrier 2
+WI:(59 0 0) SG:[14 3] - after subgroup barrier 1
+WI:(59 0 0) SG:[14 3] - at subgroup barrier 2
+WI:(56 0 0) SG:[14 0] - after subgroup barrier 2
+WI:(57 0 0) SG:[14 1] - after subgroup barrier 2
+WI:(58 0 0) SG:[14 2] - after subgroup barrier 2
+WI:(59 0 0) SG:[14 3] - after subgroup barrier 2
+WI:(60 0 0) SG:[15 0] - avoided sg barrier
+WI:(61 0 0) SG:[15 1] - avoided sg barrier
+WI:(62 0 0) SG:[15 2] - avoided sg barrier
+WI:(63 0 0) SG:[15 3] - avoided sg barrier
+WI:(64 0 0) SG:[16 0] - at subgroup barrier 1
+WI:(65 0 0) SG:[16 1] - at subgroup barrier 1
+WI:(66 0 0) SG:[16 2] - at subgroup barrier 1
+WI:(67 0 0) SG:[16 3] - at subgroup barrier 1
+WI:(64 0 0) SG:[16 0] - after subgroup barrier 1
+WI:(64 0 0) SG:[16 0] - at subgroup barrier 2
+WI:(65 0 0) SG:[16 1] - after subgroup barrier 1
+WI:(65 0 0) SG:[16 1] - at subgroup barrier 2
+WI:(66 0 0) SG:[16 2] - after subgroup barrier 1
+WI:(66 0 0) SG:[16 2] - at subgroup barrier 2
+WI:(67 0 0) SG:[16 3] - after subgroup barrier 1
+WI:(67 0 0) SG:[16 3] - at subgroup barrier 2
+WI:(64 0 0) SG:[16 0] - after subgroup barrier 2
+WI:(65 0 0) SG:[16 1] - after subgroup barrier 2
+WI:(66 0 0) SG:[16 2] - after subgroup barrier 2
+WI:(67 0 0) SG:[16 3] - after subgroup barrier 2
+WI:(68 0 0) SG:[17 0] - avoided sg barrier
+WI:(69 0 0) SG:[17 1] - avoided sg barrier
+WI:(70 0 0) SG:[17 2] - avoided sg barrier
+WI:(71 0 0) SG:[17 3] - avoided sg barrier
+WI:(72 0 0) SG:[18 0] - at subgroup barrier 1
+WI:(73 0 0) SG:[18 1] - at subgroup barrier 1
+WI:(74 0 0) SG:[18 2] - at subgroup barrier 1
+WI:(75 0 0) SG:[18 3] - at subgroup barrier 1
+WI:(72 0 0) SG:[18 0] - after subgroup barrier 1
+WI:(72 0 0) SG:[18 0] - at subgroup barrier 2
+WI:(73 0 0) SG:[18 1] - after subgroup barrier 1
+WI:(73 0 0) SG:[18 1] - at subgroup barrier 2
+WI:(74 0 0) SG:[18 2] - after subgroup barrier 1
+WI:(74 0 0) SG:[18 2] - at subgroup barrier 2
+WI:(75 0 0) SG:[18 3] - after subgroup barrier 1
+WI:(75 0 0) SG:[18 3] - at subgroup barrier 2
+WI:(72 0 0) SG:[18 0] - after subgroup barrier 2
+WI:(73 0 0) SG:[18 1] - after subgroup barrier 2
+WI:(74 0 0) SG:[18 2] - after subgroup barrier 2
+WI:(75 0 0) SG:[18 3] - after subgroup barrier 2
+WI:(76 0 0) SG:[19 0] - avoided sg barrier
+WI:(77 0 0) SG:[19 1] - avoided sg barrier
+WI:(78 0 0) SG:[19 2] - avoided sg barrier
+WI:(79 0 0) SG:[19 3] - avoided sg barrier
+WI:(80 0 0) SG:[20 0] - at subgroup barrier 1
+WI:(81 0 0) SG:[20 1] - at subgroup barrier 1
+WI:(82 0 0) SG:[20 2] - at subgroup barrier 1
+WI:(83 0 0) SG:[20 3] - at subgroup barrier 1
+WI:(80 0 0) SG:[20 0] - after subgroup barrier 1
+WI:(80 0 0) SG:[20 0] - at subgroup barrier 2
+WI:(81 0 0) SG:[20 1] - after subgroup barrier 1
+WI:(81 0 0) SG:[20 1] - at subgroup barrier 2
+WI:(82 0 0) SG:[20 2] - after subgroup barrier 1
+WI:(82 0 0) SG:[20 2] - at subgroup barrier 2
+WI:(83 0 0) SG:[20 3] - after subgroup barrier 1
+WI:(83 0 0) SG:[20 3] - at subgroup barrier 2
+WI:(80 0 0) SG:[20 0] - after subgroup barrier 2
+WI:(81 0 0) SG:[20 1] - after subgroup barrier 2
+WI:(82 0 0) SG:[20 2] - after subgroup barrier 2
+WI:(83 0 0) SG:[20 3] - after subgroup barrier 2
+WI:(84 0 0) SG:[21 0] - avoided sg barrier
+WI:(85 0 0) SG:[21 1] - avoided sg barrier
+WI:(86 0 0) SG:[21 2] - avoided sg barrier
+WI:(87 0 0) SG:[21 3] - avoided sg barrier
+WI:(88 0 0) SG:[22 0] - at subgroup barrier 1
+WI:(89 0 0) SG:[22 1] - at subgroup barrier 1
+WI:(90 0 0) SG:[22 2] - at subgroup barrier 1
+WI:(91 0 0) SG:[22 3] - at subgroup barrier 1
+WI:(88 0 0) SG:[22 0] - after subgroup barrier 1
+WI:(88 0 0) SG:[22 0] - at subgroup barrier 2
+WI:(89 0 0) SG:[22 1] - after subgroup barrier 1
+WI:(89 0 0) SG:[22 1] - at subgroup barrier 2
+WI:(90 0 0) SG:[22 2] - after subgroup barrier 1
+WI:(90 0 0) SG:[22 2] - at subgroup barrier 2
+WI:(91 0 0) SG:[22 3] - after subgroup barrier 1
+WI:(91 0 0) SG:[22 3] - at subgroup barrier 2
+WI:(88 0 0) SG:[22 0] - after subgroup barrier 2
+WI:(89 0 0) SG:[22 1] - after subgroup barrier 2
+WI:(90 0 0) SG:[22 2] - after subgroup barrier 2
+WI:(91 0 0) SG:[22 3] - after subgroup barrier 2
+WI:(92 0 0) SG:[23 0] - avoided sg barrier
+WI:(93 0 0) SG:[23 1] - avoided sg barrier
+WI:(94 0 0) SG:[23 2] - avoided sg barrier
+WI:(95 0 0) SG:[23 3] - avoided sg barrier
+WI:(96 0 0) SG:[24 0] - at subgroup barrier 1
+WI:(97 0 0) SG:[24 1] - at subgroup barrier 1
+WI:(98 0 0) SG:[24 2] - at subgroup barrier 1
+WI:(99 0 0) SG:[24 3] - at subgroup barrier 1
+WI:(96 0 0) SG:[24 0] - after subgroup barrier 1
+WI:(96 0 0) SG:[24 0] - at subgroup barrier 2
+WI:(97 0 0) SG:[24 1] - after subgroup barrier 1
+WI:(97 0 0) SG:[24 1] - at subgroup barrier 2
+WI:(98 0 0) SG:[24 2] - after subgroup barrier 1
+WI:(98 0 0) SG:[24 2] - at subgroup barrier 2
+WI:(99 0 0) SG:[24 3] - after subgroup barrier 1
+WI:(99 0 0) SG:[24 3] - at subgroup barrier 2
+WI:(96 0 0) SG:[24 0] - after subgroup barrier 2
+WI:(97 0 0) SG:[24 1] - after subgroup barrier 2
+WI:(98 0 0) SG:[24 2] - after subgroup barrier 2
+WI:(99 0 0) SG:[24 3] - after subgroup barrier 2
+WI:(100 0 0) SG:[25 0] - avoided sg barrier
+WI:(101 0 0) SG:[25 1] - avoided sg barrier
+WI:(102 0 0) SG:[25 2] - avoided sg barrier
+WI:(103 0 0) SG:[25 3] - avoided sg barrier
+WI:(104 0 0) SG:[26 0] - at subgroup barrier 1
+WI:(105 0 0) SG:[26 1] - at subgroup barrier 1
+WI:(106 0 0) SG:[26 2] - at subgroup barrier 1
+WI:(107 0 0) SG:[26 3] - at subgroup barrier 1
+WI:(104 0 0) SG:[26 0] - after subgroup barrier 1
+WI:(104 0 0) SG:[26 0] - at subgroup barrier 2
+WI:(105 0 0) SG:[26 1] - after subgroup barrier 1
+WI:(105 0 0) SG:[26 1] - at subgroup barrier 2
+WI:(106 0 0) SG:[26 2] - after subgroup barrier 1
+WI:(106 0 0) SG:[26 2] - at subgroup barrier 2
+WI:(107 0 0) SG:[26 3] - after subgroup barrier 1
+WI:(107 0 0) SG:[26 3] - at subgroup barrier 2
+WI:(104 0 0) SG:[26 0] - after subgroup barrier 2
+WI:(105 0 0) SG:[26 1] - after subgroup barrier 2
+WI:(106 0 0) SG:[26 2] - after subgroup barrier 2
+WI:(107 0 0) SG:[26 3] - after subgroup barrier 2
+WI:(108 0 0) SG:[27 0] - avoided sg barrier
+WI:(109 0 0) SG:[27 1] - avoided sg barrier
+WI:(110 0 0) SG:[27 2] - avoided sg barrier
+WI:(111 0 0) SG:[27 3] - avoided sg barrier
+WI:(112 0 0) SG:[28 0] - at subgroup barrier 1
+WI:(113 0 0) SG:[28 1] - at subgroup barrier 1
+WI:(114 0 0) SG:[28 2] - at subgroup barrier 1
+WI:(115 0 0) SG:[28 3] - at subgroup barrier 1
+WI:(112 0 0) SG:[28 0] - after subgroup barrier 1
+WI:(112 0 0) SG:[28 0] - at subgroup barrier 2
+WI:(113 0 0) SG:[28 1] - after subgroup barrier 1
+WI:(113 0 0) SG:[28 1] - at subgroup barrier 2
+WI:(114 0 0) SG:[28 2] - after subgroup barrier 1
+WI:(114 0 0) SG:[28 2] - at subgroup barrier 2
+WI:(115 0 0) SG:[28 3] - after subgroup barrier 1
+WI:(115 0 0) SG:[28 3] - at subgroup barrier 2
+WI:(112 0 0) SG:[28 0] - after subgroup barrier 2
+WI:(113 0 0) SG:[28 1] - after subgroup barrier 2
+WI:(114 0 0) SG:[28 2] - after subgroup barrier 2
+WI:(115 0 0) SG:[28 3] - after subgroup barrier 2
+WI:(116 0 0) SG:[29 0] - avoided sg barrier
+WI:(117 0 0) SG:[29 1] - avoided sg barrier
+WI:(118 0 0) SG:[29 2] - avoided sg barrier
+WI:(119 0 0) SG:[29 3] - avoided sg barrier
+WI:(120 0 0) SG:[30 0] - at subgroup barrier 1
+WI:(121 0 0) SG:[30 1] - at subgroup barrier 1
+WI:(122 0 0) SG:[30 2] - at subgroup barrier 1
+WI:(123 0 0) SG:[30 3] - at subgroup barrier 1
+WI:(120 0 0) SG:[30 0] - after subgroup barrier 1
+WI:(120 0 0) SG:[30 0] - at subgroup barrier 2
+WI:(121 0 0) SG:[30 1] - after subgroup barrier 1
+WI:(121 0 0) SG:[30 1] - at subgroup barrier 2
+WI:(122 0 0) SG:[30 2] - after subgroup barrier 1
+WI:(122 0 0) SG:[30 2] - at subgroup barrier 2
+WI:(123 0 0) SG:[30 3] - after subgroup barrier 1
+WI:(123 0 0) SG:[30 3] - at subgroup barrier 2
+WI:(120 0 0) SG:[30 0] - after subgroup barrier 2
+WI:(121 0 0) SG:[30 1] - after subgroup barrier 2
+WI:(122 0 0) SG:[30 2] - after subgroup barrier 2
+WI:(123 0 0) SG:[30 3] - after subgroup barrier 2
+WI:(124 0 0) SG:[31 0] - avoided sg barrier
+WI:(125 0 0) SG:[31 1] - avoided sg barrier
+WI:(126 0 0) SG:[31 2] - avoided sg barrier
+WI:(127 0 0) SG:[31 3] - avoided sg barrier
+OK
