@@ -706,7 +706,6 @@ void registerPassBuilderPasses(llvm::PassBuilder &PB) {
   IsolateRegions::registerWithPB(PB);
   FixMinVecSize::registerWithPB(PB);
   OptimizeWorkItemGVars::registerWithPB(PB);
-  PHIsToAllocas::registerWithPB(PB);
   SubCFGFormation::registerWithPB(PB);
   Workgroup::registerWithPB(PB);
   PoCLCFGPrinter::registerWithPB(PB);

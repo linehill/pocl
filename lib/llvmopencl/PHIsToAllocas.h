@@ -1,7 +1,7 @@
-// Header for PHIsToAllocas function pass.
+// Header for PHIsToAllocas functionality.
 //
 // Copyright (c) 2012 Pekka Jääskeläinen / TUT
-//               2024 Pekka Jääskeläinen / Intel Finland Oy
+//               2024-2025 Pekka Jääskeläinen / Intel Finland Oy
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -24,20 +24,23 @@
 #ifndef POCL_PHIS_TO_ALLOCAS_H
 #define POCL_PHIS_TO_ALLOCAS_H
 
-#include <llvm/IR/Function.h>
-#include <llvm/IR/PassManager.h>
-#include <llvm/Pass.h>
-#include <llvm/Passes/PassBuilder.h>
+namespace llvm {
+class Function;
+}
 
 namespace pocl {
 
-class PHIsToAllocas : public llvm::PassInfoMixin<PHIsToAllocas> {
-public:
-  static void registerWithPB(llvm::PassBuilder &B);
-  llvm::PreservedAnalyses run(llvm::Function &F,
-                              llvm::FunctionAnalysisManager &AM);
-  static bool isRequired() { return true; }
-};
+class VariableUniformityAnalysisResult;
+
+/// Converts PHIs to an alloca and the sources to writes.
+///
+/// The control flow transformations DeSPMD performs do not handle PHI nodes.
+/// When we compile from sources, the input is unoptimized and not in SSA form,
+/// thus there should not be PHI nodes either, but when the input originates
+/// from SPIR-V there could be PHI nodes we should get rid of. Maintains
+/// uniformity info in \p VUA that has been produced with the PHIs intact.
+bool convertPHIsToAllocaAccesses(llvm::Function &F,
+                                 VariableUniformityAnalysisResult &VUA);
 
 } // namespace pocl
 

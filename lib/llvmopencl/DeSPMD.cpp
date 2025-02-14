@@ -44,6 +44,7 @@
 #include "ImplicitLoopBarriers.h"
 #include "LLVMUtils.h"
 #include "LoopBarriers.h"
+#include "PHIsToAllocas.h"
 #include "WorkitemLoops.h"
 
 // TODO: recheck if we can reuse an existing analysis from LLVM:
@@ -101,6 +102,9 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
 
   bool Changed = false;
 
+  Changed = convertPHIsToAllocaAccesses(F, VUA) || Changed;
+  REFRESH_LOOP_INFO();
+
   Changed = canonicalizeBarriers(F) || Changed;
   REFRESH_LOOP_INFO();
 
@@ -111,8 +115,6 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
   REFRESH_LOOP_INFO();
 
   Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
-  REFRESH_LOOP_INFO();
-
   Changed = canonicalizeBarriers(F) || Changed;
   REFRESH_LOOP_INFO();
 
