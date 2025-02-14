@@ -100,6 +100,10 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
   auto &DT = AM.getResult<llvm::DominatorTreeAnalysis>(F);
 
   bool Changed = false;
+
+  Changed = canonicalizeBarriers(F) || Changed;
+  REFRESH_LOOP_INFO();
+
   Changed = enforceOuterLoopParIfBeneficial(F, LI, VUA) || Changed;
   REFRESH_LOOP_INFO();
 
