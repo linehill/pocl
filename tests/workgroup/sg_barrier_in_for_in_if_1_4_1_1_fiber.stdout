@@ -1,0 +1,21 @@
+Before sub-group barrier (i=0): Global ID: 0	Local ID: 0	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 0
+Before sub-group barrier (i=0): Global ID: 1	Local ID: 1	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 1
+After sub-group barrier (i=0): Global ID: 0	Local ID: 0	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 0
+Before sub-group barrier (i=1): Global ID: 0	Local ID: 0	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 0
+After sub-group barrier (i=0): Global ID: 1	Local ID: 1	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 1
+Before sub-group barrier (i=1): Global ID: 1	Local ID: 1	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 1
+After sub-group barrier (i=1): Global ID: 0	Local ID: 0	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 0
+Before sub-group barrier (i=2): Global ID: 0	Local ID: 0	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 0
+After sub-group barrier (i=1): Global ID: 1	Local ID: 1	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 1
+Before sub-group barrier (i=2): Global ID: 1	Local ID: 1	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 1
+After sub-group barrier (i=2): Global ID: 0	Local ID: 0	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 0
+Before sub-group barrier (i=3): Global ID: 0	Local ID: 0	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 0
+After sub-group barrier (i=2): Global ID: 1	Local ID: 1	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 1
+Before sub-group barrier (i=3): Global ID: 1	Local ID: 1	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 1
+After sub-group barrier (i=3): Global ID: 0	Local ID: 0	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 0
+Global ID: 0	Local ID: 0	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 0
+After sub-group barrier (i=3): Global ID: 1	Local ID: 1	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 1
+Global ID: 1	Local ID: 1	Workgroup ID: 0	Subgroup ID: 0	Subgroup local ID: 1
+Global ID: 2	Local ID: 2	Workgroup ID: 0	Subgroup ID: 1	Subgroup local ID: 0
+Global ID: 3	Local ID: 3	Workgroup ID: 0	Subgroup ID: 1	Subgroup local ID: 1
+OK

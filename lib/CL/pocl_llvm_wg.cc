@@ -70,6 +70,7 @@ POP_COMPILER_DIAGS
 #include "pocl_llvm_api.h"
 #include "pocl_spir.h"
 #include "pocl_util.h"
+#include "WorkitemHandlerChooser.h"
 
 #include <iostream>
 #include <map>

@@ -22,7 +22,8 @@
 */
 
 #define SG_SIZE 2
-__attribute ((intel_reqd_sub_group_size (SG_SIZE))) __kernel void
+__attribute ((intel_reqd_sub_group_size (SG_SIZE)))
+__kernel void
 test_kernel (void)
 {
   int gid_x = get_global_id (0);

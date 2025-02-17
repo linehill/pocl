@@ -45,8 +45,8 @@
 #include "ImplicitLoopBarriers.h"
 #include "LLVMUtils.h"
 #include "LoopBarriers.h"
-#include "WorkitemHandlerChooser.h"
 #include "PHIsToAllocas.h"
+#include "WorkitemHandlerChooser.h"
 #include "WorkitemLoops.h"
 
 // TODO: recheck if we can reuse an existing analysis from LLVM:
@@ -113,35 +113,30 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
   Changed = canonicalizeBarriers(F) || Changed;
   REFRESH_LOOP_INFO();
 
-  Changed = enforceOuterLoopParIfBeneficial(F, LI, VUA) || Changed;
-  REFRESH_LOOP_INFO();
-
-  Changed = addLoopConstructIsolationBarriers(F, LI, VUA, DT) || Changed;
-  REFRESH_LOOP_INFO();
-
   if (WIH != WorkitemHandlerType::FIBER) {
+    Changed = enforceOuterLoopParIfBeneficial(F, LI, VUA) || Changed;
+    REFRESH_LOOP_INFO();
+
+    Changed = addLoopConstructIsolationBarriers(F, LI, VUA, DT) || Changed;
+    REFRESH_LOOP_INFO();
+
+    Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
+    Changed = canonicalizeBarriers(F) || Changed;
+    REFRESH_LOOP_INFO();
+
+    Changed = replicateBarrierPathTails(F, LI, DT, PDT, VUA) || Changed;
+    REFRESH_LOOP_INFO();
+
+    // Run implicit conditional barriers again since BTR might have added new
+    // conditional barrier cases that must be handled.
     Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
     REFRESH_LOOP_INFO();
-  }
 
-  Changed = canonicalizeBarriers(F) || Changed;
-  REFRESH_LOOP_INFO();
+    Changed = removeLifetimeMarkers(F);
 
-  Changed = replicateBarrierPathTails(F, LI, DT, PDT, VUA) || Changed;
-  REFRESH_LOOP_INFO();
-
-  // Run implicit conditional barriers again since BTR might have added new
-  // conditional barrier cases that must be handled.
-  if (WIH != WorkitemHandlerType::FIBER) {
-    Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
-    REFRESH_LOOP_INFO();
-  }
-
-  Changed = removeLifetimeMarkers(F);
-
-  // TODO: Run CBS if chosen.
-  if (WIH == WorkitemHandlerType::LOOPS || WIH == WorkitemHandlerType::CBS)
+    // TODO: Run CBS if chosen.
     Changed = addWorkItemLoops(F, DT, PDT, LI, VUA) || Changed;
+  }
 
   if (WIH == WorkitemHandlerType::FIBER)
     Changed = addFiberExecution(F, DT, PDT, LI, VUA) || Changed;

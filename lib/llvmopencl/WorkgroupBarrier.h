@@ -27,7 +27,6 @@
 
 namespace pocl {
   // Class for work-group barrier instructions, inherits from barrier class.
-  // This is semantically same as previous implementation of Barrier.
   class WorkgroupBarrier : public Barrier {
   public:
 

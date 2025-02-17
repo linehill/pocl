@@ -108,6 +108,10 @@ add_test_pocl(NAME "workgroup/mixing_barriers_fiber"
               COMMAND "run_kernel" "mixing_barriers.cl" 1 8 1 1
               WORKITEM_HANDLER "fiber")
 
+add_test_pocl(NAME "workgroup/sg_barrier_in_for_in_if_fiber"
+              EXPECTED_OUTPUT "sg_barrier_in_for_in_if_1_4_1_1_fiber.stdout"
+              COMMAND "run_kernel" "sg_barrier_in_for_in_if.cl" 1 4 1 1
+              WORKITEM_HANDLER "fiber")
 
 # Cases which are not dependent on the work-group or work-item
 # execution (printout) order or the method (use the default method
@@ -124,11 +128,11 @@ foreach(VARIANT ${VARIANTS})
     "workgroup/cond_barriers_in_for_${VARIANT}"
     "workgroup/different_implicit_barrier_injection_scenarios"
 #    "workgroup/cond_barrier_in_var_for_cbs"
-    "workgroup/basic_subgroup_barrier_fiber"
-    "workgroup/basic_subgroup_barrier_loopvec"
+    "workgroup/basic_subgroup_barrier_${VARIANT}"
     "workgroup/basic_diverging_sg_barrier_fiber"
     "workgroup/diverging_sg_barriers_fiber"
     "workgroup/mixing_barriers_fiber"
+    "workgroup/sg_barrier_in_for_in_if_fiber"
     PROPERTIES
       COST 2.0
       PROCESSORS 1
@@ -167,10 +171,15 @@ add_test_pocl(NAME "workgroup/forcing_horizontal_parallelization_to_some_outer_l
               COMMAND "run_kernel" "outerlooppar.cl" 2 2 1 1
               WORKITEM_HANDLER "loopvec")
 
-add_test_pocl(NAME "workgroup/outerloop_intelligence"
+add_test_pocl(NAME "workgroup/outerloop_intelligence_loopvec"
               EXPECTED_OUTPUT "outerloop_intelligence_1_2_1_1.stdout"
               COMMAND "run_kernel" "outerloop_intelligence.cl" 1 2 1 1
               WORKITEM_HANDLER "loopvec")
+
+add_test_pocl(NAME "workgroup/outerloop_intelligence_fiber"
+              EXPECTED_OUTPUT "outerloop_intelligence_1_2_1_1.stdout"
+              COMMAND "run_kernel" "outerloop_intelligence.cl" 1 2 1 1
+              WORKITEM_HANDLER "fiber")
 
 add_test_pocl(NAME "workgroup/reduce"
               EXPECTED_OUTPUT "reduce_2_512_1_1.stdout"
@@ -178,13 +187,35 @@ add_test_pocl(NAME "workgroup/reduce"
               LLVM_FILECHECK "reduce.fc"
               WORKITEM_HANDLER "loopvec")
 
-add_test_pocl(NAME "workgroup/loop_with_two_paths_to_the_latch"
+add_test_pocl(NAME "workgroup/loop_with_two_paths_to_the_latch_loopvec"
               EXPECTED_OUTPUT "for_bug_1_2_1_1.stdout"
-              COMMAND "run_kernel" "for_bug.cl" 1 2 1 1)
+              COMMAND "run_kernel" "for_bug.cl" 1 2 1 1
+              WORKITEM_HANDLER "loopvec")
 
-add_test_pocl(NAME "workgroup/b_loop_with_two_latches"
+add_test_pocl(NAME "workgroup/loop_with_two_paths_to_the_latch_cbs"
+              EXPECTED_OUTPUT "for_bug_1_2_1_1.stdout"
+              COMMAND "run_kernel" "for_bug.cl" 1 2 1 1
+              WORKITEM_HANDLER "cbs")
+
+add_test_pocl(NAME "workgroup/loop_with_two_paths_to_the_latch_fiber"
+              EXPECTED_OUTPUT "for_bug_1_2_1_1_fiber.stdout"
+              COMMAND "run_kernel" "for_bug.cl" 1 2 1 1
+              WORKITEM_HANDLER "fiber")
+
+add_test_pocl(NAME "workgroup/b_loop_with_two_latches_loopvec"
               EXPECTED_OUTPUT "multilatch_bloop_1_3_1_1.stdout"
-              COMMAND "run_kernel" "multilatch_bloop.cl" 1 3 1 1)
+              COMMAND "run_kernel" "multilatch_bloop.cl" 1 3 1 1
+              WORKITEM_HANDLER "loopvec")
+
+add_test_pocl(NAME "workgroup/b_loop_with_two_latches_cbs"
+              EXPECTED_OUTPUT "multilatch_bloop_1_3_1_1.stdout"
+              COMMAND "run_kernel" "multilatch_bloop.cl" 1 3 1 1
+              WORKITEM_HANDLER "cbs")
+
+add_test_pocl(NAME "workgroup/b_loop_with_two_latches_fiber"
+              EXPECTED_OUTPUT "multilatch_bloop_1_3_1_1_fiber.stdout"
+              COMMAND "run_kernel" "multilatch_bloop.cl" 1 3 1 1
+              WORKITEM_HANDLER "fiber")
 
 add_test_pocl(NAME "workgroup/workgroup_sizes_work_items_get_wrong_ids"
               SORT_OUTPUT
@@ -210,7 +241,7 @@ add_test_pocl(NAME "workgroup/range_md_large_grid"
 if(ENABLE_CONFORMANCE)
   set(BALLOT_LABELS "cpu_fail")
 else()
-  set(BALLOT_LABELS "")
+  set(BALLOT_LABELS "cpu")
 endif()
 
 add_test_pocl(NAME "workgroup/ballot"
@@ -234,6 +265,7 @@ foreach(VARIANT ${VARIANTS})
   "workgroup/range_md_small_grid_${VARIANT}"
   "workgroup/range_md_large_grid_${VARIANT}"
   "workgroup/issue_1747_wg_divergent_barrier_${VARIANT}"
+  "workgroup/outerloop_intelligence_${VARIANT}"
   )
   set_tests_properties(
     ${TEST_LIST}

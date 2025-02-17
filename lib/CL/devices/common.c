@@ -1518,7 +1518,7 @@ static const cl_image_format supported_image_formats[] = {
 };
 #endif
 
-// For the scheduler of fiber wg-method.
+/* For the scheduler of fiber wg-method. */
 static const char *basic_native_device_aux_funcs[]
   = { "__pocl_fiber_sched_init", "__pocl_fiber_schedule_work_item",
       "__pocl_fiber_wg_barrier_reached", "__pocl_fiber_sg_barrier_reached",

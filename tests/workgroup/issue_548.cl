@@ -1,8 +1,7 @@
 // Remove this attribute to reproduce #548, which should get fixed after
 // upgrading to Clang 6.0:
 __attribute__((convergent))
-inline
-void
+inline void
 auxfunc()
 {
     printf("auxfunc\n");
@@ -10,8 +9,7 @@ auxfunc()
 }
 
 
-__kernel
-void
+__kernel void
 test_kernel() {
     int id = get_local_id(0);
     int localsize = get_local_size(0);

@@ -49,11 +49,11 @@
  *
  */
 
-/** Initializes values in the data structure.
+/** Initializes the work-group state.
  *
  * Called by one work-item from the kernel.
  *
- * @param wg_state The workgroup data structure.
+ * @param wg_state The work-group data structure.
  * @param sg_wi_counter Pointer to subgroup counters that store wi progression.
  * @param sg_barrier_counter Pointer to counters that store subgroup barrier
  *        status.
@@ -90,8 +90,8 @@ __pocl_fiber_sched_init (wgState *wg_state,
  * Scheduling works so that lowest-id subgroup that still have workitems
  * not reached a barrier has priority.
  *
- * @param wg_state The workgroup data structure.
- * @return The linear ID of the workitem within the workgroup.
+ * @param wg_state The work-group data structure.
+ * @return The linear ID of the workitem within the work-group.
  */
 long
 __pocl_fiber_schedule_work_item (wgState *wg_state)
@@ -110,7 +110,7 @@ __pocl_fiber_schedule_work_item (wgState *wg_state)
       if (wg_state->sg_wi_counter[i] < wg_state->subgroup_size)
         {
           /* Adjust the id so that return value will be linearized id within
-             the workgroup. */
+             the work-group. */
           next_wi = i * wg_state->subgroup_size + wg_state->sg_wi_counter[i];
           break;
         }
@@ -131,7 +131,7 @@ __pocl_fiber_schedule_work_item (wgState *wg_state)
  * @param local_id_x Local 'x' id of current workitem.
  * @param local_id_y Local 'y' id of current workitem.
  * @param local_id_z Local 'z' id of current workitem.
- * @param wg_state The workgroup data structure.
+ * @param wg_state The work-group data structure.
  */
 void
 __pocl_fiber_wg_barrier_reached (long local_id_x,
@@ -160,8 +160,7 @@ __pocl_fiber_wg_barrier_reached (long local_id_x,
 #endif
 }
 
-//
-/** Registers workitem reaching a sub-group barrier.
+/** Registers a workitem reaching a sub-group barrier.
  *
  * Workitem progression is stored based on linear ids, so this
  * requires linear conversion as the kernel works with 3-dimensional ids.
@@ -169,7 +168,7 @@ __pocl_fiber_wg_barrier_reached (long local_id_x,
  * @param local_id_x Local 'x' id of current workitem.
  * @param local_id_y Local 'y' id of current workitem.
  * @param local_id_z Local 'z' id of current workitem.
- * @param wg_state The workgroup data structure.
+ * @param wg_state The work-group data structure.
  */
 void
 __pocl_fiber_sg_barrier_reached (long local_id_x,
@@ -205,12 +204,12 @@ __pocl_fiber_sg_barrier_reached (long local_id_x,
 #endif
 }
 
-/** Resolves workgroup/subgroup barriers.
+/** Resolves work-group/subgroup barriers.
  *
  * Check whether conditions are fulfilled such that all workitems have reached
  * a barrier and can be 'freed' to move on.
  *
- * Case 1. If all wis in the workgroup are waiting (indicated by
+ * Case 1. If all WIs in the work-group are waiting (indicated by
  * waiting_count), zero the counters.
  *
  * Case 2. If the subgroup barrier is 'active' (indicated by
@@ -218,7 +217,7 @@ __pocl_fiber_sg_barrier_reached (long local_id_x,
  *         (indicated by sg_wi_counter[i]) within that subgroup equals the
  *         subgroup size, zero counters for that specific subgroup.
  *
- * @param wg_state The workgroup data structure.
+ * @param wg_state The work-group data structure.
  *
  */
 static void
@@ -312,7 +311,7 @@ resolve_barriers (wgState *wg_state)
  *
  * For each subgroup, outputs the number of workitems waiting.
  *
- * @param wg_state The workgroup data structure.
+ * @param wg_state The work-group data structure.
  */
 static void
 print_barrier_status (wg_state *wg_state)
