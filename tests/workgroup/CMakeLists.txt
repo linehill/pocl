@@ -81,37 +81,38 @@ add_test_pocl(NAME "workgroup/outerlooppar_multiple_exits"
 #              COMMAND "run_kernel" "cond_barrier_in_var_for.cl" 2 4 1 1
 #              WORKITEM_HANDLER "cbs")
 
+# Test cases for subgroup barriers (Not supported in conformance build).
+if(NOT ENABLE_CONFORMANCE)
+  add_test_pocl(NAME "workgroup/basic_subgroup_barrier_fiber"
+                EXPECTED_OUTPUT "basic_sg_barrier_1_4_1_1_fiber.stdout"
+                COMMAND "run_kernel" "basic_sg_barrier.cl" 1 4 1 1
+                WORKITEM_HANDLER "fiber")
 
-# Test cases for subgroup barriers.
-add_test_pocl(NAME "workgroup/basic_subgroup_barrier_fiber"
-              EXPECTED_OUTPUT "basic_sg_barrier_1_4_1_1_fiber.stdout"
-              COMMAND "run_kernel" "basic_sg_barrier.cl" 1 4 1 1
-              WORKITEM_HANDLER "fiber")
+  add_test_pocl(NAME "workgroup/basic_subgroup_barrier_loopvec"
+                EXPECTED_OUTPUT "basic_sg_barrier_1_4_1_1_loopvec.stdout"
+                COMMAND "run_kernel" "basic_sg_barrier.cl" 1 4 1 1
+                WORKITEM_HANDLER "loopvec")
 
-add_test_pocl(NAME "workgroup/basic_subgroup_barrier_loopvec"
-              EXPECTED_OUTPUT "basic_sg_barrier_1_4_1_1_loopvec.stdout"
-              COMMAND "run_kernel" "basic_sg_barrier.cl" 1 4 1 1
-              WORKITEM_HANDLER "loopvec")
+  add_test_pocl(NAME "workgroup/basic_diverging_sg_barrier_fiber"
+                EXPECTED_OUTPUT "basic_diverging_sg_barrier_1_4_1_1.stdout"
+                COMMAND "run_kernel" "basic_diverging_sg_barrier.cl" 1 4 1 1
+                WORKITEM_HANDLER "fiber")
 
-add_test_pocl(NAME "workgroup/basic_diverging_sg_barrier_fiber"
-              EXPECTED_OUTPUT "basic_diverging_sg_barrier_1_4_1_1.stdout"
-              COMMAND "run_kernel" "basic_diverging_sg_barrier.cl" 1 4 1 1
-              WORKITEM_HANDLER "fiber")
+  add_test_pocl(NAME "workgroup/diverging_sg_barriers_fiber"
+                EXPECTED_OUTPUT "diverging_sg_barriers_1_128_1_1.stdout"
+                COMMAND "run_kernel" "diverging_sg_barriers.cl" 1 128 1 1
+                WORKITEM_HANDLER "fiber")
 
-add_test_pocl(NAME "workgroup/diverging_sg_barriers_fiber"
-              EXPECTED_OUTPUT "diverging_sg_barriers_1_128_1_1.stdout"
-              COMMAND "run_kernel" "diverging_sg_barriers.cl" 1 128 1 1
-              WORKITEM_HANDLER "fiber")
+  add_test_pocl(NAME "workgroup/mixing_barriers_fiber"
+                EXPECTED_OUTPUT "mixing_barriers_1_8_1_1.stdout"
+                COMMAND "run_kernel" "mixing_barriers.cl" 1 8 1 1
+                WORKITEM_HANDLER "fiber")
 
-add_test_pocl(NAME "workgroup/mixing_barriers_fiber"
-              EXPECTED_OUTPUT "mixing_barriers_1_8_1_1.stdout"
-              COMMAND "run_kernel" "mixing_barriers.cl" 1 8 1 1
-              WORKITEM_HANDLER "fiber")
-
-add_test_pocl(NAME "workgroup/sg_barrier_in_for_in_if_fiber"
-              EXPECTED_OUTPUT "sg_barrier_in_for_in_if_1_4_1_1_fiber.stdout"
-              COMMAND "run_kernel" "sg_barrier_in_for_in_if.cl" 1 4 1 1
-              WORKITEM_HANDLER "fiber")
+  add_test_pocl(NAME "workgroup/sg_barrier_in_for_in_if_fiber"
+                EXPECTED_OUTPUT "sg_barrier_in_for_in_if_1_4_1_1_fiber.stdout"
+                COMMAND "run_kernel" "sg_barrier_in_for_in_if.cl" 1 4 1 1
+                WORKITEM_HANDLER "fiber")
+endif()
 
 # Cases which are not dependent on the work-group or work-item
 # execution (printout) order or the method (use the default method
@@ -138,6 +139,22 @@ foreach(VARIANT ${VARIANTS})
       PROCESSORS 1
       DEPENDS "pocl_version_check")
 endforeach()
+
+# Disable subgroup tests in conformance build.
+if(ENABLE_CONFORMANCE)
+  set_tests_properties(
+    "workgroup/basic_subgroup_barrier_fiber"
+    "workgroup/basic_subgroup_barrier_loopvec"
+    "workgroup/basic_diverging_sg_barrier_fiber"
+    "workgroup/diverging_sg_barriers_fiber"
+    "workgroup/mixing_barriers_fiber"
+    "workgroup/sg_barrier_in_for_in_if_fiber"
+    PROPERTIES
+      COST 2.0
+      PROCESSORS 1
+      DEPENDS "pocl_version_check"
+      LABELS "cpu_fail")
+endif()
 
 add_test_pocl(NAME "workgroup/unconditional_barriers"
               EXPECTED_OUTPUT "basic_barriers_2_2_2_2.stdout"

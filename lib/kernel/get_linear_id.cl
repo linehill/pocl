@@ -67,7 +67,7 @@ size_t _CL_OVERLOADABLE _CL_READNONE _CL_OPTNONE
 get_global_linear_id ()
 #endif
 {
-  return ((_local_size_z * _group_id_z + _local_id_x) * _num_groups_y
+  return ((_local_size_z * _group_id_z + _local_id_z) * _num_groups_y
           * _local_size_y * _num_groups_x * _local_size_x)
 
          + ((_local_size_y * _group_id_y + _local_id_y) * _num_groups_x
