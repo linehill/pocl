@@ -1,6 +1,6 @@
 /* Tests consecutive subgroup barriers in diverging control flow. 
 
-   Copyright (c) 2025 Taio Nevalainen / Tampere University
+   Copyright (c) 2025 Tapio Nevalainen / Tampere University
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to
