@@ -130,7 +130,7 @@ function(add_test_pocl)
       endif()
 
       set_tests_properties("${POCL_VARIANT_TEST_NAME}" PROPERTIES
-        ENVIRONMENT POCL_WORK_GROUP_METHOD=${VARIANT})
+        ENVIRONMENT "POCL_WORK_GROUP_METHOD=${VARIANT};${POCL_TEST_ENVIRONMENT}")
 
       set_tests_properties("${POCL_VARIANT_TEST_NAME}" PROPERTIES
         LABELS "${POCL_TEST_LABELS}")

@@ -1,0 +1,9 @@
+# This case should get vectorized by means of the LLVM loop vectorizer's
+# reduction pattern detection _from within_ the work-item. But only if
+# relaxed math is on.
+
+CHECK-NOT: wi_context
+
+# Let LLVM a lot of freedom to generate the reduction trees. Just make
+# sure we do the final reductions using vector instrinsics.
+CHECK: call fast float @llvm.vector.reduce.fadd.
