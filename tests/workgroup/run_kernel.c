@@ -145,6 +145,8 @@ main (int argc, char **argv)
         }
       free (init_data);
     }
+  else
+    assert (num_args == 0 || num_args == 1 || num_args == 2);
 
   err = clEnqueueNDRangeKernel (cmd_queue, kernel, 3, NULL, global_work_size,
                                 local_work_size, 0, NULL, NULL);
