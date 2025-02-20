@@ -1,9 +1,12 @@
 # This case should get vectorized by means of the LLVM loop vectorizer's
 # reduction pattern detection.
 
-# Remat and alloc sinking should take care of any needs for WI context.
-CHECK-NOT: wi_context
+# The float reduction adds an alloca that refers to another alloca which has to
+# be currently context saved.
+# TODO: Recursive rematerialization to fix this.
+# CHECK: wi_context
 
-# Let LLVM a lot of freedom to generate the reduction tree. Just make
-# sure we do a final reduction within a vector:
-CHECK: call i32 @llvm.vector.reduce.add.v8i32
+# Let LLVM a lot of freedom to generate the reduction trees. Just make
+# sure we do the final reductions using vector instrinsics.
+CHECK: call i32 @llvm.vector.reduce.add.
+CHECK: call reassoc float @llvm.vector.reduce.fadd.

@@ -27,6 +27,9 @@
 #undef min
 #undef max
 
+/* Allow the cross-WI FP reductions to be executed out-of-order. */
+#pragma clang fp reassociate(on)
+
 /* Align the stack temporary data by this multiple to facilitate easier
    vectorization. */
 #define ALIGN_ELEMENT_MULTIPLE 32

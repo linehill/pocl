@@ -22,9 +22,9 @@
 */
 
 __kernel void
-test_kernel (global int *d)
+test_kernel (global int *int_d, global int *out_d)
 {
-  int sum = work_group_reduce_add(d[get_num_groups(0) + get_global_id(0)]);
+  int sum_i = work_group_reduce_add (int_d[get_global_id (0)]);
 
   /*
     With 512 WIs per WG with 2 WGs the correct answers are:
@@ -32,6 +32,27 @@ test_kernel (global int *d)
     1: 393984
   */
 
-  if (get_local_id(0) == 0)
-    d[get_group_id(0)] = sum;
+  /*
+    Float reduction has the additional challenge with float ordering
+    constraints when strict rounding is used which can prevent
+    parallel reduction trees to be formed.
+
+    First convert the values to float.
+  */
+  global float *float_d = (global float *)int_d;
+  float_d[get_global_id (0)] = (float)int_d[get_global_id (0)];
+
+  barrier (CLK_GLOBAL_MEM_FENCE);
+
+  float sum_f = work_group_reduce_add (float_d[get_global_id (0)]);
+
+  int_d[get_global_id (0)] = get_global_id (0);
+
+  barrier (CLK_GLOBAL_MEM_FENCE);
+
+  if (get_local_id (0) == 0)
+    {
+      out_d[get_group_id (0)] = sum_i;
+      out_d[get_num_groups (0) + get_group_id (0)] = (int)sum_f;
+    }
 }
