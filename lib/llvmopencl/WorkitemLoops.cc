@@ -42,14 +42,6 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 #include "Barrier.h"
-
-// To be moved to DeSPMD:
-#include "BarrierTailReplication.h"
-#include "CanonicalizeBarriers.h"
-#include "ImplicitConditionalBarriers.h"
-#include "ImplicitLoopBarriers.h"
-#include "LoopBarriers.h"
-
 #include "DebugHelpers.h"
 #include "Kernel.h"
 #include "KernelCompilerUtils.h"
