@@ -222,34 +222,37 @@ bool enforceOuterLoopParIfBeneficial(llvm::Function &F, llvm::LoopInfo &LI,
 #endif
 
   bool Changed = false;
-  for (llvm::Loop *L : LI) {
+  for (llvm::Loop *OuterLoop : LI) {
+    auto Loops = OuterLoop->getLoopsInPreorder();
+    for (llvm::Loop *L : Loops) {
 
-    // Only add barriers to the innermost loops.
-    if (L->getSubLoops().size() > 0)
-      continue;
+      // Only add barriers to the innermost loops.
+      if (L->getSubLoops().size() > 0)
+        continue;
 
-    if (Barrier::isLoopWithBarrier(*L)) {
+      if (Barrier::isLoopWithBarrier(*L)) {
 #ifdef DEBUG_ILOOP_BARRIERS
-      std::cerr << "#### loop with barrier\n";
+        std::cerr << "#### loop with barrier\n";
 #endif
-      continue;
-    }
+        continue;
+      }
 
-    if (!VUA.isUniformLoop(F, *L)) {
+      if (!VUA.isUniformLoop(F, *L)) {
 #ifdef DEBUG_ILOOP_BARRIERS
-      std::cerr << "#### not a uniform loop\n";
+        std::cerr << "#### not a uniform loop\n";
 #endif
-      continue;
-    }
+        continue;
+      }
 
-    if (!pocl_get_bool_option("POCL_FORCE_PARALLEL_OUTER_LOOP", 0) &&
-        !outerLoopIsLikelyBeneficial(*L)) {
+      if (!pocl_get_bool_option("POCL_FORCE_PARALLEL_OUTER_LOOP", 0) &&
+          !outerLoopIsLikelyBeneficial(*L)) {
 #ifdef DEBUG_ILOOP_BARRIERS
-      std::cerr << "#### likely better inner-loop vectorized\n";
+        std::cerr << "#### likely better inner-loop vectorized\n";
 #endif
-      continue;
+        continue;
+      }
+      Changed = convertToLoopWithBarriers(*L) || Changed;
     }
-    Changed = convertToLoopWithBarriers(*L) || Changed;
   }
 
   if (Changed) {

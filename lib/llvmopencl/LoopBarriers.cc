@@ -392,10 +392,11 @@ bool addLoopConstructIsolationBarriers(llvm::Function &F, llvm::LoopInfo &LI,
 #endif
 
   bool Changed = false;
-  for (llvm::Loop *L : LI) {
-    Changed = processLoop(*L, DT, VUA) || Changed;
+  for (llvm::Loop *OuterLoop : LI) {
+    auto Loops = OuterLoop->getLoopsInPreorder();
+    for (llvm::Loop *L : Loops)
+      Changed = processLoop(*L, DT, VUA) || Changed;
   }
-
 #ifdef DEBUG_LOOP_BARRIERS
   std::cerr << "After LoopBarriers:\n";
   F.dump();

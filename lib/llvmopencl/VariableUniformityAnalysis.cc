@@ -245,9 +245,11 @@ bool VariableUniformityAnalysisResult::runOnFunction(
   analyzeBBDivergence(&F, &F.getEntryBlock(), &F.getEntryBlock(), PDT);
 
   // Then correct loop divergence information.
-  for (llvm::LoopInfo::iterator i = LI.begin(), e = LI.end(); i != e; ++i) {
-    llvm::Loop *L = *i;
-    analyzeLoop(F, *L, PDT);
+  for (llvm::Loop *OuterLoop : LI) {
+    auto Loops = OuterLoop->getLoopsInPreorder();
+    for (llvm::Loop *L : Loops) {
+      analyzeLoop(F, *L, PDT);
+    }
   }
 
 #ifdef DEBUG_UNIFORMITY_ANALYSIS
