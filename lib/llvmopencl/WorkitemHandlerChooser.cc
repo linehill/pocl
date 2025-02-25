@@ -47,7 +47,8 @@ WorkitemHandlerType getWorkitemHandler() {
     if (method == "loops" || method == "workitemloops" || method == "loopvec")
       Result = WorkitemHandlerType::LOOPS;
     else if (method == "cbs")
-      Result = WorkitemHandlerType::CBS;
+      // CBS is deprecated for now at least until it's fixed.
+      Result = WorkitemHandlerType::FIBER;
     else if (method == "fiber")
       Result = WorkitemHandlerType::FIBER;
     else if (method != "auto") {
