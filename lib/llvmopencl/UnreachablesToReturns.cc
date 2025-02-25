@@ -55,6 +55,8 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 
 #include "LLVMUtils.h"
 #include "UnreachablesToReturns.h"
+#include "WorkitemHandlerChooser.h"
+
 POP_COMPILER_DIAGS
 
 #include <iostream>
@@ -318,9 +320,10 @@ ConvertUnreachablesToReturns::run(llvm::Function &F,
   if (!isKernelToProcess(F))
     return PreservedAnalyses::all();
 
-  // LOOPS: remove the blocks with unreachable inst.
-  // CBS: replace unreachable with ret void
-  WorkitemHandlerType WIH = AM.getResult<WorkitemHandlerChooser>(F).WIH;
+  // for LOOPS, remove the blocks with unreachable inst.
+  // for CBS, replace unreachable with ret void
+  WorkitemHandlerType WIH = getWorkitemHandler();
+
   bool Changed = (WIH == WorkitemHandlerType::LOOPS)
                      ? deleteBlocksWithUnreachable(F)
                      : convertUnreachablesToReturns(F);
