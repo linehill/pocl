@@ -461,9 +461,9 @@ void WorkitemHandler::addContextSaveRestore(llvm::Instruction *Def, llvm::LoopIn
   // Find out the uses to fix first as fixing them invalidates the iterator.
   for (Instruction::use_iterator UI = Def->use_begin(), UE = Def->use_end();
        UI != UE; ++UI) {
-    
+
     llvm::Instruction *User = cast<Instruction>(UI->getUser());
-    
+
     if (WIH == WorkitemHandlerType::FIBER) {
       Uses.push_back(User);
       continue;
@@ -471,7 +471,7 @@ void WorkitemHandler::addContextSaveRestore(llvm::Instruction *Def, llvm::LoopIn
 
     if (User == NULL)
       continue;
-    
+
     ParallelRegion *PRegion = regionOfBlock(User->getParent());
 
     if (StoreInst *ST = dyn_cast<StoreInst>(User)) {
@@ -497,7 +497,7 @@ void WorkitemHandler::addContextSaveRestore(llvm::Instruction *Def, llvm::LoopIn
           User->dump();
 #endif
         }
-        
+
         if (LI.getLoopFor(ST->getParent()) != nullptr) {
           RematCandidate = false;
 #ifdef DEBUG_WORK_ITEM_LOOPS
@@ -1056,6 +1056,7 @@ llvm::Value *WorkitemHandler::getLinearWiIndex(llvm::IRBuilder<> &Builder,
   Value *LocalSizeXTimesY =
       Builder.CreateBinOp(Instruction::Mul, LoadX, LoadY, "ls_xy");
 
+  Value *Result;
   if (WIH == WorkitemHandlerType::FIBER) {
     llvm::LoadInst *LoadXId = Builder.CreateLoad(ST, LocalIdGlobals[0], "id_x");
     llvm::LoadInst *LoadYId = Builder.CreateLoad(ST, LocalIdGlobals[1], "id_y");
@@ -1063,6 +1064,10 @@ llvm::Value *WorkitemHandler::getLinearWiIndex(llvm::IRBuilder<> &Builder,
     ZPart =
         Builder.CreateBinOp(Instruction::Mul, LocalSizeXTimesY, LoadZId, "tmp");
     YPart = Builder.CreateBinOp(Instruction::Mul, LoadX, LoadYId, "ls_x_y");
+    Value *ZYSum =
+        Builder.CreateBinOp(Instruction::Add, ZPart, YPart, "zy_sum");
+    Result =
+        Builder.CreateBinOp(Instruction::Add, ZYSum, LoadXId, "linear_xyz_idx");
   } else {
     ZPart =
         Builder.CreateBinOp(Instruction::Mul, LocalSizeXTimesY,
@@ -1070,14 +1075,8 @@ llvm::Value *WorkitemHandler::getLinearWiIndex(llvm::IRBuilder<> &Builder,
     YPart =
         Builder.CreateBinOp(Instruction::Mul, LoadX,
                             Region->getOrCreateIDLoad(LID_G_NAME(1)), "ls_x_y");
-  }
-
-  Value *ZYSum = Builder.CreateBinOp(Instruction::Add, ZPart, YPart, "zy_sum");
-  Value *Result;
-  if (WIH == WorkitemHandlerType::FIBER) {
-    Result = Builder.CreateBinOp(Instruction::Add, ZYSum, LocalIdGlobals[0],
-                                 "linear_xyz_idx");
-  } else {
+    Value *ZYSum =
+        Builder.CreateBinOp(Instruction::Add, ZPart, YPart, "zy_sum");
     Result = Builder.CreateBinOp(Instruction::Add, ZYSum,
                                  Region->getOrCreateIDLoad(LID_G_NAME(0)),
                                  "linear_xyz_idx");

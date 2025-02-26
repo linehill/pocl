@@ -314,7 +314,7 @@ resolve_barriers (wgState *wg_state)
  * @param wg_state The work-group data structure.
  */
 static void
-print_barrier_status (wg_state *wg_state)
+print_barrier_status (wgState *wg_state)
 {
   for (int i = 0; i < wg_state->n_subgroups; i++)
     {

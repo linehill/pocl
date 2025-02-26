@@ -79,6 +79,9 @@ typedef enum memory_order
 void _CL_OVERLOADABLE barrier (cl_mem_fence_flags flags)
     __attribute__ ((noduplicate));
 
+void _CL_OVERLOADABLE subgroup_barrier (cl_mem_fence_flags flags)
+  __attribute__ ((noduplicate));
+
 void _CL_OVERLOADABLE
 POCL_BUILTIN_PREFIX(work_group_barrier) (cl_mem_fence_flags flags) __attribute__ ((noduplicate))
 {
@@ -97,4 +100,19 @@ POCL_BUILTIN_PREFIX(atomic_work_item_fence) (cl_mem_fence_flags flags, memory_or
                         memory_scope scope) __attribute__ ((noduplicate))
 {
   __c11_atomic_thread_fence (order);
+}
+
+void _CL_OVERLOADABLE
+POCL_BUILTIN_PREFIX (sub_group_barrier) (cl_mem_fence_flags flags)
+  __attribute__ ((noduplicate))
+{
+  subgroup_barrier (flags);
+}
+
+void _CL_OVERLOADABLE
+POCL_BUILTIN_PREFIX (sub_group_barrier) (cl_mem_fence_flags flags,
+                                         memory_scope scope)
+  __attribute__ ((noduplicate))
+{
+  subgroup_barrier (flags);
 }

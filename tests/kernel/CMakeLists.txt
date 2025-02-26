@@ -300,8 +300,8 @@ endif()
 
 ######################################################################
 
-#Comment out this one for now. Seems the test throws an exception, 
-#and CTest doesn't think this is a WILL_FAIL, causing "Exception Other" 
+#Comment out this one for now. Seems the test throws an exception,
+#and CTest doesn't think this is a WILL_FAIL, causing "Exception Other"
 #to be printed
 #add_test_custom("${CMAKE_CURRENT_BINARY_DIR}/kernel" "kernel/test_block"
 #                "test_block_expout.txt" "test_block")
