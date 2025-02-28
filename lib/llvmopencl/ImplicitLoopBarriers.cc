@@ -190,11 +190,18 @@ static bool convertToLoopWithBarriers(Loop &L) {
   SmallVector<BasicBlock *> ExitingBlocks;
   L.getExitingBlocks(ExitingBlocks);
   for (BasicBlock *ExitingBlock : ExitingBlocks) {
+#if LLVM_MAJOR < 20
     WorkgroupBarrier::create(ExitingBlock->getTerminator());
+#else
+    WorkgroupBarrier::create(ExitingBlock->getTerminator()->getIterator());
+#endif
     Highlights.insert(ExitingBlock);
   }
-
+#if LLVM_MAJOR < 20
   WorkgroupBarrier::create(HeaderBlock->getFirstNonPHI());
+#else
+  WorkgroupBarrier::create(HeaderBlock->getFirstNonPHIIt());
+#endif
 
 #ifdef DEBUG_ILOOP_BARRIERS
   std::cerr << "### added inner-loop barriers to loop " << L.getName().str()

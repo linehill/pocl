@@ -26,10 +26,9 @@
 #include <iostream>
 
 namespace pocl {
-  // Class for work-group barrier instructions, inherits from barrier class.
-  class WorkgroupBarrier : public Barrier {
-  public:
-
+// Class for work-group barrier instructions, inherits from barrier class.
+class WorkgroupBarrier : public Barrier {
+public:
   /// Ensures there is a workgroup barrier call in the basic block before
   /// the given instruction.
   ///
@@ -40,7 +39,7 @@ namespace pocl {
   static WorkgroupBarrier *create(llvm::Instruction *InsertBefore) {
     if (InsertBefore != &InsertBefore->getParent()->front() &&
 #else
-  static Barrier *create(InstListType::iterator InsertBefore) {
+  static WorkgroupBarrier *create(InstListType::iterator InsertBefore) {
     if (InsertBefore != InsertBefore->getParent()->begin() &&
 #endif
         llvm::isa<WorkgroupBarrier>(InsertBefore->getPrevNode()))
@@ -76,38 +75,30 @@ namespace pocl {
   }
 #endif
 
-    /// Ensures there is a workgroup barrier call in the basic block before
-    /// the given instruction.
-    ///
-    /// Otherwise, creates a new one there.
-    ///
-    /// \returns The workgroup barrier.
-
-    static bool classof(const Barrier *) { return true; }
-    static bool classof(const llvm::CallInst *C) {
-      return C->getCalledFunction() != NULL &&
-        C->getCalledFunction()->getName() == WGBARRIER_FUNCTION_NAME;
-    }
-    static bool classof(const Instruction *I) {
-      return (llvm::isa<llvm::CallInst>(I) &&
-              classof(llvm::cast<llvm::CallInst>(I)));
-    }
-    static bool classof(const User *U) {
-      return (llvm::isa<Instruction>(U) &&
-              classof(llvm::cast<llvm::Instruction>(U)));
-    }
-    static bool classof(const Value *V) {
-      return (llvm::isa<User>(V) &&
-              classof(llvm::cast<llvm::User>(V)));
-    }
-    static bool hasWGBarrier(const llvm::BasicBlock *BB) {
-      for (llvm::BasicBlock::const_iterator I = BB->begin(), E = BB->end();
-           I != E; ++I)
-        if (llvm::isa<WorkgroupBarrier>(I))
-          return true;
-      return false;
-    }
-  };
+  static bool classof(const Barrier *) { return true; }
+  static bool classof(const llvm::CallInst *C) {
+    return C->getCalledFunction() != NULL &&
+           C->getCalledFunction()->getName() == WGBARRIER_FUNCTION_NAME;
+  }
+  static bool classof(const Instruction *I) {
+    return (llvm::isa<llvm::CallInst>(I) &&
+            classof(llvm::cast<llvm::CallInst>(I)));
+  }
+  static bool classof(const User *U) {
+    return (llvm::isa<Instruction>(U) &&
+            classof(llvm::cast<llvm::Instruction>(U)));
+  }
+  static bool classof(const Value *V) {
+    return (llvm::isa<User>(V) && classof(llvm::cast<llvm::User>(V)));
+  }
+  static bool hasWGBarrier(const llvm::BasicBlock *BB) {
+    for (llvm::BasicBlock::const_iterator I = BB->begin(), E = BB->end();
+         I != E; ++I)
+      if (llvm::isa<WorkgroupBarrier>(I))
+        return true;
+    return false;
+  }
+};
 
 } // namespace pocl
 

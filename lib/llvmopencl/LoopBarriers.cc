@@ -275,7 +275,11 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
 #endif
 
         if (Latch != NULL && BrExit != Latch) {
+#if LLVM_MAJOR < 20
           WorkgroupBarrier::create(Latch->getTerminator());
+#else
+          WorkgroupBarrier::create(Latch->getTerminator()->getIterator());
+#endif
           Latch->setName(Latch->getName() + ".latchbarrier");
         }
 
@@ -315,7 +319,11 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
             // (otherwise if might not even belong to this "tail", see
             // forifbarrier1 graph test).
             if (DT.dominates(J->getParent(), Latch2)) {
+#if LLVM_MAJOR < 20
               WorkgroupBarrier::create(Latch2->getTerminator());
+#else
+              WorkgroupBarrier::create(Latch2->getTerminator()->getIterator());
+#endif
               if (UniformLoopConstruct)
                 markAsPureUniformBlock(Latch2, "b-loop latch");
               Highlights.insert(Latch2);

@@ -142,7 +142,11 @@ bool canonicalizeBarriers(Function &F) {
         if (!isPureUniformBlock(PredBB) && !Barrier::endsWithBarrier(PredBB)) {
           // Create the barrier to the beginning of the uniform block so
           // all predecessors can branch to it in case it's a join point.
+#if LLVM_MAJOR < 20
           WorkgroupBarrier::create(BB->getFirstNonPHI());
+#else
+          WorkgroupBarrier::create(BB->getFirstNonPHIIt());
+#endif
           Changed = true;
           continue;
         }
@@ -154,7 +158,11 @@ bool canonicalizeBarriers(Function &F) {
             !Barrier::startsWithBarrier(SuccBB)) {
           // Create a barrier at the end of the uniform block which can then
           // potentially start multiple parallel regions.
+#if LLVM_MAJOR < 20
           WorkgroupBarrier::create(BB->getTerminator());
+#else
+          WorkgroupBarrier::create(BB->getTerminator()->getIterator());
+#endif
           Changed = true;
           continue;
         }

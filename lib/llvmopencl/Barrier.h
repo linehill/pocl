@@ -107,7 +107,13 @@ public:
   // Returns true in case the given basic block starts with a barrier,
   // that is, contains a branch instruction after possible PHI nodes.
   static bool startsWithBarrier(const llvm::BasicBlock *BB) {
+
+#if LLVM_MAJOR < 20
     const llvm::Instruction *Inst = BB->getFirstNonPHI();
+#else
+    InstListType::const_iterator it = BB->getFirstNonPHIIt();
+    const llvm::Instruction *Inst = &*it;
+#endif
     if (Inst == NULL)
       return false;
     return llvm::isa<Barrier>(Inst);
@@ -123,6 +129,7 @@ public:
            llvm::isa<Barrier>(Inst->getPrevNode());
   }
 };
-}
+
+} // namespace pocl
 
 #endif
