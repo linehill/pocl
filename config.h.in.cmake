@@ -215,6 +215,8 @@
 
 #cmakedefine ENABLE_LEVEL0_OCLOC
 
+#cmakedefine ENABLE_LEVEL0_IMM_CMDLIST
+
 #endif
 
 

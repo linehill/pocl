@@ -46,10 +46,6 @@
 #error Defined both ENABLE_CONFORMANCE and ENABLE_LEVEL0_EXTRA_FEATURES
 #endif
 
-// TODO: do we need to use Barriers, if we're using immediate
-// cmdlist in synchronous mode
-//#define LEVEL0_IMMEDIATE_CMDLIST
-
 // debugging help. If defined, randomize the execution order by skipping 1-3
 // of the commands in the work queue.
 //#define LEVEL0_RANDOMIZE_QUEUE
@@ -105,7 +101,8 @@ static void pocl_level0_abort_on_ze_error(int unused, ze_result_t status,
 #define LEVEL0_CHECK_ABORT_NO_EXIT(code)                                       \
   pocl_level0_abort_on_ze_error(0, code, __LINE__, __FUNCTION__, #code)
 
-void Level0Queue::runThread() {
+/*
+void Level0CmdList::runThread() {
 
   bool ShouldExit = false;
   _cl_command_node *Command = nullptr;
@@ -151,8 +148,9 @@ void Level0Queue::runThread() {
     }
   } while (!ShouldExit);
 }
+*/
 
-void Level0Queue::appendEventToList(_cl_command_node *Cmd, const char **Msg,
+void Level0CmdList::appendEventToList(_cl_command_node *Cmd, const char **Msg,
                                     cl_context Context) {
   cl_device_id dev = Cmd->device;
   assert(dev);
@@ -477,21 +475,15 @@ void Level0Queue::appendEventToList(_cl_command_node *Cmd, const char **Msg,
   }
 }
 
-void Level0Queue::allocNextFreeEvent() {
+void Level0CmdList::allocNextFreeEvent() {
   PreviousEventH = CurrentEventH;
-
-  if (AvailableDeviceEvents.empty())
-    CurrentEventH = Device->getNewEvent();
-  else {
-    CurrentEventH = AvailableDeviceEvents.front();
-    AvailableDeviceEvents.pop();
-  }
+  CurrentEventH = Device->getNewEvent();
   DeviceEventsToReset.push(CurrentEventH);
 }
 
-void Level0Queue::reset() {
+void Level0CmdList::reset() {
   assert(CmdListH);
-  if (QueueH) {
+  if (!Immediate) {
     LEVEL0_CHECK_ABORT(zeCommandListReset(CmdListH));
   }
   CurrentEventH = nullptr;
@@ -501,7 +493,7 @@ void Level0Queue::reset() {
   MemPtrsToMakeResident.clear();
 }
 
-void Level0Queue::closeCmdList(std::queue<ze_event_handle_t> *EvtList) {
+void Level0CmdList::closeCmdList(std::queue<ze_event_handle_t> *EvtList) {
   LEVEL0_CHECK_ABORT(zeCommandListAppendBarrier(CmdListH,
                                    nullptr, // signal event
                                    CurrentEventH ? 1 : 0,
@@ -511,6 +503,7 @@ void Level0Queue::closeCmdList(std::queue<ze_event_handle_t> *EvtList) {
     ze_event_handle_t E = DeviceEventsToReset.front();
     DeviceEventsToReset.pop();
     LEVEL0_CHECK_ABORT(zeCommandListAppendEventReset(CmdListH, E));
+    // TODO
     if (EvtList) {
       EvtList->push(E);
     } else {
@@ -518,12 +511,12 @@ void Level0Queue::closeCmdList(std::queue<ze_event_handle_t> *EvtList) {
     }
   }
 
-  if (QueueH) {
+  if (!Immediate) {
     LEVEL0_CHECK_ABORT(zeCommandListClose(CmdListH));
   }
 }
 
-void Level0Queue::makeMemResident() {
+void Level0CmdList::makeMemResident() {
   for (auto &I : MemPtrsToMakeResident) {
     void *Ptr = I.first;
     size_t Size = I.second;
@@ -535,7 +528,7 @@ void Level0Queue::makeMemResident() {
   MemPtrsToMakeResident.clear();
 }
 
-void Level0Queue::syncMemHostPtrs() {
+void Level0CmdList::syncMemHostPtrs() {
   for (auto &I : UseMemHostPtrsToSync) {
     char *MemHostPtr = I.first.first;
     char *DevPtr = I.first.second;
@@ -550,7 +543,9 @@ void Level0Queue::syncMemHostPtrs() {
   UseMemHostPtrsToSync.clear();
 }
 
-void Level0Queue::execCommand(_cl_command_node *Cmd) {
+/*
+
+void Level0CmdList::execCommand(_cl_command_node *Cmd) {
 
   cl_event event = Cmd->sync.event.event;
 
@@ -583,7 +578,8 @@ void Level0Queue::execCommand(_cl_command_node *Cmd) {
   POCL_UPDATE_EVENT_COMPLETE_MSG(event, Msg);
 }
 
-void Level0Queue::execCommandBatch(BatchType &Batch) {
+
+void Level0CmdList::execCommandBatch(BatchType &Batch) {
 
   ze_result_t res;
 
@@ -636,7 +632,7 @@ void Level0Queue::execCommandBatch(BatchType &Batch) {
   }
 }
 
-void Level0Queue::execCommandBuffer(_cl_command_node *Node) {
+void Level0CmdList::execCommandBuffer(_cl_command_node *Node) {
 
   ze_result_t res;
 
@@ -677,7 +673,7 @@ void Level0Queue::execCommandBuffer(_cl_command_node *Node) {
   POCL_UPDATE_EVENT_COMPLETE_MSG(Event, "Event Command Buffer");
 }
 
-void *Level0Queue::createCommandBuffer(cl_command_buffer_khr CmdBuf) {
+void *Level0CmdList::createCommandBuffer(cl_command_buffer_khr CmdBuf) {
 
   POCL_MSG_PRINT_LEVEL0("New CmdList for CmdBuf %p\n", (void *)CmdBuf);
   assert(CmdBuf);
@@ -727,7 +723,7 @@ void *Level0Queue::createCommandBuffer(cl_command_buffer_khr CmdBuf) {
   return (void *)CmdBufData;
 }
 
-void Level0Queue::freeCommandBuffer(void *CmdBufPtr) {
+void Level0CmdList::freeCommandBuffer(void *CmdBufPtr) {
   assert(CmdBufPtr);
   Level0CmdBufferData *CmdBufData = (Level0CmdBufferData *)CmdBufPtr;
   {
@@ -741,8 +737,9 @@ void Level0Queue::freeCommandBuffer(void *CmdBufPtr) {
   }
   delete CmdBufData;
 }
+*/
 
-void Level0Queue::syncUseMemHostPtr(pocl_mem_identifier *MemId, cl_mem Mem,
+void Level0CmdList::syncUseMemHostPtr(pocl_mem_identifier *MemId, cl_mem Mem,
                                     size_t Offset, size_t Size) {
   assert(Mem);
 
@@ -766,7 +763,7 @@ void Level0Queue::syncUseMemHostPtr(pocl_mem_identifier *MemId, cl_mem Mem,
   UseMemHostPtrsToSync.emplace(Key, Size);
 }
 
-void Level0Queue::syncUseMemHostPtr(pocl_mem_identifier *MemId, cl_mem Mem,
+void Level0CmdList::syncUseMemHostPtr(pocl_mem_identifier *MemId, cl_mem Mem,
                                     const size_t Origin[3],
                                     const size_t Region[3],
                                     size_t RowPitch,
@@ -801,7 +798,7 @@ void Level0Queue::syncUseMemHostPtr(pocl_mem_identifier *MemId, cl_mem Mem,
   LEVEL0_CHECK_ABORT(res);
 }
 
-void Level0Queue::read(void *__restrict__ HostPtr,
+void Level0CmdList::read(void *__restrict__ HostPtr,
                        pocl_mem_identifier *SrcMemId, cl_mem SrcBuf,
                        size_t Offset, size_t Size) {
   char *DevPtr = static_cast<char *>(SrcMemId->mem_ptr);
@@ -819,7 +816,7 @@ void Level0Queue::read(void *__restrict__ HostPtr,
       PreviousEventH ? 1 : 0, PreviousEventH ? &PreviousEventH : nullptr));
 }
 
-void Level0Queue::write(const void *__restrict__ HostPtr,
+void Level0CmdList::write(const void *__restrict__ HostPtr,
                         pocl_mem_identifier *DstMemId, cl_mem DstBuf,
                         size_t Offset, size_t Size) {
   char *DevPtr = static_cast<char *>(DstMemId->mem_ptr);
@@ -837,7 +834,7 @@ void Level0Queue::write(const void *__restrict__ HostPtr,
          PreviousEventH ? &PreviousEventH : nullptr));
 }
 
-void Level0Queue::copy(pocl_mem_identifier *DstMemDd, cl_mem DstBuf,
+void Level0CmdList::copy(pocl_mem_identifier *DstMemDd, cl_mem DstBuf,
                        pocl_mem_identifier *SrcMemId, cl_mem SrcBuf,
                        size_t DstOffset, size_t SrcOffset, size_t Size) {
   char *SrcPtr = static_cast<char *>(SrcMemId->mem_ptr);
@@ -850,7 +847,7 @@ void Level0Queue::copy(pocl_mem_identifier *DstMemDd, cl_mem DstBuf,
       PreviousEventH ? 1 : 0, PreviousEventH ? &PreviousEventH : nullptr));
 }
 
-void Level0Queue::copyRect(pocl_mem_identifier *DstMemId, cl_mem DstBuf,
+void Level0CmdList::copyRect(pocl_mem_identifier *DstMemId, cl_mem DstBuf,
                            pocl_mem_identifier *SrcMemId, cl_mem SrcBuf,
                            const size_t *__restrict__ const DstOrigin,
                            const size_t *__restrict__ const SrcOrigin,
@@ -899,7 +896,7 @@ void Level0Queue::copyRect(pocl_mem_identifier *DstMemId, cl_mem DstBuf,
   LEVEL0_CHECK_ABORT(res);
 }
 
-void Level0Queue::readRectHelper(char *HostPtr,
+void Level0CmdList::readRectHelper(char *HostPtr,
                                  const char* DevicePtr,
                                  const size_t *BufferOrigin,
                                  const size_t *HostOrigin,
@@ -977,7 +974,7 @@ void Level0Queue::readRectHelper(char *HostPtr,
   }
 }
 
-void Level0Queue::readRect(void *__restrict__ HostPtr,
+void Level0CmdList::readRect(void *__restrict__ HostPtr,
                            pocl_mem_identifier *SrcMemId, cl_mem SrcBuf,
                            const size_t *__restrict__ const BufferOrigin,
                            const size_t *__restrict__ const HostOrigin,
@@ -992,7 +989,7 @@ void Level0Queue::readRect(void *__restrict__ HostPtr,
                  HostSlicePitch);
 }
 
-void Level0Queue::writeRectHelper(
+void Level0CmdList::writeRectHelper(
     const char *HostPtr, char *DevicePtr, const size_t *BufferOrigin,
     const size_t *HostOrigin, const size_t *Region, size_t const BufferRowPitch,
     size_t const BufferSlicePitch, size_t const HostRowPitch,
@@ -1069,7 +1066,7 @@ void Level0Queue::writeRectHelper(
   }
 }
 
-void Level0Queue::writeRect(const void *__restrict__ HostPtr,
+void Level0CmdList::writeRect(const void *__restrict__ HostPtr,
                             pocl_mem_identifier *DstMemId, cl_mem DstBuf,
                             const size_t *__restrict__ const BufferOrigin,
                             const size_t *__restrict__ const HostOrigin,
@@ -1085,7 +1082,7 @@ void Level0Queue::writeRect(const void *__restrict__ HostPtr,
                   HostSlicePitch);
 }
 
-void Level0Queue::memfillImpl(Level0Device *Device,
+void Level0CmdList::memfillImpl(Level0Device *Device,
                               ze_command_list_handle_t CmdListH,
                               const void *MemPtr, size_t Size, size_t Offset,
                               const void *__restrict__ Pattern,
@@ -1141,7 +1138,7 @@ void Level0Queue::memfillImpl(Level0Device *Device,
   LEVEL0_CHECK_ABORT(ZeRes);
 }
 
-void Level0Queue::memFill(pocl_mem_identifier *DstMemId, cl_mem DstBuf,
+void Level0CmdList::memFill(pocl_mem_identifier *DstMemId, cl_mem DstBuf,
                           size_t Size, size_t Offset,
                           const void *__restrict__ Pattern,
                           size_t PatternSize) {
@@ -1164,7 +1161,7 @@ void Level0Queue::memFill(pocl_mem_identifier *DstMemId, cl_mem DstBuf,
 }
 
 
-void Level0Queue::mapMem(pocl_mem_identifier *SrcMemId,
+void Level0CmdList::mapMem(pocl_mem_identifier *SrcMemId,
                          cl_mem SrcBuf, mem_mapping_t *Map) {
   char *SrcPtr = static_cast<char *>(SrcMemId->mem_ptr);
 
@@ -1188,7 +1185,7 @@ void Level0Queue::mapMem(pocl_mem_identifier *SrcMemId,
   LEVEL0_CHECK_ABORT(res);
 }
 
-void Level0Queue::unmapMem(pocl_mem_identifier *DstMemId, cl_mem DstBuf,
+void Level0CmdList::unmapMem(pocl_mem_identifier *DstMemId, cl_mem DstBuf,
                            mem_mapping_t *Map) {
   char *DstPtr = static_cast<char *>(DstMemId->mem_ptr);
 
@@ -1213,7 +1210,7 @@ void Level0Queue::unmapMem(pocl_mem_identifier *DstMemId, cl_mem DstBuf,
   LEVEL0_CHECK_ABORT(res);
 }
 
-void Level0Queue::copyImageRect(cl_mem SrcImage, cl_mem DstImage,
+void Level0CmdList::copyImageRect(cl_mem SrcImage, cl_mem DstImage,
                                 pocl_mem_identifier *SrcMemId,
                                 pocl_mem_identifier *DstMemId,
                                 const size_t *SrcOrigin,
@@ -1274,7 +1271,7 @@ static bool needsStagingCopy(cl_mem DstImage, size_t &UserRowPitch,
   return false;
 }
 
-void Level0Queue::writeImageRect(cl_mem DstImage, pocl_mem_identifier *DstMemId,
+void Level0CmdList::writeImageRect(cl_mem DstImage, pocl_mem_identifier *DstMemId,
                                  const void *__restrict__ SrcHostPtr,
                                  pocl_mem_identifier *SrcMemId,
                                  const size_t *Origin, const size_t *Region,
@@ -1370,7 +1367,7 @@ void Level0Queue::writeImageRect(cl_mem DstImage, pocl_mem_identifier *DstMemId,
   }
 }
 
-void Level0Queue::readImageRect(cl_mem SrcImage, pocl_mem_identifier *SrcMemId,
+void Level0CmdList::readImageRect(cl_mem SrcImage, pocl_mem_identifier *SrcMemId,
                                 void *__restrict__ DstHostPtr,
                                 pocl_mem_identifier *DstMemId,
                                 const size_t *Origin, const size_t *Region,
@@ -1465,7 +1462,7 @@ void Level0Queue::readImageRect(cl_mem SrcImage, pocl_mem_identifier *SrcMemId,
   }
 }
 
-void Level0Queue::mapImage(pocl_mem_identifier *MemId,
+void Level0CmdList::mapImage(pocl_mem_identifier *MemId,
                            cl_mem SrcImage, mem_mapping_t *Map) {
 
   if ((Map->map_flags & CL_MAP_WRITE_INVALIDATE_REGION) != 0u) {
@@ -1482,7 +1479,7 @@ void Level0Queue::mapImage(pocl_mem_identifier *MemId,
                 Map->row_pitch, Map->slice_pitch, Map->offset);
 }
 
-void Level0Queue::unmapImage(pocl_mem_identifier *MemId,
+void Level0CmdList::unmapImage(pocl_mem_identifier *MemId,
                              cl_mem DstImage, mem_mapping_t *Map) {
 
   // for read mappings, don't copy anything
@@ -1500,7 +1497,7 @@ void Level0Queue::unmapImage(pocl_mem_identifier *MemId,
                  Map->row_pitch, Map->slice_pitch, Map->offset);
 }
 
-void Level0Queue::fillImage(cl_mem Image, pocl_mem_identifier *MemId,
+void Level0CmdList::fillImage(cl_mem Image, pocl_mem_identifier *MemId,
                             const size_t *Origin, const size_t *Region,
                             cl_uint4 OrigPixel, pixel_t FillPixel,
                             size_t PixelSize) {
@@ -1557,11 +1554,11 @@ void Level0Queue::fillImage(cl_mem Image, pocl_mem_identifier *MemId,
       PreviousEventH ? &PreviousEventH : nullptr));
 }
 
-void Level0Queue::svmMap(void *Ptr) {}
+void Level0CmdList::svmMap(void *Ptr) {}
 
-void Level0Queue::svmUnmap(void *Ptr) {}
+void Level0CmdList::svmUnmap(void *Ptr) {}
 
-void Level0Queue::svmCopy(void *DstPtr, const void *SrcPtr, size_t Size) {
+void Level0CmdList::svmCopy(void *DstPtr, const void *SrcPtr, size_t Size) {
   POCL_MSG_PRINT_LEVEL0("SVM COPY | SRC %p | DST %p | SIZE %zu\n", SrcPtr,
                         DstPtr, Size);
 
@@ -1571,7 +1568,7 @@ void Level0Queue::svmCopy(void *DstPtr, const void *SrcPtr, size_t Size) {
       PreviousEventH ? &PreviousEventH : nullptr));
 }
 
-void Level0Queue::svmFill(void *DstPtr, size_t Size, void *Pattern,
+void Level0CmdList::svmFill(void *DstPtr, size_t Size, void *Pattern,
                           size_t PatternSize) {
   POCL_MSG_PRINT_LEVEL0("SVM FILL | PTR %p | SIZE %zu | PAT SIZE %zu\n", DstPtr,
                         Size, PatternSize);
@@ -1594,7 +1591,7 @@ void Level0Queue::svmFill(void *DstPtr, size_t Size, void *Pattern,
 // a shared Unified Shared Memory allocation to the device associated
 // with command_queue. This is a hint that may improve performance and
 // is not required for correctness
-void Level0Queue::svmMigrate(unsigned num_svm_pointers, void **svm_pointers,
+void Level0CmdList::svmMigrate(unsigned num_svm_pointers, void **svm_pointers,
                              size_t *sizes) {
   for (unsigned i = 0; i < num_svm_pointers; ++i) {
     ze_result_t Res =
@@ -1603,7 +1600,7 @@ void Level0Queue::svmMigrate(unsigned num_svm_pointers, void **svm_pointers,
   }
 }
 
-void Level0Queue::svmAdvise(const void *ptr, size_t size,
+void Level0CmdList::svmAdvise(const void *ptr, size_t size,
                             cl_mem_advice_intel advice) {
   // TODO convert cl_advice to ZeAdvice. The current API doesn't
   // seem to specify any valid values
@@ -1617,7 +1614,7 @@ void Level0Queue::svmAdvise(const void *ptr, size_t size,
   LEVEL0_CHECK_ABORT(Res);
 }
 
-bool Level0Queue::setupKernelArgs(ze_module_handle_t ModuleH,
+bool Level0CmdList::setupKernelArgs(ze_module_handle_t ModuleH,
                                   ze_kernel_handle_t KernelH, cl_device_id Dev,
                                   unsigned DeviceI, _cl_command_run *RunCmd) {
   cl_kernel Kernel = RunCmd->kernel;
@@ -1695,7 +1692,7 @@ bool Level0Queue::setupKernelArgs(ze_module_handle_t ModuleH,
   return false;
 }
 
-void Level0Queue::run(_cl_command_node *Cmd) {
+void Level0CmdList::run(_cl_command_node *Cmd) {
   cl_event Event = Cmd->sync.event.event;
   _cl_command_run *RunCmd = &Cmd->command.run;
   cl_device_id Dev = Cmd->device;
@@ -1710,7 +1707,7 @@ void Level0Queue::run(_cl_command_node *Cmd) {
                      Cmd->migr_infos);
 }
 
-void Level0Queue::runBuiltinKernel(_cl_command_run *RunCmd, cl_device_id Dev,
+void Level0CmdList::runBuiltinKernel(_cl_command_run *RunCmd, cl_device_id Dev,
                                    cl_event Event, cl_program Program,
                                    cl_kernel Kernel, unsigned DeviceI) {
 #ifdef ENABLE_NPU
@@ -1783,7 +1780,7 @@ void Level0Queue::runBuiltinKernel(_cl_command_run *RunCmd, cl_device_id Dev,
 #endif
 }
 
-void Level0Queue::runNDRangeKernel(_cl_command_run *RunCmd, cl_device_id Dev,
+void Level0CmdList::runNDRangeKernel(_cl_command_run *RunCmd, cl_device_id Dev,
                                    cl_event Event, cl_program Program,
                                    cl_kernel Kernel, unsigned DeviceI,
                                    pocl_buffer_migration_info *MigInfos) {
@@ -1878,17 +1875,14 @@ void Level0Queue::runNDRangeKernel(_cl_command_run *RunCmd, cl_device_id Dev,
                      PreviousEventH ? &PreviousEventH : nullptr));
 }
 
-Level0Queue::Level0Queue(Level0WorkQueueInterface *WH,
-                         ze_command_queue_handle_t Q,
-                         ze_command_list_handle_t L, Level0Device *D,
-                         size_t MaxPatternSize, unsigned int QO,
-                         bool RunThread) {
+Level0CmdList::Level0CmdList(ze_command_list_handle_t L,
+                             Level0Device *D,
+                             bool ImmediateFlag,
+                             bool InorderFlag,
+                             size_t MaxPatternSize) {
 
-  WorkHandler = WH;
-  QueueH = Q;
   CmdListH = L;
   Device = D;
-  QueueOrdinal = QO;
   PreviousEventH = CurrentEventH = nullptr;
   MaxFillPatternSize = MaxPatternSize;
 
@@ -1909,11 +1903,12 @@ Level0Queue::Level0Queue(Level0WorkQueueInterface *WH,
 
   Device->getMaxWGs(&DeviceMaxWGSizes);
 
-  if (RunThread)
-    Thread = std::thread(&Level0Queue::runThread, this);
+  // TODO
+  // if (RunThread)
+  //   Thread = std::thread(&Level0CmdList::runThread, this);
 }
 
-Level0Queue::~Level0Queue() {
+Level0CmdList::~Level0CmdList() {
   if (Thread.joinable()) {
     Thread.join();
   }
@@ -1922,10 +1917,18 @@ Level0Queue::~Level0Queue() {
   if (CmdListH != nullptr) {
     zeCommandListDestroy(CmdListH);
   }
-  if (QueueH != nullptr) {
-    zeCommandQueueDestroy(QueueH);
-  }
 }
+
+// TODO
+// if (QueueH != nullptr) {
+//     zeCommandQueueDestroy(QueueH);
+// }
+
+/***********************************************************************************/
+/***********************************************************************************/
+/***********************************************************************************/
+/***********************************************************************************/
+/***********************************************************************************/
 
 bool Level0QueueGroup::init(unsigned Ordinal, unsigned Count,
                             Level0Device *Device, size_t MaxPatternSize) {
@@ -1945,18 +1948,18 @@ bool Level0QueueGroup::init(unsigned Ordinal, unsigned Count,
   ze_command_list_handle_t CmdList = nullptr;
 
   ze_command_queue_desc_t cmdQueueDesc = {
-      ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
-      nullptr,
-      Ordinal,
-      0, // index
-      0, // flags   // ZE_COMMAND_QUEUE_FLAG_EXPLICIT_ONLY
-      ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS,
-      ZE_COMMAND_QUEUE_PRIORITY_NORMAL};
+                                          ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
+                                          nullptr,
+                                          Ordinal,
+                                          0, // index
+                                          0, // flags   // ZE_COMMAND_QUEUE_FLAG_EXPLICIT_ONLY
+                                          ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS,
+                                          ZE_COMMAND_QUEUE_PRIORITY_NORMAL};
 
   ze_command_list_desc_t cmdListDesc = {
-      ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC, nullptr, Ordinal,
-      ZE_COMMAND_LIST_FLAG_RELAXED_ORDERING |
-          ZE_COMMAND_LIST_FLAG_MAXIMIZE_THROUGHPUT};
+                                        ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC, nullptr, Ordinal,
+                                        ZE_COMMAND_LIST_FLAG_RELAXED_ORDERING |
+                                            ZE_COMMAND_LIST_FLAG_MAXIMIZE_THROUGHPUT};
 
 #ifdef LEVEL0_IMMEDIATE_CMDLIST
   for (unsigned i = 0; i < Count; ++i) {

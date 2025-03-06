@@ -73,52 +73,37 @@ public:
 
 class Level0Device;
 
-class Level0Queue {
+// TODO
+// void freeCommandBuffer(void *CmdBufData);
+// void *createCommandBuffer(cl_command_buffer_khr CmdBuf);
+
+void execCommand(_cl_command_node *Cmd);
+void execCommandBatch(BatchType &Batch);
+void execCommandBuffer(_cl_command_node *Node);
+void closeCmdList(std::queue<ze_event_handle_t> *EvtList = nullptr);
+
+class Level0CmdList {
 
 public:
-  Level0Queue(Level0WorkQueueInterface *WH, ze_command_queue_handle_t Q,
-              ze_command_list_handle_t L, Level0Device *D,
-              size_t MaxPatternSize, unsigned QO, bool RunThread = true);
-  ~Level0Queue();
+  Level0CmdList(ze_command_list_handle_t L,
+                Level0Device *D,
+                bool ImmediateFlag,
+                bool InorderFlag,
+                size_t MaxPatternSize);
+  ~Level0CmdList();
 
-  Level0Queue(Level0Queue const &) = delete;
-  Level0Queue& operator=(Level0Queue const &) = delete;
-  Level0Queue(Level0Queue const &&) = delete;
-  Level0Queue& operator=(Level0Queue &&) = delete;
+  Level0CmdList(Level0CmdList const &) = delete;
+  Level0CmdList& operator=(Level0CmdList const &) = delete;
+  Level0CmdList(Level0CmdList const &&) = delete;
+  Level0CmdList& operator=(Level0CmdList &&) = delete;
 
-  void runThread();
-  void freeCommandBuffer(void *CmdBufData);
-  void *createCommandBuffer(cl_command_buffer_khr CmdBuf);
+  void reset();
 
-private:
-  std::queue<ze_event_handle_t> AvailableDeviceEvents;
-  std::queue<ze_event_handle_t> DeviceEventsToReset;
-  std::map<void *, size_t> MemPtrsToMakeResident;
-  std::map<std::pair<char*, char*>, size_t> UseMemHostPtrsToSync;
+  void makeMemResident();
+  void syncMemHostPtrs();
+  void allocNextFreeEvent();
 
-  ze_command_queue_handle_t QueueH;
-  ze_command_list_handle_t CmdListH;
-
-  ze_event_handle_t CurrentEventH;
-  ze_event_handle_t PreviousEventH;
-
-  Level0Device *Device;
-  std::thread Thread;
-  Level0WorkQueueInterface *WorkHandler;
-
-  double DeviceFrequency;
-  double DeviceNsPerCycle;
-  // maximum valid (kernel) timestamp value
-  uint64_t DeviceMaxValidTimestamp;
-  uint64_t DeviceMaxValidKernelTimestamp;
-  // Nanoseconds after which the device (kernel) timer wraps around
-  uint64_t DeviceTimerWrapTimeNs;
-  uint64_t DeviceKernelTimerWrapTimeNs;
-  uint32_t_3 DeviceMaxWGSizes;
-  uint32_t MaxFillPatternSize;
-  // required for creating new command lists for cl_khr_command_buffer
-  unsigned QueueOrdinal;
-
+  // append various command types to the list
   void read(void *__restrict__ HostPtr,
             pocl_mem_identifier *SrcMemId, cl_mem SrcBuf,
             size_t Offset, size_t Size);
@@ -227,20 +212,41 @@ private:
                         cl_event Event, cl_program Program, cl_kernel Kernel,
                         unsigned DeviceI, pocl_buffer_migration_info *MigInfos);
 
-  void execCommand(_cl_command_node *Cmd);
-  void execCommandBatch(BatchType &Batch);
-  void execCommandBuffer(_cl_command_node *Node);
-  void reset();
-  void closeCmdList(std::queue<ze_event_handle_t> *EvtList = nullptr);
-  void makeMemResident();
-  void syncMemHostPtrs();
-  void allocNextFreeEvent();
-
   void syncUseMemHostPtr(pocl_mem_identifier *MemId, cl_mem Mem,
                          size_t Offset, size_t Size);
   void syncUseMemHostPtr(pocl_mem_identifier *MemId, cl_mem Mem,
                          const size_t Origin[3], const size_t Region[3],
                          size_t RowPitch, size_t SlicePitch);
+
+private:
+  std::queue<ze_event_handle_t> DeviceEventsToReset;
+  std::map<void *, size_t> MemPtrsToMakeResident;
+  std::map<std::pair<char*, char*>, size_t> UseMemHostPtrsToSync;
+
+  // ze_command_queue_handle_t QueueH;
+  ze_command_list_handle_t CmdListH;
+
+  ze_event_handle_t CurrentEventH;
+  ze_event_handle_t PreviousEventH;
+
+  Level0Device *Device;
+  std::thread Thread;
+  Level0WorkQueueInterface *WorkHandler;
+
+  double DeviceFrequency;
+  double DeviceNsPerCycle;
+  // maximum valid (kernel) timestamp value
+  uint64_t DeviceMaxValidTimestamp;
+  uint64_t DeviceMaxValidKernelTimestamp;
+  // Nanoseconds after which the device (kernel) timer wraps around
+  uint64_t DeviceTimerWrapTimeNs;
+  uint64_t DeviceKernelTimerWrapTimeNs;
+  uint32_t_3 DeviceMaxWGSizes;
+  // maximum Pattern size for memfill commands
+  uint32_t MaxFillPatternSize;
+
+  bool Immediate;
+  bool Inorder;
 };
 
 class Level0QueueGroup : public Level0WorkQueueInterface {
@@ -274,9 +280,9 @@ private:
   std::queue<_cl_command_node *> WorkQueue;
   std::queue<BatchType> BatchWorkQueue;
 
-  std::vector<std::unique_ptr<Level0Queue>> Queues;
+  std::vector<std::unique_ptr<Level0CmdList>> Queues;
 
-  std::unique_ptr<Level0Queue> CreateQueue;
+  std::unique_ptr<Level0CmdList> CreateQueue;
 
   bool ThreadExitRequested = false;
   bool Available = false;
