@@ -175,7 +175,6 @@ process_options (const char *options,
                  cl_program program,
                  int compiling,
                  int linking,
-
                  size_t size)
 {
   cl_int error;
@@ -358,6 +357,15 @@ process_options (const char *options,
               token = strtok_r (NULL, " ", &saveptr);
               continue;
             }
+        }
+      else if (strncmp (token, "-cmc", 4) == 0 || strncmp (token, "-vc-codegen", 11) == 0)
+        {
+#ifndef BUILD_LEVEL0
+            APPEND_TO_OPTION_BUILD_LOG ("Invalid build option: %s\n", token);
+            error = ret_error;
+            goto ERROR;
+#endif
+          // continue with default action - append token
         }
       else if (strncmp (token, "-x", 2) == 0 && strlen (token) == 2)
         {
