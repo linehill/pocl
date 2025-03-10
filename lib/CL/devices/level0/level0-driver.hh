@@ -49,12 +49,7 @@ typedef struct
 } uint32_t_3;
 #endif
 
-using BatchType = std::deque<cl_event>;
-/// limit the Batch size to this number of commands
-constexpr unsigned BatchSizeLimit = 128;
-/// the number of events allocated for each Event Pool
-constexpr unsigned EventPoolSize = 2048;
-
+/*
 struct Level0CmdBufferData {
   std::mutex Lock;
   std::queue<ze_event_handle_t> Events;
@@ -62,34 +57,27 @@ struct Level0CmdBufferData {
   ze_command_list_handle_t CmdListH = nullptr;
 };
 
-class Level0WorkQueueInterface {
-
-public:
-  virtual void pushWork(_cl_command_node *Command) = 0;
-  virtual void pushCommandBatch(BatchType Batch) = 0;
-  virtual bool getWorkOrWait(_cl_command_node **Node, BatchType &Batch) = 0;
-  virtual ~Level0WorkQueueInterface() {};
-};
-
-class Level0Device;
-
 // TODO
 // void freeCommandBuffer(void *CmdBufData);
 // void *createCommandBuffer(cl_command_buffer_khr CmdBuf);
+void execCommandBuffer(_cl_command_node *Node);
+
+*/
+
+
+class Level0Device;
 
 void execCommand(_cl_command_node *Cmd);
-void execCommandBatch(BatchType &Batch);
-void execCommandBuffer(_cl_command_node *Node);
-void closeCmdList(std::queue<ze_event_handle_t> *EvtList = nullptr);
+// void execCommandBatch(BatchType &Batch);
 
 class Level0CmdList {
 
 public:
-  Level0CmdList(ze_command_list_handle_t L,
-                Level0Device *D,
-                bool ImmediateFlag,
-                bool InorderFlag,
-                size_t MaxPatternSize);
+    Level0CmdList(ze_command_list_handle_t L,
+                  ze_command_queue_handle_t Q,
+                  Level0Device *D,
+                  bool ImmInorder,
+                  size_t MaxPatternSize);
   ~Level0CmdList();
 
   Level0CmdList(Level0CmdList const &) = delete;
@@ -97,11 +85,16 @@ public:
   Level0CmdList(Level0CmdList const &&) = delete;
   Level0CmdList& operator=(Level0CmdList &&) = delete;
 
-  void reset();
+  // ExtEvents = external event dependencies
+  // (= events from non-LZ devices we must wait for)
+  bool appendEventToList(cl_event Ev, _cl_command_node *Cmd, const char **Msg,
+                         cl_context Context,
+                         const std::vector<cl_event> &ExtEvents);
+  bool executeAndWait();
 
-  void makeMemResident();
-  void syncMemHostPtrs();
-  void allocNextFreeEvent();
+private:
+  void reset();
+  void close(std::queue<ze_event_handle_t> *EvtList = nullptr);
 
   // append various command types to the list
   void read(void *__restrict__ HostPtr,
@@ -202,9 +195,6 @@ public:
   void runWithOffsets(struct pocl_context *PoclCtx, ze_kernel_handle_t KernelH);
   void run(_cl_command_node *Cmd);
 
-  void appendEventToList(_cl_command_node *Cmd, const char **Msg,
-                         cl_context Context);
-
   void runBuiltinKernel(_cl_command_run *RunCmd, cl_device_id Dev,
                         cl_event Event, cl_program Program, cl_kernel Kernel,
                         unsigned DeviceI);
@@ -220,18 +210,25 @@ public:
 
 private:
   std::queue<ze_event_handle_t> DeviceEventsToReset;
-  std::map<void *, size_t> MemPtrsToMakeResident;
-  std::map<std::pair<char*, char*>, size_t> UseMemHostPtrsToSync;
+  // std::map<void *, size_t> MemPtrsToMakeResident;
+  // std::map<std::pair<char*, char*>, size_t> UseMemHostPtrsToSync;
+  // void makeMemResident();
+  // void syncMemHostPtrs();
+  void allocNextFreeEvent();
 
-  // ze_command_queue_handle_t QueueH;
+  std::vector<ze_event_handle_t> CurrentEventDependeciesVec;
+  std::vector<ze_event_handle_t> PushedEventDependeciesVec;
+  unsigned NumCurrentEventDependecies = 0;
+  ze_event_handle_t *CurrentEventDependeciesPtr = nullptr;
+
   ze_command_list_handle_t CmdListH;
+  // nullptr for ImmInoder, non-null for regular cmdlist
+  ze_command_queue_handle_t CmdQueueH;
 
   ze_event_handle_t CurrentEventH;
   ze_event_handle_t PreviousEventH;
 
   Level0Device *Device;
-  std::thread Thread;
-  Level0WorkQueueInterface *WorkHandler;
 
   double DeviceFrequency;
   double DeviceNsPerCycle;
@@ -245,47 +242,61 @@ private:
   // maximum Pattern size for memfill commands
   uint32_t MaxFillPatternSize;
 
-  bool Immediate;
-  bool Inorder;
+  bool ImmediateInorder;
 };
 
-class Level0QueueGroup : public Level0WorkQueueInterface {
+class Level0CmdQueue {
 
 public:
-  Level0QueueGroup() {};
-  ~Level0QueueGroup() override;
+    Level0CmdQueue(ze_context_handle_t C,
+                   ze_device_handle_t D,
+                   ze_command_queue_handle_t Q,
+                   unsigned Ord);
+    ~Level0CmdQueue();
+
+    Level0CmdQueue(Level0CmdQueue const &) = delete;
+    Level0CmdQueue& operator=(Level0CmdQueue const &) = delete;
+    Level0CmdQueue(Level0CmdQueue const &&) = delete;
+    Level0CmdQueue& operator=(Level0CmdQueue &&) = delete;
+
+    // ZE_COMMAND_LIST_FLAG_IN_ORDER | ZE_COMMAND_LIST_FLAG_MAXIMIZE_THROUGHPUT
+    Level0CmdList *createRegCmdList(ze_command_list_flags_t ListFlags);
+
+private:
+    std::vector<std::unique_ptr<Level0CmdList>> RegCmdLists;
+    ze_command_queue_handle_t QueueH;
+    ze_context_handle_t ContextH;
+    ze_device_handle_t DeviceH;
+    unsigned Ordinal;
+};
+
+class Level0QueueGroup {
+
+public:
+  Level0QueueGroup(unsigned Ordinal, unsigned Count,
+                   Level0Device *Device, size_t MaxPatternSize);
+  ~Level0QueueGroup() = default;
 
   Level0QueueGroup(Level0QueueGroup const &) = delete;
   Level0QueueGroup& operator=(Level0QueueGroup const &) = delete;
   Level0QueueGroup(Level0QueueGroup const &&) = delete;
   Level0QueueGroup& operator=(Level0QueueGroup &&) = delete;
 
-  bool init(unsigned Ordinal, unsigned Count, Level0Device *Device,
-            size_t MaxPatternSize);
-  void uninit();
-
-  void pushWork(_cl_command_node *Command) override;
-  void pushCommandBatch(BatchType Batch) override;
-
-  bool getWorkOrWait(_cl_command_node **Node, BatchType &Batch) override;
-  bool available() const { return Available; }
-
-  void freeCmdBuf(void *CmdBufData);
-  void *createCmdBuf(cl_command_buffer_khr CmdBuf);
+  // flags: ZE_COMMAND_QUEUE_FLAG_EXPLICIT_ONLY, ZE_COMMAND_QUEUE_FLAG_IN_ORDER
+  // priority: ZE_COMMAND_QUEUE_PRIORITY_PRIORITY_{NORMAL,LOW,HIGH}
+  Level0CmdQueue *createQueue(ze_command_queue_flags_t Flags,
+                              ze_command_queue_priority_t Priority);
+  Level0CmdList *createImmCmdList(ze_command_queue_flags_t QueueFlags,
+                                  ze_command_queue_priority_t Priority);
 
 private:
-  std::condition_variable Cond;
-  std::mutex Mutex;
-
-  std::queue<_cl_command_node *> WorkQueue;
-  std::queue<BatchType> BatchWorkQueue;
-
-  std::vector<std::unique_ptr<Level0CmdList>> Queues;
-
-  std::unique_ptr<Level0CmdList> CreateQueue;
-
-  bool ThreadExitRequested = false;
-  bool Available = false;
+  std::vector<std::unique_ptr<Level0CmdQueue>> Queues;
+  std::vector<std::unique_ptr<Level0CmdList>> ImmCmdLists;
+  ze_context_handle_t ContextH = nullptr;
+  ze_device_handle_t DeviceH = nullptr;
+  unsigned LastUsedIndex = 0;
+  unsigned Count = 0;
+  unsigned Ordinal = 0;
 };
 
 class Level0Driver;
@@ -297,6 +308,8 @@ public:
   ~Level0EventPool();
   bool isEmpty() const { return LastIdx >= AvailableEvents.size(); }
   ze_event_handle_t getEvent();
+  /// the number of events allocated for each Event Pool
+  static constexpr unsigned EventPoolSize = 2048;
 private:
   std::vector<ze_event_handle_t> AvailableEvents;
   ze_event_pool_handle_t EvtPoolH;
@@ -328,8 +341,8 @@ public:
   Level0Device(Level0Device const &&) = delete;
   Level0Device& operator=(Level0Device &&) = delete;
 
-  void pushCommand(_cl_command_node *Command);
-  void pushCommandBatch(BatchType Batch);
+  // void pushCommand(_cl_command_node *Command);
+  // void pushCommandBatch(BatchType Batch);
 
   void assignAllocator(Level0AllocatorSPtr NewAlloc) { Alloc = NewAlloc; }
   void *allocBuffer(uintptr_t Key, ze_device_mem_alloc_flags_t DevFlags,
@@ -358,8 +371,10 @@ public:
                         void *pNext = nullptr);
   void freeUSMMem(void *Ptr);
   bool freeUSMMemBlocking(void *Ptr);
-  void freeCmdBuf(void *CmdBufData);
-  void *createCmdBuf(cl_command_buffer_khr CmdBuf);
+  // void freeCmdBuf(void *CmdBufData);
+  // void *createCmdBuf(cl_command_buffer_khr CmdBuf);
+  ze_event_handle_t getOrCreateLzEvForClEv(cl_event Ev);
+  bool notifyAndFreeLzEvForClEv(cl_event Ev);
 
   ze_image_handle_t allocImage(cl_channel_type ChType,
                                cl_channel_order ChOrder,
@@ -456,9 +471,6 @@ public:
   }
   uint32_t getIPVersion() { return DeviceIPVersion; }
 
-  bool supportsCmdQBatching() {
-    return UniversalQueues.available() && ClDev->type == CL_DEVICE_TYPE_GPU;
-  }
   // for GPU, prefer L0 queues for all commands, as most commands can be
   // implemented using L0 API calls, and the few that can't (e.g. for
   // imagefill) we have implemented via kernels
@@ -489,6 +501,9 @@ private:
 
   std::map<std::string, Level0Kernel *> MemfillKernels;
   std::map<std::string, Level0Kernel *> ImagefillKernels;
+
+  std::map<uint64_t, ze_event_handle_t> Cl2LzEventMap;
+  std::mutex EventMapLock;
 
   Level0Driver *Driver;
   cl_device_id ClDev;
