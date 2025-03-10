@@ -171,6 +171,9 @@ if(ENABLE_LEVEL0)
 
   if(NOT ENABLE_LOADABLE_DRIVERS)
     list(APPEND POCL_DEVICES_LINK_LIST PkgConfig::LEVEL0)
+    if(OCLOC_FOUND)
+      list(APPEND POCL_DEVICES_LINK_LIST ${OCLOC_LIBRARIES})
+    endif()
   endif()
 endif()
 

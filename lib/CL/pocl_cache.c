@@ -92,6 +92,14 @@ void pocl_cache_program_path(char*        path,
   program_device_dir (path, program, device_i, "");
 }
 
+void pocl_cache_get_ocloc_cache_dir (char* path)
+{
+    int bytes_written
+        = snprintf (path, POCL_MAX_PATHNAME_LENGTH,
+                    "%s/ocloc_cache", cache_topdir);
+    assert (bytes_written > 0 && bytes_written < POCL_MAX_PATHNAME_LENGTH);
+}
+
 POCL_EXPORT
 void
 pocl_cache_program_bc_path(char* program_bc_path,

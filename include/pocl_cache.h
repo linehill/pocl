@@ -129,6 +129,9 @@ POCL_EXPORT
 void pocl_cache_program_path (char *path, cl_program program,
                               unsigned device_i);
 
+POCL_EXPORT
+void pocl_cache_get_ocloc_cache_dir (char* path);
+
 void pocl_cache_kernel_cachedir (char *kernel_cachedir_path,
                                  cl_program program, unsigned device_i,
                                  const char *kernel_name);
