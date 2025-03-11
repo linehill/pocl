@@ -266,7 +266,6 @@ private:
   bool ImmediateInorder;
 };
 
-/*
 class Level0CmdQueue {
 
 public:
@@ -281,11 +280,9 @@ public:
     Level0CmdQueue(Level0CmdQueue const &&) = delete;
     Level0CmdQueue& operator=(Level0CmdQueue &&) = delete;
 
-    // ZE_COMMAND_LIST_FLAG_IN_ORDER | ZE_COMMAND_LIST_FLAG_MAXIMIZE_THROUGHPUT
     Level0CmdList *createRegCmdList(ze_command_list_flags_t ListFlags);
 
 private:
-    // std::vector<std::unique_ptr<Level0CmdList>> RegCmdLists;
     Level0Device *Device = nullptr;
     ze_command_queue_handle_t QueueH = nullptr;
     ze_context_handle_t ContextH = nullptr;
@@ -293,30 +290,36 @@ private:
     size_t MaxPatternSize = 0;
     unsigned Ordinal = 0;
 };
-*/
 
 class Level0QueueGroup {
 
 public:
-    Level0QueueGroup(unsigned Ordinal, unsigned Count,
-                     Level0Device *Dev, size_t MaxPatSize);
+  Level0QueueGroup() = default;
   ~Level0QueueGroup() = default;
+  void init(unsigned Ordinal, unsigned Count,
+            Level0Device *Dev, size_t MaxPatSize);
+  void uninit() { Queues.clear(); }
 
   Level0QueueGroup(Level0QueueGroup const &) = delete;
   Level0QueueGroup& operator=(Level0QueueGroup const &) = delete;
   Level0QueueGroup(Level0QueueGroup const &&) = delete;
   Level0QueueGroup& operator=(Level0QueueGroup &&) = delete;
 
-  // flags: ZE_COMMAND_QUEUE_FLAG_EXPLICIT_ONLY, ZE_COMMAND_QUEUE_FLAG_IN_ORDER
+  // queue flags: ZE_COMMAND_QUEUE_FLAG_EXPLICIT_ONLY, ZE_COMMAND_QUEUE_FLAG_IN_ORDER
   // priority: ZE_COMMAND_QUEUE_PRIORITY_PRIORITY_{NORMAL,LOW,HIGH}
-  Level0CmdQueue *createQueue(ze_command_queue_flags_t Flags,
-                              ze_command_queue_priority_t Priority);
+  // list flags: ZE_COMMAND_LIST_FLAG_IN_ORDER | ZE_COMMAND_LIST_FLAG_MAXIMIZE_THROUGHPUT
+
+  Level0CmdList *createRegCmdList(ze_command_list_flags_t ListFlags,
+                                  ze_command_queue_flags_t QueueFlags,
+                                  ze_command_queue_priority_t Priority);
+
   Level0CmdList *createImmCmdList(ze_command_queue_flags_t QueueFlags,
                                   ze_command_queue_priority_t Priority);
 
 private:
-  // std::vector<std::unique_ptr<Level0CmdQueue>> Queues;
-  // std::vector<std::unique_ptr<Level0CmdList>> ImmCmdLists;
+  Level0CmdQueue *createQueue(ze_command_queue_flags_t Flags,
+                              ze_command_queue_priority_t Priority);
+  std::vector<std::unique_ptr<Level0CmdQueue>> Queues;
   Level0Device *Device = nullptr;
   ze_context_handle_t ContextH = nullptr;
   ze_device_handle_t DeviceH = nullptr;
@@ -402,8 +405,9 @@ public:
   // void *createCmdBuf(cl_command_buffer_khr CmdBuf);
   ze_event_handle_t getOrCreateLzEvForClEv(cl_event Ev);
   bool notifyAndFreeLzEvForClEv(cl_event Ev);
-  Level0CmdList *createCmdList();
-  bool destroyCmdList(Level0CmdList *);
+  Level0CmdList *createCmdList(cl_queue_priority_khr OclPriority, bool PreferThroughput,
+                               bool Inorder);
+  void destroyCmdList(Level0CmdList *);
 
   ze_image_handle_t allocImage(cl_channel_type ChType,
                                cl_channel_order ChOrder,

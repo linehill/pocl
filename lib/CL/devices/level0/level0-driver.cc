@@ -133,9 +133,9 @@ int Level0CmdList::appendEventToList(cl_event Ev,
   };
   if (!ImmediateInorder) {
       for (auto E: WaitIntEvents) {
-        auto It = std::find(EnqueuedEvents.begin(),
-                            EnqueuedEvents.end(),
-                            FindF);
+        auto It = std::find_if(EnqueuedEvents.begin(),
+                               EnqueuedEvents.end(),
+                               FindF);
         if (It != EnqueuedEvents.end())
           CurrentEventDependeciesVec.push_back(std::get<ze_event_handle_t>(*It));
       }
@@ -468,7 +468,7 @@ int Level0CmdList::appendEventToList(cl_event Ev,
 }
 
 int Level0CmdList::enqueue() {
-
+    POCL_MSG_WARN("Level0CmdList::enqueue()\n");
     std::lock_guard<std::mutex> LockGuard(StateLock);
     if (State == CmdListState::Appending) {
         State = CmdListState::ClosedEnqueued;
@@ -2000,9 +2000,8 @@ Level0CmdList *Level0CmdQueue::createRegCmdList(ze_command_list_flags_t ListFlag
     ze_command_list_handle_t CmdListH = nullptr;
     ZeRes = zeCommandListCreate(ContextH, DeviceH, &cmdListDesc, &CmdListH);
     LEVEL0_CHECK_RET(nullptr, ZeRes);
-    RegCmdLists.emplace_back(new Level0CmdList(CmdListH, QueueH,
-                                               Device, false, MaxPatternSize));
-    return RegCmdLists.back().get();
+    return new Level0CmdList(CmdListH, QueueH,
+                             Device, false, MaxPatternSize);
 }
 
 Level0CmdQueue::~Level0CmdQueue() {
@@ -2014,8 +2013,8 @@ Level0CmdQueue::~Level0CmdQueue() {
 /***********************************************************************************/
 /***********************************************************************************/
 
-Level0QueueGroup::Level0QueueGroup(unsigned QOrd, unsigned QCount,
-                                   Level0Device *Dev, size_t MaxPatSize) {
+void Level0QueueGroup::init(unsigned QOrd, unsigned QCount,
+                            Level0Device *Dev, size_t MaxPatSize) {
 
   assert(Dev);
   assert(QCount > 0);
@@ -2064,9 +2063,21 @@ Level0CmdList *Level0QueueGroup::createImmCmdList(ze_command_queue_flags_t Queue
 
     ZeRes = zeCommandListCreateImmediate(ContextH, DeviceH, &cmdQueueDesc, &CmdListH);
     LEVEL0_CHECK_RET(nullptr, ZeRes);
-    ImmCmdLists.emplace_back(new Level0CmdList(CmdListH, nullptr, Device, true, MaxPatternSize));
-    return ImmCmdLists.back().get();
+    return new Level0CmdList(CmdListH, nullptr, Device,
+                             true, MaxPatternSize);
 }
+
+Level0CmdList *Level0QueueGroup::createRegCmdList(ze_command_list_flags_t ListFlags,
+                                                  ze_command_queue_flags_t QueueFlags,
+                                                  ze_command_queue_priority_t Priority) {
+    std::unique_ptr<Level0CmdQueue> UpQ{createQueue(QueueFlags, Priority)};
+    if (UpQ.get() == nullptr)
+        return nullptr;
+    auto Ret = UpQ->createRegCmdList(ListFlags);
+    Queues.push_back(std::move(UpQ));
+    return Ret;
+}
+
 
 /***********************************************************************************/
 /***********************************************************************************/
@@ -2659,12 +2670,11 @@ bool Level0Device::setupQueueGroupProperties() {
                     QGroupProps[CopyQueueOrd].maxMemoryFillPatternSize);
   }
 #endif
-  // always create universal queues, if available
-  if (UniversalQueueOrd != UINT32_MAX) {
-    UniversalQueues.init(
-        UniversalQueueOrd, NumUniversalQueues, this,
-        QGroupProps[UniversalQueueOrd].maxMemoryFillPatternSize);
-  }
+  // always create universal queues
+  assert(UniversalQueueOrd != UINT32_MAX);
+  UniversalQueues.init(
+    UniversalQueueOrd, NumUniversalQueues, this,
+    QGroupProps[UniversalQueueOrd].maxMemoryFillPatternSize);
 
   return true;
 }
@@ -3537,22 +3547,48 @@ bool Level0Device::prefersRegCmdList() {
     return Integrated && DeviceIPVersion < 0x90807060;
 }
 
-Level0CmdList *Level0Device::createCmdList() {
-    Level0CmdList *Ret = nullptr;
-    if (prefersRegCmdList()) {
-      Ret = UniversalQueues.createRegCmdList();
-    } else {
-        Ret = UniversalQueues.createImmCmdList();
+static ze_command_queue_priority_t convertOclPriorityToZe(cl_queue_priority_khr OclPrio) {
+    ze_command_queue_priority_t ZePrio;
+    switch (OclPrio) {
+    case CL_QUEUE_PRIORITY_HIGH_KHR:
+        ZePrio = ZE_COMMAND_QUEUE_PRIORITY_PRIORITY_HIGH; break;
+    case CL_QUEUE_PRIORITY_LOW_KHR:
+        ZePrio = ZE_COMMAND_QUEUE_PRIORITY_PRIORITY_LOW; break;
+    case CL_QUEUE_PRIORITY_MED_KHR:
+    default:
+        ZePrio = ZE_COMMAND_QUEUE_PRIORITY_NORMAL; break;
     }
+    return ZePrio;
 }
 
-bool Level0Device::destroyCmdList(Level0CmdList *List) {
-    if (prefersRegCmdList()) {
-      Level0CmdQueue *Q = 0;
-      delete List;
-    } else {
-      delete List;
+// queue flags: ZE_COMMAND_QUEUE_FLAG_EXPLICIT_ONLY, ZE_COMMAND_QUEUE_FLAG_IN_ORDER
+// priority: ZE_COMMAND_QUEUE_PRIORITY_PRIORITY_{NORMAL,LOW,HIGH}
+// list flags: ZE_COMMAND_LIST_FLAG_IN_ORDER | ZE_COMMAND_LIST_FLAG_MAXIMIZE_THROUGHPUT
+Level0CmdList *Level0Device::createCmdList(cl_queue_priority_khr OclPriority,
+                                           bool PreferThroughput, bool Inorder) {
+    Level0CmdList *Ret = nullptr;
+    ze_command_queue_priority_t Prio = convertOclPriorityToZe(OclPriority);
+    ze_command_queue_flags_t QFlags = 0;
+    ze_command_list_flags_t LFlags = 0;
+    if (PreferThroughput)
+        LFlags |= ZE_COMMAND_LIST_FLAG_MAXIMIZE_THROUGHPUT;
+    if (Inorder) {
+        QFlags |= ZE_COMMAND_QUEUE_FLAG_IN_ORDER;
+        LFlags |= ZE_COMMAND_LIST_FLAG_IN_ORDER;
     }
+
+    if (prefersRegCmdList() || !Inorder) {
+      Ret = UniversalQueues.createRegCmdList(LFlags, QFlags, Prio);
+    } else {
+      Ret = UniversalQueues.createImmCmdList(QFlags, Prio);
+    }
+    return Ret;
+}
+
+void Level0Device::destroyCmdList(Level0CmdList *List) {
+  if (List == nullptr)
+    return;
+  delete List;
 }
 
 static void convertOpenclToZeImgFormat(cl_channel_type ChType,

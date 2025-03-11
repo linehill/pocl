@@ -33,7 +33,6 @@ POname(clReleaseCommandQueue)(cl_command_queue command_queue) CL_API_SUFFIX__VER
 
   int new_refcount;
 
-  POname(clFlush)(command_queue);
   POCL_LOCK_OBJ (command_queue);
   POCL_RELEASE_OBJECT_UNLOCKED (command_queue, new_refcount);
   POCL_MSG_PRINT_REFCOUNTS ("Release Command Queue %" PRId64

@@ -289,9 +289,9 @@ void pocl_level0_init_device_ops(struct pocl_device_ops *Ops) {
   Ops->set_kernel_exec_info_ext = pocl_level0_set_kernel_exec_info_ext;
   Ops->get_synchronized_timestamps = pocl_driver_get_synchronized_timestamps;
 
-  Ops->create_finalized_command_buffer =
-      pocl_level0_create_finalized_command_buffer;
-  Ops->free_command_buffer = pocl_level0_free_command_buffer;
+  // Ops->create_finalized_command_buffer =
+  //     pocl_level0_create_finalized_command_buffer;
+  // Ops->free_command_buffer = pocl_level0_free_command_buffer;
 }
 
 
@@ -1365,7 +1365,10 @@ int pocl_level0_build_builtin(cl_program Program, cl_uint DeviceI) {
 int pocl_level0_init_queue(cl_device_id Dev, cl_command_queue Queue) {
   Level0Device *Device = (Level0Device *)Dev->data;
   assert(Device);
-  Level0CmdList *CList = Device->createQueue();
+  bool OOO = (Queue->properties & CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE);
+  Level0CmdList *CList = Device->createCmdList(Queue->priority,
+                                               false, // prefer throughput
+                                               OOO); // out-of-order
   POCL_RETURN_ERROR_COND((CList == nullptr), CL_OUT_OF_RESOURCES);
   PoclL0QueueData *QD = new PoclL0QueueData;
   POCL_RETURN_ERROR_COND((QD == nullptr), CL_OUT_OF_HOST_MEMORY);
@@ -1383,7 +1386,7 @@ int pocl_level0_free_queue(cl_device_id Dev, cl_command_queue Queue) {
     return CL_SUCCESS;
 
   if (QD->CmdList)
-    Device->destroyQueue(QD->CmdList);
+    Device->destroyCmdList(QD->CmdList);
   POCL_DESTROY_COND(QD->Cond);
   delete QD;
   Queue->data = nullptr;
@@ -2002,6 +2005,7 @@ cl_int pocl_level0_set_kernel_exec_info_ext(
   }
 }
 
+/*
 cl_int
 pocl_level0_create_finalized_command_buffer(cl_device_id Dev,
                                             cl_command_buffer_khr CmdBuf) {
@@ -2026,3 +2030,4 @@ cl_int pocl_level0_free_command_buffer(cl_device_id Dev,
   CmdBuf->data[Dev->dev_id] = nullptr;
   return CL_SUCCESS;
 }
+*/
