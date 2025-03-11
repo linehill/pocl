@@ -101,13 +101,19 @@ static void pocl_level0_abort_on_ze_error(int unused, ze_result_t status,
 #define LEVEL0_CHECK_ABORT_NO_EXIT(code)                                       \
   pocl_level0_abort_on_ze_error(0, code, __LINE__, __FUNCTION__, #code)
 
-bool Level0CmdList::appendEventToList(cl_event Ev, _cl_command_node *Cmd, const char **Msg,
-                                      cl_context Context, const std::vector<cl_event> &ExtEvents) {
+ze_event_handle_t Level0CmdList::appendEventToList(cl_event Ev,
+                                      const std::vector<ze_event_handle_t> &WaitIntEvents,
+                                      const std::vector<cl_event> &WaitExtEvents) {
+    _cl_command_node *Cmd = Ev->command;
   cl_device_id dev = Cmd->device;
   assert(dev);
   _cl_command_t *cmd = &Cmd->command;
   assert(cmd);
-  for (auto E : ExtEvents) {
+  if (!ImmediateInorder) {
+    for (auto E: WaitIntEvents)
+      CurrentEventDependeciesVec.push_back(E);
+  }
+  for (auto E : WaitExtEvents) {
     ze_event_handle_t LzEv = Device->getOrCreateLzEvForClEv(E);
     CurrentEventDependeciesVec.push_back(LzEv);
   }
@@ -427,7 +433,7 @@ bool Level0CmdList::appendEventToList(cl_event Ev, _cl_command_node *Cmd, const 
     POCL_ABORT_UNIMPLEMENTED("An unknown command type");
     break;
   }
-  return true;
+  return CurrentEventH;
 }
 
 void Level0CmdList::allocNextFreeEvent() {
@@ -526,22 +532,31 @@ void Level0CmdList::syncMemHostPtrs() {
 }
 */
 
-bool Level0CmdList::executeAndWait() {
+int Level0CmdList::enqueue() {
+    if (ImmediateInorder) // no-op
+        return ZE_RESULT_SUCCESS;
+    // regular cmdlist
+    close();
+    assert(CmdQueueH);
+    ze_result_t Res = ZE_RESULT_SUCCESS;
+    LEVEL0_CHECK_RET(Res,
+        zeCommandQueueExecuteCommandLists(CmdQueueH, 1, &CmdListH, nullptr));
+    return Res;
+}
 
+int Level0CmdList::hostSynchronize() {
+    ze_result_t Res = ZE_RESULT_SUCCESS;
     if (ImmediateInorder) {
         // immediate cmd list
-        LEVEL0_CHECK_ABORT(
+        LEVEL0_CHECK_RET(Res,
             zeCommandListHostSynchronize(CmdListH, std::numeric_limits<uint64_t>::max()));
 
     } else {
-
-        close();
-        assert(CmdQueueH);
-        LEVEL0_CHECK_ABORT(
-          zeCommandQueueExecuteCommandLists(CmdQueueH, 1, &CmdListH, nullptr));
-        LEVEL0_CHECK_ABORT(
+        LEVEL0_CHECK_RET(Res,
           zeCommandQueueSynchronize(CmdQueueH, std::numeric_limits<uint64_t>::max()));
     }
+    if (Res != ZE_RESULT_SUCCESS)
+        return Res;
 
   reset();
   // TODO handle events...

@@ -76,25 +76,13 @@ static unsigned TotalL0Devices;
 
 struct PoclL0EventData {
   pocl_cond_t Cond;
-  bool CanBeBatched;
+  ze_event_handle_t LzEv;
 };
 
 struct PoclL0QueueData {
+  Level0CmdList *CmdList = nullptr;
   pocl_cond_t Cond;
-
-  void getSubmitBatch(BatchType &SubmitBatch);
-  void appendAndGetSubmitBatch(cl_event Ev, BatchType &SubmitBatch,
-                                 size_t BatchSizeLimit);
-  void getSubmitBatchIfFirstEvent(BatchType &SubmitBatch, cl_event Event);
-  void eraseEvent(cl_event Ev);
-
-private:
-  // list of event that have been submitted to the runtime, but not yet
-  // to the device. They will be split into actual batches
-  // in Flush/Notify callbacks
-  BatchType UnsubmittedEventList;
-  std::mutex ListLock;
-  void getSubmitBatchUnlocked(BatchType &SubmitBatch);
+  std::mutex Lock;
 };
 
 static void pocl_level0_local_size_optimizer(cl_device_id Dev, cl_kernel Ker,
@@ -329,10 +317,11 @@ static int readProgramSpv(cl_program Program, cl_uint DeviceI,
 }
 
 char *pocl_level0_build_hash(cl_device_id ClDevice) {
+  Level0Device *Device = (Level0Device *)ClDevice->data;
   char *Res = (char *)malloc(32);
   if (ClDevice->type == CL_DEVICE_TYPE_GPU ||
       ClDevice->type == CL_DEVICE_TYPE_CPU) {
-    snprintf(Res, 32, "pocl-level0-spirv");
+      snprintf(Res, 32, "pocl-level0-spirv-%x", Device->getIPVersion());
     // Intel FPGA Emulation uses device type Accelerator
   } else if (ClDevice->type == CL_DEVICE_TYPE_ACCELERATOR) {
     snprintf(Res, 32, "pocl-level0-fpga");
@@ -1376,17 +1365,27 @@ int pocl_level0_build_builtin(cl_program Program, cl_uint DeviceI) {
 }
 
 int pocl_level0_init_queue(cl_device_id Dev, cl_command_queue Queue) {
+  Level0Device *Device = (Level0Device *)Dev->data;
+  assert(Device);
+  Level0CmdList *CList = Device->createQueue();
+  POCL_RETURN_ERROR_COND((CList == nullptr), CL_OUT_OF_RESOURCES);
   PoclL0QueueData *QD = new PoclL0QueueData;
+  POCL_RETURN_ERROR_COND((QD == nullptr), CL_OUT_OF_HOST_MEMORY);
   Queue->data = QD;
+  QD->CmdList = CList;
   POCL_INIT_COND(QD->Cond);
   return CL_SUCCESS;
 }
 
 int pocl_level0_free_queue(cl_device_id Dev, cl_command_queue Queue) {
+  Level0Device *Device = (Level0Device *)Dev->data;
+  assert(Device);
   PoclL0QueueData *QD = (PoclL0QueueData *)Queue->data;
   if (QD == nullptr)
     return CL_SUCCESS;
 
+  if (QD->CmdList)
+    Device->destroyQueue(QD->CmdList);
   POCL_DESTROY_COND(QD->Cond);
   delete QD;
   Queue->data = nullptr;
@@ -1429,111 +1428,13 @@ void pocl_level0_join(cl_device_id Device, cl_command_queue Queue) {
   }
 }
 
-static bool pocl_level0_queue_supports_batching(cl_command_queue CQ,
-                                                Level0Device *Device) {
-  if (!Device->supportsCmdQBatching())
-    return false;
-  if (CQ->properties & CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE)
-    return false;
-  if (CQ->properties & CL_QUEUE_PROFILING_ENABLE)
-    return false;
-  return true;
-}
-
-static bool pocl_level0_can_event_be_batched(cl_event Ev) {
-
-  // empty waitlist -> immediately ready event
-  if (Ev->wait_list == nullptr)
-    return true;
-
-  // non-empty waitlist. if it has only one
-  // event in the waitlist, it must be
-  // the previous one (inorder queue)
-  return Ev->wait_list->next == nullptr;
-}
-
-void PoclL0QueueData::getSubmitBatch(BatchType &SubmitBatch) {
-  std::lock_guard<std::mutex> ListLockGuard(ListLock);
-  getSubmitBatchUnlocked(SubmitBatch);
-}
-
-void PoclL0QueueData::getSubmitBatchUnlocked(BatchType &SubmitBatch) {
-  if (UnsubmittedEventList.empty())
-    return;
-  cl_event FirstEv = UnsubmittedEventList.front();
-  // first event must be ready to launch = null waitlist
-  if (FirstEv->wait_list != nullptr)
-    return;
-  // if the first event has null waitlist, it's ready to launch
-  SubmitBatch.push_back(FirstEv);
-  UnsubmittedEventList.pop_front();
-  if (FirstEv->command_type == CL_COMMAND_COMMAND_BUFFER_KHR)
-    goto FINISH;
-
-  while (!UnsubmittedEventList.empty()) {
-    cl_event Ev = UnsubmittedEventList.front();
-    if (Ev->command_type == CL_COMMAND_COMMAND_BUFFER_KHR)
-      break;
-    assert(Ev->data);
-    PoclL0EventData *EvData = (PoclL0EventData *)Ev->data;
-    if (EvData->CanBeBatched) {
-      SubmitBatch.push_back(Ev);
-      UnsubmittedEventList.pop_front();
-    } else {
-      break;
-    }
-  }
-
-FINISH:
-  POCL_MSG_PRINT_LEVEL0("Processing Batch: Submitted %zu || New batch: %zu\n",
-                        UnsubmittedEventList.size(), SubmitBatch.size());
-}
-
-void PoclL0QueueData::getSubmitBatchIfFirstEvent(BatchType &SubmitBatch,
-                                                 cl_event Event) {
-  std::lock_guard<std::mutex> ListLockGuard(ListLock);
-
-  bool IsFirstEvent =
-      !UnsubmittedEventList.empty() && (Event == UnsubmittedEventList.front());
-  if (!IsFirstEvent)
-    return;
-  getSubmitBatchUnlocked(SubmitBatch);
-}
-
-void PoclL0QueueData::appendAndGetSubmitBatch(cl_event Ev,
-                                                BatchType &SubmitBatch,
-                                                size_t BatchSizeLimit) {
-  std::lock_guard<std::mutex> ListLockGuard(ListLock);
-  UnsubmittedEventList.push_back(Ev);
-  // to limit latency of the first launch, limit the size of the batch
-  if (UnsubmittedEventList.size() >= BatchSizeLimit)
-    getSubmitBatchUnlocked(SubmitBatch);
-}
-
-void PoclL0QueueData::eraseEvent(cl_event Event) {
-  std::lock_guard<std::mutex> ListLockGuard(ListLock);
-  auto It = std::find(UnsubmittedEventList.begin(), UnsubmittedEventList.end(),
-                      Event);
-  if (It != UnsubmittedEventList.end())
-    UnsubmittedEventList.erase(It);
-}
 
 void pocl_level0_flush(cl_device_id ClDev, cl_command_queue Queue) {
   Level0Device *Device = (Level0Device *)ClDev->data;
   PoclL0QueueData *QD = (PoclL0QueueData *)Queue->data;
 
-  if (!pocl_level0_queue_supports_batching(Queue, Device))
-    return;
-
-  BatchType SubmitBatch;
-  QD->getSubmitBatch(SubmitBatch);
-  if (SubmitBatch.empty()) {
-    POCL_MSG_PRINT_LEVEL0("FLUSH: SubmitBatch EMPTY\n");
-  } else {
-    POCL_MSG_PRINT_LEVEL0("FLUSH: SubmitBatch SIZE %zu\n", SubmitBatch.size());
-    Device->pushCommandBatch(std::move(SubmitBatch));
-    assert(SubmitBatch.empty());
-  }
+  int R = QD->CmdList->enqueue();
+  assert(R == 0);
 }
 
 void pocl_level0_submit(_cl_command_node *Node, cl_command_queue Queue) {
@@ -1545,20 +1446,20 @@ void pocl_level0_submit(_cl_command_node *Node, cl_command_queue Queue) {
   assert(Ev->data);
   PoclL0EventData *EvData = (PoclL0EventData *)Ev->data;
 
-  if (pocl_level0_queue_supports_batching(Queue, Device)) {
-    EvData->CanBeBatched = pocl_level0_can_event_be_batched(Ev);
-    BatchType SubmitBatch;
-    QD->appendAndGetSubmitBatch(Ev, SubmitBatch, BatchSizeLimit);
-    if (!SubmitBatch.empty())
-      Device->pushCommandBatch(std::move(SubmitBatch));
-  } else {
-    // fallback processing for all other events
-    EvData->CanBeBatched = false;
-    if (pocl_command_is_ready(Ev) != 0) {
-      pocl_update_event_submitted(Ev);
-      Device->pushCommand(Node);
-    }
+  std::vector<cl_event> WaitExtEvents;
+  std::vector<ze_event_handle_t> WaitIntEvents;
+  event_node *WaitNode = nullptr;
+  LL_FOREACH(Ev->wait_list, WaitNode) {
+      cl_event WaitEv = WaitNode->event;
+      if (WaitEv->queue != Queue)
+          WaitExtEvents.push_back(WaitEv);
+      else {
+          PoclL0EventData *WaitEvData = (PoclL0EventData *)WaitEv->data;
+          WaitIntEvents.push_back(WaitEvData->LzEv);
+      }
   }
+  pocl_update_event_submitted(Ev);
+  EvData->LzEv = QD->CmdList->appendEventToList(Ev, WaitIntEvents, WaitExtEvents);
   POCL_UNLOCK_OBJ(Ev);
 }
 
@@ -1598,7 +1499,6 @@ void pocl_level0_update_event(cl_device_id ClDevice, cl_event Event) {
     PoclL0EventData *EvData = (PoclL0EventData *)malloc(sizeof(PoclL0EventData));
     assert(EvData);
     POCL_INIT_COND(EvData->Cond);
-    EvData->CanBeBatched = false;
     Event->data = (void *)EvData;
   }
   if (Event->status == CL_QUEUED) {

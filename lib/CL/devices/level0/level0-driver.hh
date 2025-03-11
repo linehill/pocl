@@ -85,12 +85,14 @@ public:
   Level0CmdList(Level0CmdList const &&) = delete;
   Level0CmdList& operator=(Level0CmdList &&) = delete;
 
-  // ExtEvents = external event dependencies
+  // IntEvents = event dependencies on the same queue
+  // WaitExtEvents = external event dependencies
   // (= events from non-LZ devices we must wait for)
-  bool appendEventToList(cl_event Ev, _cl_command_node *Cmd, const char **Msg,
-                         cl_context Context,
-                         const std::vector<cl_event> &ExtEvents);
-  bool executeAndWait();
+  ze_event_handle_t appendEventToList(cl_event Ev,
+                                      const std::vector<ze_event_handle_t> &WaitIntEvents,
+                                      const std::vector<cl_event> &WaitExtEvents);
+  int enqueue();
+  int hostSynchronize();
 
 private:
   void reset();
@@ -375,6 +377,8 @@ public:
   // void *createCmdBuf(cl_command_buffer_khr CmdBuf);
   ze_event_handle_t getOrCreateLzEvForClEv(cl_event Ev);
   bool notifyAndFreeLzEvForClEv(cl_event Ev);
+  Level0CmdList *createQueue();
+  bool destroyQueue(Level0CmdList *);
 
   ze_image_handle_t allocImage(cl_channel_type ChType,
                                cl_channel_order ChOrder,
