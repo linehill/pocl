@@ -76,6 +76,7 @@ static unsigned TotalL0Devices;
 
 struct PoclL0EventData {
   pocl_cond_t Cond;
+  std::mutex Lock;
   ze_event_handle_t LzEv;
 };
 
@@ -274,8 +275,8 @@ void pocl_level0_init_device_ops(struct pocl_device_ops *Ops) {
   /* ops->get_timer_value = pocl_level0_get_timer_value; */
 
   Ops->wait_event = pocl_level0_wait_event;
-  Ops->notify_event_finished = pocl_level0_notify_event_finished;
-  Ops->notify_cmdq_finished = pocl_level0_notify_cmdq_finished;
+  // Ops->notify_event_finished = pocl_level0_notify_event_finished;
+  // Ops->notify_cmdq_finished = pocl_level0_notify_cmdq_finished;
   Ops->free_event_data = pocl_level0_free_event_data;
   Ops->wait_event = pocl_level0_wait_event;
   Ops->update_event = pocl_level0_update_event;
@@ -1392,11 +1393,12 @@ int pocl_level0_free_queue(cl_device_id Dev, cl_command_queue Queue) {
   return CL_SUCCESS;
 }
 
+/*
 void pocl_level0_notify_cmdq_finished(cl_command_queue Queue) {
-  /* must be called with CQ already locked.
-   * this must be a broadcast since there could be multiple
-   * user threads waiting on the same command queue
-   * in pthread_scheduler_wait_cq(). */
+  // must be called with CQ already locked.
+  // this must be a broadcast since there could be multiple
+  // user threads waiting on the same command queue
+  // in pthread_scheduler_wait_cq().
   PoclL0QueueData *QD = (PoclL0QueueData *)Queue->data;
   POCL_BROADCAST_COND(QD->Cond);
 }
@@ -1405,6 +1407,7 @@ void pocl_level0_notify_event_finished(cl_event Event) {
   PoclL0EventData *EvData = (PoclL0EventData *)Event->data;
   POCL_BROADCAST_COND(EvData->Cond);
 }
+*/
 
 void pocl_level0_free_event_data(cl_event Event) {
   if (Event->data == nullptr) {
@@ -1418,20 +1421,18 @@ void pocl_level0_free_event_data(cl_event Event) {
 void pocl_level0_join(cl_device_id Device, cl_command_queue Queue) {
   POCL_LOCK_OBJ(Queue);
   PoclL0QueueData *QD = (PoclL0QueueData *)Queue->data;
-  while (true) {
-    if (Queue->command_count == 0) {
-      POCL_UNLOCK_OBJ(Queue);
-      return;
-    } else {
-      POCL_WAIT_COND(QD->Cond, Queue->pocl_lock);
-    }
-  }
+  assert(QD);
+  POCL_UNLOCK_OBJ(Queue);
+
+  QD->CmdList->hostSynchronize();
 }
 
 
 void pocl_level0_flush(cl_device_id ClDev, cl_command_queue Queue) {
   Level0Device *Device = (Level0Device *)ClDev->data;
+  assert(Device);
   PoclL0QueueData *QD = (PoclL0QueueData *)Queue->data;
+  assert(QD);
 
   int R = QD->CmdList->enqueue();
   assert(R == 0);
@@ -1466,32 +1467,25 @@ void pocl_level0_submit(_cl_command_node *Node, cl_command_queue Queue) {
 void pocl_level0_notify(cl_device_id ClDev, cl_event Event, cl_event Finished) {
   _cl_command_node *Node = Event->command;
   Level0Device *Device = (Level0Device *)ClDev->data;
+  assert(Device);
 
+  // TODO handling this is not really solved..
+  assert(Finished->status >= CL_COMPLETE);
+/*
   if (Finished->status < CL_COMPLETE) {
     // remove the Event from unsubmitted list
     PoclL0QueueData *QD = (PoclL0QueueData *)Event->queue->data;
-    QD->eraseEvent(Event);
     pocl_update_event_failed_locked(Event);
+    // TODO
+    //Device->failAndFreeLzEvForClEv(Event);
     return;
   }
-
+*/
   // node is ready to execute
   POCL_MSG_PRINT_LEVEL0("notify on event %zu | READY %i\n", Event->id,
                         Node->ready);
 
-  assert(Event->queue);
-  if (pocl_level0_queue_supports_batching(Event->queue, Device)) {
-    BatchType SubmitBatch;
-    PoclL0QueueData *QD = (PoclL0QueueData *)Event->queue->data;
-    QD->getSubmitBatchIfFirstEvent(SubmitBatch, Event);
-    if (!SubmitBatch.empty())
-      Device->pushCommandBatch(std::move(SubmitBatch));
-  } else {
-    if (Node->ready == CL_TRUE && pocl_command_is_ready(Event) != 0) {
-      pocl_update_event_submitted(Event);
-      Device->pushCommand(Node);
-    }
-  }
+  Device->notifyAndFreeLzEvForClEv(Event);
 }
 
 void pocl_level0_update_event(cl_device_id ClDevice, cl_event Event) {
