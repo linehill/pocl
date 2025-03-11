@@ -76,14 +76,11 @@ static unsigned TotalL0Devices;
 
 struct PoclL0EventData {
   pocl_cond_t Cond;
-  std::mutex Lock;
-  ze_event_handle_t LzEv;
 };
 
 struct PoclL0QueueData {
   Level0CmdList *CmdList = nullptr;
   pocl_cond_t Cond;
-  std::mutex Lock;
 };
 
 static void pocl_level0_local_size_optimizer(cl_device_id Dev, cl_kernel Ker,
@@ -1424,9 +1421,20 @@ void pocl_level0_join(cl_device_id Device, cl_command_queue Queue) {
   assert(QD);
   POCL_UNLOCK_OBJ(Queue);
 
+  // pocl_<driver>_join callback can be called simultaneously from multiple threads
+  // only one (the first) synchronize will do the sync work. Later calls from other
+  // threads return immediately. Therefore we have to wait for the signaling of Cond.
   QD->CmdList->hostSynchronize();
-}
 
+  while (true) {
+      if (Queue->command_count == 0) {
+          POCL_UNLOCK_OBJ(Queue);
+          return;
+      } else {
+          POCL_WAIT_COND(QD->Cond, Queue->pocl_lock);
+      }
+  }
+}
 
 void pocl_level0_flush(cl_device_id ClDev, cl_command_queue Queue) {
   Level0Device *Device = (Level0Device *)ClDev->data;
@@ -1448,19 +1456,19 @@ void pocl_level0_submit(_cl_command_node *Node, cl_command_queue Queue) {
   PoclL0EventData *EvData = (PoclL0EventData *)Ev->data;
 
   std::vector<cl_event> WaitExtEvents;
-  std::vector<ze_event_handle_t> WaitIntEvents;
+  std::vector<cl_event> WaitIntEvents;
   event_node *WaitNode = nullptr;
   LL_FOREACH(Ev->wait_list, WaitNode) {
       cl_event WaitEv = WaitNode->event;
       if (WaitEv->queue != Queue)
           WaitExtEvents.push_back(WaitEv);
       else {
-          PoclL0EventData *WaitEvData = (PoclL0EventData *)WaitEv->data;
-          WaitIntEvents.push_back(WaitEvData->LzEv);
+          WaitIntEvents.push_back(WaitEv);
       }
   }
   pocl_update_event_submitted(Ev);
-  EvData->LzEv = QD->CmdList->appendEventToList(Ev, WaitIntEvents, WaitExtEvents);
+  int Res = QD->CmdList->appendEventToList(Ev, WaitIntEvents, WaitExtEvents);
+  assert(Res == ZE_RESULT_SUCCESS);
   POCL_UNLOCK_OBJ(Ev);
 }
 

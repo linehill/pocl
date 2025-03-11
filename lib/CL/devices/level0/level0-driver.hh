@@ -85,13 +85,16 @@ public:
   Level0CmdList(Level0CmdList const &&) = delete;
   Level0CmdList& operator=(Level0CmdList &&) = delete;
 
+  // can be called from multiple user threads simultaneously
   // IntEvents = event dependencies on the same queue
   // WaitExtEvents = external event dependencies
   // (= events from non-LZ devices we must wait for)
-  ze_event_handle_t appendEventToList(cl_event Ev,
-                                      const std::vector<ze_event_handle_t> &WaitIntEvents,
-                                      const std::vector<cl_event> &WaitExtEvents);
+  int appendEventToList(cl_event Ev,
+                        const std::vector<cl_event> &WaitIntEvents,
+                        const std::vector<cl_event> &WaitExtEvents);
+  // can be called from multiple user threads simultaneously
   int enqueue();
+  // can be called from multiple user threads simultaneously
   int hostSynchronize();
 
 private:
@@ -210,27 +213,43 @@ private:
                          const size_t Origin[3], const size_t Region[3],
                          size_t RowPitch, size_t SlicePitch);
 
-private:
-  std::queue<ze_event_handle_t> DeviceEventsToReset;
   // std::map<void *, size_t> MemPtrsToMakeResident;
   // std::map<std::pair<char*, char*>, size_t> UseMemHostPtrsToSync;
   // void makeMemResident();
   // void syncMemHostPtrs();
   void allocNextFreeEvent();
 
+private:
+  using ClEvLzEvMsg = std::tuple<cl_event, ze_event_handle_t, const char*>;
+  // recycled events from previous enqueues
+  std::queue<ze_event_handle_t> ReusableDeviceEvents;
+  // device events currently used by appended commands that need to be reset
+  std::queue<ze_event_handle_t> DeviceEventsToReset;
+  // the CL,LZ pairs of events that have been appended since last flush/synchronize
+  std::vector<ClEvLzEvMsg> EnqueuedEvents;
+
+  // state of the CmdList. For Imm Cmdlist, the ClosedEnqueued is meaningless
+  enum class CmdListState {
+      Appending,
+      ClosedEnqueued,
+      Synchronizing
+  };
+  std::mutex StateLock;
+  std::condition_variable StateCond;
+  CmdListState State = CmdListState::Appending;
+
+  // list of dependencies for currently appended event
   std::vector<ze_event_handle_t> CurrentEventDependeciesVec;
   std::vector<ze_event_handle_t> PushedEventDependeciesVec;
   unsigned NumCurrentEventDependecies = 0;
   ze_event_handle_t *CurrentEventDependeciesPtr = nullptr;
+  ze_event_handle_t CurrentEventH = nullptr;
 
-  ze_command_list_handle_t CmdListH;
-  // nullptr for ImmInoder, non-null for regular cmdlist
-  ze_command_queue_handle_t CmdQueueH;
+  ze_command_list_handle_t CmdListH = nullptr;
+  // Queue handle; nullptr for ImmInoder, non-null for regular cmdlist
+  ze_command_queue_handle_t CmdQueueH = nullptr;
 
-  ze_event_handle_t CurrentEventH;
-  ze_event_handle_t PreviousEventH;
-
-  Level0Device *Device;
+  Level0Device *Device = nullptr;
 
   double DeviceFrequency;
   double DeviceNsPerCycle;
@@ -247,12 +266,13 @@ private:
   bool ImmediateInorder;
 };
 
+/*
 class Level0CmdQueue {
 
 public:
-    Level0CmdQueue(ze_context_handle_t C,
-                   ze_device_handle_t D,
+    Level0CmdQueue(Level0Device *Dev,
                    ze_command_queue_handle_t Q,
+                   size_t MaxPatSize,
                    unsigned Ord);
     ~Level0CmdQueue();
 
@@ -265,18 +285,21 @@ public:
     Level0CmdList *createRegCmdList(ze_command_list_flags_t ListFlags);
 
 private:
-    std::vector<std::unique_ptr<Level0CmdList>> RegCmdLists;
-    ze_command_queue_handle_t QueueH;
-    ze_context_handle_t ContextH;
-    ze_device_handle_t DeviceH;
-    unsigned Ordinal;
+    // std::vector<std::unique_ptr<Level0CmdList>> RegCmdLists;
+    Level0Device *Device = nullptr;
+    ze_command_queue_handle_t QueueH = nullptr;
+    ze_context_handle_t ContextH = nullptr;
+    ze_device_handle_t DeviceH = nullptr;
+    size_t MaxPatternSize = 0;
+    unsigned Ordinal = 0;
 };
+*/
 
 class Level0QueueGroup {
 
 public:
-  Level0QueueGroup(unsigned Ordinal, unsigned Count,
-                   Level0Device *Device, size_t MaxPatternSize);
+    Level0QueueGroup(unsigned Ordinal, unsigned Count,
+                     Level0Device *Dev, size_t MaxPatSize);
   ~Level0QueueGroup() = default;
 
   Level0QueueGroup(Level0QueueGroup const &) = delete;
@@ -292,10 +315,12 @@ public:
                                   ze_command_queue_priority_t Priority);
 
 private:
-  std::vector<std::unique_ptr<Level0CmdQueue>> Queues;
-  std::vector<std::unique_ptr<Level0CmdList>> ImmCmdLists;
+  // std::vector<std::unique_ptr<Level0CmdQueue>> Queues;
+  // std::vector<std::unique_ptr<Level0CmdList>> ImmCmdLists;
+  Level0Device *Device = nullptr;
   ze_context_handle_t ContextH = nullptr;
   ze_device_handle_t DeviceH = nullptr;
+  size_t MaxPatternSize = 0;
   unsigned LastUsedIndex = 0;
   unsigned Count = 0;
   unsigned Ordinal = 0;
@@ -306,12 +331,12 @@ class Level0Device;
 
 class Level0EventPool {
 public:
-  Level0EventPool(Level0Device *D, unsigned EvtPoolSize);
+  static constexpr unsigned EventPoolSize = 2048;
+  Level0EventPool(Level0Device *D, unsigned EvtPoolSize = EventPoolSize);
   ~Level0EventPool();
   bool isEmpty() const { return LastIdx >= AvailableEvents.size(); }
   ze_event_handle_t getEvent();
   /// the number of events allocated for each Event Pool
-  static constexpr unsigned EventPoolSize = 2048;
 private:
   std::vector<ze_event_handle_t> AvailableEvents;
   ze_event_pool_handle_t EvtPoolH;
@@ -377,8 +402,8 @@ public:
   // void *createCmdBuf(cl_command_buffer_khr CmdBuf);
   ze_event_handle_t getOrCreateLzEvForClEv(cl_event Ev);
   bool notifyAndFreeLzEvForClEv(cl_event Ev);
-  Level0CmdList *createQueue();
-  bool destroyQueue(Level0CmdList *);
+  Level0CmdList *createCmdList();
+  bool destroyCmdList(Level0CmdList *);
 
   ze_image_handle_t allocImage(cl_channel_type ChType,
                                cl_channel_order ChOrder,
@@ -562,6 +587,10 @@ private:
   /// e.g. FillImage, FillBuffer with large patterns etc
   bool initHelperKernels();
   void destroyHelperKernels();
+
+  // true if the device prefers Regular CmdList,
+  // instead of Immediate CmdList
+  bool prefersRegCmdList();
 
   bool setupDeviceProperties(bool HasIPVersionExt);
   bool setupComputeProperties();
