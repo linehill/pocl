@@ -231,7 +231,7 @@ private:
   // state of the CmdList. For Imm Cmdlist, the ClosedEnqueued is meaningless
   enum class CmdListState {
       Appending,
-      ClosedEnqueued,
+      // ClosedEnqueued,
       Synchronizing
   };
   std::mutex StateLock;

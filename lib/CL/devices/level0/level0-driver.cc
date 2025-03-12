@@ -104,22 +104,11 @@ static void pocl_level0_abort_on_ze_error(int unused, ze_result_t status,
 int Level0CmdList::appendEventToList(cl_event Ev,
                                      const std::vector<cl_event> &WaitIntEvents,
                                      const std::vector<cl_event> &WaitExtEvents) {
-    std::unique_lock<std::mutex> UniqLock(StateLock);
-    if (ImmediateInorder) {
-        // for Imm Cmdlist, the ClosedEnqueued state is meaningless,
-        // we can still append to the queue
-        while (State == CmdListState::Synchronizing) {
-            // State == Synchronizing; need to wait
-            StateCond.wait(UniqLock);
-        }
-    } else {
-        // for Regular CmdList, the ClosedEnqueued state is meaningful, we must wait
-        // TODO this breaks with the pattern: append, enqueue, append, enqueue, hostSynchronize
-        while (State != CmdListState::Appending) {
-          // State == Enqueued, Synchronizing; need to wait
-          StateCond.wait(UniqLock);
-        }
-    }
+  std::unique_lock<std::mutex> UniqLock(StateLock);
+  while (State != CmdListState::Appending) {
+    // State == Synchronizing; need to wait
+    StateCond.wait(UniqLock);
+  }
 
   _cl_command_node *Cmd = Ev->command;
   cl_context Context = Ev->context;
@@ -467,34 +456,11 @@ int Level0CmdList::appendEventToList(cl_event Ev,
   return ZE_RESULT_SUCCESS;
 }
 
-int Level0CmdList::enqueue() {
-    POCL_MSG_WARN("Level0CmdList::enqueue()\n");
-    std::lock_guard<std::mutex> LockGuard(StateLock);
-    if (State == CmdListState::Appending) {
-        State = CmdListState::ClosedEnqueued;
-        StateCond.notify_all();
-    } else // State == Enqueued, Synchronizing
-        return ZE_RESULT_SUCCESS;
-
-    if (ImmediateInorder) // no-op
-        return ZE_RESULT_SUCCESS;
-
-    // regular cmdlist
-    close();
-    assert(CmdQueueH);
-    ze_result_t Res = ZE_RESULT_SUCCESS;
-    LEVEL0_CHECK_RET(Res,
-                     zeCommandQueueExecuteCommandLists(CmdQueueH, 1, &CmdListH, nullptr));
-    return Res;
-}
-
 int Level0CmdList::hostSynchronize() {
-
     {
         std::unique_lock<std::mutex> UniqLock(StateLock);
-        assert(State != CmdListState::Appending);
 
-        if (State == CmdListState::ClosedEnqueued) {
+        if (State == CmdListState::Appending) {
             State = CmdListState::Synchronizing;
             StateCond.notify_all();
         } else {
@@ -504,8 +470,10 @@ int Level0CmdList::hostSynchronize() {
             return ZE_RESULT_SUCCESS;
         }
     }
+    assert(State != CmdListState::Appending);
 
     /***************************/
+    enqueue();
     ze_result_t Res = ZE_RESULT_SUCCESS;
     if (ImmediateInorder) {
         // immediate cmd list
@@ -530,6 +498,19 @@ int Level0CmdList::hostSynchronize() {
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
+
+int Level0CmdList::enqueue() {
+    if (ImmediateInorder) // no-op
+        return ZE_RESULT_SUCCESS;
+
+    // regular cmdlist
+    close();
+    assert(CmdQueueH);
+    ze_result_t Res = ZE_RESULT_SUCCESS;
+    LEVEL0_CHECK_RET(Res,
+                     zeCommandQueueExecuteCommandLists(CmdQueueH, 1, &CmdListH, nullptr));
+    return Res;
+}
 
 void Level0CmdList::allocNextFreeEvent() {
     if (ImmediateInorder) {

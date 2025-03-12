@@ -1431,13 +1431,12 @@ void pocl_level0_join(cl_device_id Device, cl_command_queue Queue) {
 }
 
 void pocl_level0_flush(cl_device_id ClDev, cl_command_queue Queue) {
-  Level0Device *Device = (Level0Device *)ClDev->data;
-  assert(Device);
-  PoclL0QueueData *QD = (PoclL0QueueData *)Queue->data;
-  assert(QD);
-
-  int R = QD->CmdList->enqueue();
-  assert(R == 0);
+  // Immediate CmdList doesn't need an flush;
+  // Regular Cmdlist could be flushed, but doing so would break
+  // with this code pattern:
+  // enqueue, flush, enqueue, flush, finish
+  // ... because execution requires closing a list,
+  // and AFAIK we can't append to a closed LZ Cmdlist
 }
 
 void pocl_level0_submit(_cl_command_node *Node, cl_command_queue Queue) {
