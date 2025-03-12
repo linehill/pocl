@@ -594,7 +594,7 @@ private:
 
   // true if the device prefers Regular CmdList,
   // instead of Immediate CmdList
-  bool prefersRegCmdList();
+  bool prefersImmCmdList();
 
   bool setupDeviceProperties(bool HasIPVersionExt);
   bool setupComputeProperties();

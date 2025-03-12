@@ -1367,10 +1367,10 @@ int pocl_level0_build_builtin(cl_program Program, cl_uint DeviceI) {
 int pocl_level0_init_queue(cl_device_id Dev, cl_command_queue Queue) {
   Level0Device *Device = (Level0Device *)Dev->data;
   assert(Device);
-  bool OOO = (Queue->properties & CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE);
+  bool Inorder = (Queue->properties & CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE) == 0;
   Level0CmdList *CList = Device->createCmdList(Queue->priority,
                                                false, // prefer throughput
-                                               OOO); // out-of-order
+                                               Inorder);
   POCL_RETURN_ERROR_COND((CList == nullptr), CL_OUT_OF_RESOURCES);
   PoclL0QueueData *QD = new PoclL0QueueData;
   POCL_RETURN_ERROR_COND((QD == nullptr), CL_OUT_OF_HOST_MEMORY);

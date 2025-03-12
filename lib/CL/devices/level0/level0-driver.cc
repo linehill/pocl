@@ -3543,7 +3543,10 @@ bool Level0Device::notifyAndFreeLzEvForClEv(cl_event Ev) {
 }
 
 // TODO FIXME: figure out which devices benefit from ImmCmdList
-bool Level0Device::prefersRegCmdList() {
+bool Level0Device::prefersImmCmdList() {
+    int Preference = pocl_get_bool_option("POCL_LEVEL0_IMM_CMD_LIST", -1);
+    if (Preference >= 0)
+      return Preference > 0;
     return Integrated && DeviceIPVersion < 0x90807060;
 }
 
@@ -3577,7 +3580,7 @@ Level0CmdList *Level0Device::createCmdList(cl_queue_priority_khr OclPriority,
         LFlags |= ZE_COMMAND_LIST_FLAG_IN_ORDER;
     }
 
-    if (prefersRegCmdList() || !Inorder) {
+    if (!prefersImmCmdList() || !Inorder) {
       Ret = UniversalQueues.createRegCmdList(LFlags, QFlags, Prio);
     } else {
       Ret = UniversalQueues.createImmCmdList(QFlags, Prio);
