@@ -41,6 +41,8 @@ POname(clReleaseCommandQueue)(cl_command_queue command_queue) CL_API_SUFFIX__VER
 
   if (new_refcount == 0)
     {
+      assert (command_queue->command_count == 0);
+
       POCL_UNLOCK_OBJ (command_queue);
       VG_REFC_ZERO (command_queue);
 
@@ -68,7 +70,8 @@ POname(clReleaseCommandQueue)(cl_command_queue command_queue) CL_API_SUFFIX__VER
           && (*(command_queue->device->available) == CL_TRUE))
         command_queue->device->ops->free_queue (device, command_queue);
       POCL_DESTROY_OBJECT (command_queue);
-      POCL_MEM_FREE(command_queue);
+      POCL_MEM_FREE (command_queue);
+
     }
   else
     {

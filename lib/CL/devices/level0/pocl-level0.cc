@@ -80,7 +80,7 @@ struct PoclL0EventData {
 
 struct PoclL0QueueData {
   Level0CmdList *CmdList = nullptr;
-  pocl_cond_t Cond;
+  // pocl_cond_t Cond;
 };
 
 static void pocl_level0_local_size_optimizer(cl_device_id Dev, cl_kernel Ker,
@@ -271,11 +271,13 @@ void pocl_level0_init_device_ops(struct pocl_device_ops *Ops) {
   /* TODO get timing data from level0 API */
   /* ops->get_timer_value = pocl_level0_get_timer_value; */
 
-  Ops->wait_event = pocl_level0_wait_event;
+  // TODO implement wait on events
+  //Ops->wait_event = pocl_level0_wait_event;
   // Ops->notify_event_finished = pocl_level0_notify_event_finished;
+
+  // the pocl_level0_join is MT-safe, so this is not required:
   // Ops->notify_cmdq_finished = pocl_level0_notify_cmdq_finished;
   Ops->free_event_data = pocl_level0_free_event_data;
-  Ops->wait_event = pocl_level0_wait_event;
   Ops->update_event = pocl_level0_update_event;
 
   Ops->init_queue = pocl_level0_init_queue;
@@ -1374,7 +1376,7 @@ int pocl_level0_init_queue(cl_device_id Dev, cl_command_queue Queue) {
   POCL_RETURN_ERROR_COND((QD == nullptr), CL_OUT_OF_HOST_MEMORY);
   Queue->data = QD;
   QD->CmdList = CList;
-  POCL_INIT_COND(QD->Cond);
+  // POCL_INIT_COND(QD->Cond);
   return CL_SUCCESS;
 }
 
@@ -1387,12 +1389,13 @@ int pocl_level0_free_queue(cl_device_id Dev, cl_command_queue Queue) {
 
   if (QD->CmdList)
     Device->destroyCmdList(QD->CmdList);
-  POCL_DESTROY_COND(QD->Cond);
+  // POCL_DESTROY_COND(QD->Cond);
   delete QD;
   Queue->data = nullptr;
   return CL_SUCCESS;
 }
 
+// TODO
 /*
 void pocl_level0_notify_cmdq_finished(cl_command_queue Queue) {
   // must be called with CQ already locked.
@@ -1424,19 +1427,7 @@ void pocl_level0_join(cl_device_id Device, cl_command_queue Queue) {
   assert(QD);
   POCL_UNLOCK_OBJ(Queue);
 
-  // pocl_<driver>_join callback can be called simultaneously from multiple threads
-  // only one (the first) synchronize will do the sync work. Later calls from other
-  // threads return immediately. Therefore we have to wait for the signaling of Cond.
   QD->CmdList->hostSynchronize();
-
-  while (true) {
-      if (Queue->command_count == 0) {
-          POCL_UNLOCK_OBJ(Queue);
-          return;
-      } else {
-          POCL_WAIT_COND(QD->Cond, Queue->pocl_lock);
-      }
-  }
 }
 
 void pocl_level0_flush(cl_device_id ClDev, cl_command_queue Queue) {
@@ -1514,6 +1505,7 @@ void pocl_level0_update_event(cl_device_id ClDevice, cl_event Event) {
   }
 }
 
+/*
 void pocl_level0_wait_event(cl_device_id ClDevice, cl_event Event) {
   POCL_MSG_PRINT_LEVEL0("device->wait_event on event %zu\n", Event->id);
   assert(Event->data);
@@ -1525,6 +1517,7 @@ void pocl_level0_wait_event(cl_device_id ClDevice, cl_event Event) {
   }
   POCL_UNLOCK_OBJ(Event);
 }
+*/
 
 int pocl_level0_alloc_mem_obj(cl_device_id ClDevice, cl_mem Mem, void *HostPtr) {
   Level0Device *Device = (Level0Device *)ClDevice->data;

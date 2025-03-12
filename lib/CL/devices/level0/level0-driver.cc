@@ -578,11 +578,9 @@ void Level0CmdList::close(std::queue<ze_event_handle_t> *EvtList) {
     return;
   }
   // is a barrier required at all ?
-  // TODO do we need to add all events here, for out-of-order queues
   LEVEL0_CHECK_ABORT(zeCommandListAppendBarrier(CmdListH,
                                    nullptr, // signal event
-                                   CurrentEventH ? 1 : 0,
-                                   CurrentEventH ? &CurrentEventH : nullptr));
+                                   0, nullptr)); // 0 = wait on all previous events
 
   while (!DeviceEventsToReset.empty()) {
     ze_event_handle_t E = DeviceEventsToReset.front();
@@ -2043,8 +2041,11 @@ Level0CmdQueue *Level0QueueGroup::createQueue(ze_command_queue_flags_t Flags,
 
   ZeRes = zeCommandQueueCreate(ContextH, DeviceH, &cmdQueueDesc, &QueueH);
   LEVEL0_CHECK_RET(nullptr, ZeRes);
-  Queues.emplace_back(new Level0CmdQueue(Device, QueueH, MaxPatternSize, Ordinal));
-  return Queues.back().get();
+  std::unique_ptr<Level0CmdQueue> NewQ{new Level0CmdQueue(Device, QueueH, MaxPatternSize, Ordinal)};
+  Level0CmdQueue *Ret = NewQ.get();
+  if (Ret)
+    Queues.push_back(std::move(NewQ));
+  return Ret;
 }
 
 Level0CmdList *Level0QueueGroup::createImmCmdList(ze_command_queue_flags_t QueueFlags,
@@ -2070,12 +2071,10 @@ Level0CmdList *Level0QueueGroup::createImmCmdList(ze_command_queue_flags_t Queue
 Level0CmdList *Level0QueueGroup::createRegCmdList(ze_command_list_flags_t ListFlags,
                                                   ze_command_queue_flags_t QueueFlags,
                                                   ze_command_queue_priority_t Priority) {
-    std::unique_ptr<Level0CmdQueue> UpQ{createQueue(QueueFlags, Priority)};
-    if (UpQ.get() == nullptr)
+    Level0CmdQueue *UpQ = createQueue(QueueFlags, Priority);
+    if (UpQ == nullptr)
         return nullptr;
-    auto Ret = UpQ->createRegCmdList(ListFlags);
-    Queues.push_back(std::move(UpQ));
-    return Ret;
+    return UpQ->createRegCmdList(ListFlags);
 }
 
 
@@ -2326,8 +2325,9 @@ bool Level0Device::setupDeviceProperties(bool HasIPVersionExt) {
     ClDev->wg_collective_func_support = CL_TRUE;
 #endif
 
-    ClDev->on_host_queue_props
-        = CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE | CL_QUEUE_PROFILING_ENABLE;
+    // OOO queues are disabled ATM, because they're
+    // implemented via Regular (not Immediate) CmdLists
+    ClDev->on_host_queue_props = CL_QUEUE_PROFILING_ENABLE;
     ClDev->version_of_latest_passed_cts = "v2025-02-25-01";
   } else {
     // FPGA / VPU custom devices

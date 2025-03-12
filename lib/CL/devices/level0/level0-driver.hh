@@ -319,7 +319,7 @@ public:
 private:
   Level0CmdQueue *createQueue(ze_command_queue_flags_t Flags,
                               ze_command_queue_priority_t Priority);
-  std::vector<std::unique_ptr<Level0CmdQueue>> Queues;
+  std::deque<std::unique_ptr<Level0CmdQueue>> Queues;
   Level0Device *Device = nullptr;
   ze_context_handle_t ContextH = nullptr;
   ze_device_handle_t DeviceH = nullptr;
