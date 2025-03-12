@@ -334,7 +334,7 @@ class Level0Device;
 
 class Level0EventPool {
 public:
-  static constexpr unsigned EventPoolSize = 2048;
+  static constexpr unsigned EventPoolSize = 128;
   Level0EventPool(Level0Device *D, unsigned EvtPoolSize = EventPoolSize);
   ~Level0EventPool();
   bool isEmpty() const { return LastIdx >= AvailableEvents.size(); }
