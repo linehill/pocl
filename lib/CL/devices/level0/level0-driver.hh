@@ -98,9 +98,15 @@ public:
   int hostSynchronize();
 
 private:
+  // std::map<void *, size_t> MemPtrsToMakeResident;
+  // std::map<std::pair<char*, char*>, size_t> UseMemHostPtrsToSync;
+  // void makeMemResident();
+  // void syncMemHostPtrs();
+  void allocNextFreeEvent();
   void reset();
   void close(std::queue<ze_event_handle_t> *EvtList = nullptr);
 
+/****************************************************************/
   // append various command types to the list
   void read(void *__restrict__ HostPtr,
             pocl_mem_identifier *SrcMemId, cl_mem SrcBuf,
@@ -212,12 +218,6 @@ private:
   void syncUseMemHostPtr(pocl_mem_identifier *MemId, cl_mem Mem,
                          const size_t Origin[3], const size_t Region[3],
                          size_t RowPitch, size_t SlicePitch);
-
-  // std::map<void *, size_t> MemPtrsToMakeResident;
-  // std::map<std::pair<char*, char*>, size_t> UseMemHostPtrsToSync;
-  // void makeMemResident();
-  // void syncMemHostPtrs();
-  void allocNextFreeEvent();
 
 private:
   using ClEvLzEvMsg = std::tuple<cl_event, ze_event_handle_t, const char*>;

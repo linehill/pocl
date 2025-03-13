@@ -459,6 +459,8 @@ int Level0CmdList::appendEventToList(cl_event Ev,
 int Level0CmdList::hostSynchronize() {
     {
         std::unique_lock<std::mutex> UniqLock(StateLock);
+        if (EnqueuedEvents.empty())
+          return ZE_RESULT_SUCCESS;
 
         if (State == CmdListState::Appending) {
             State = CmdListState::Synchronizing;
@@ -471,6 +473,8 @@ int Level0CmdList::hostSynchronize() {
         }
     }
     assert(State != CmdListState::Appending);
+
+    POCL_MSG_WARN ("LZ CmdList %p : HostSynchronize\n", this);
 
     /***************************/
     enqueue();

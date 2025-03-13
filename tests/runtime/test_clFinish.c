@@ -174,7 +174,9 @@ int main()
                                 local_work_size, 2, C5_wait_list, NULL); 
   CHECK_OPENCL_ERROR_IN("clEnqueueNDRangeKernel");
 
-  clFinish(queueC);
+  clFlush (queueA);
+  clFlush (queueB);
+  clFinish (queueC);
   /* TODO some checks */
 
   CHECK_CL_ERROR (clReleaseEvent (eventA1));

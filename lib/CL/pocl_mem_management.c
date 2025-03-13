@@ -809,6 +809,9 @@ pocl_create_migration_commands (cl_device_id dev,
       POCL_RETAIN_OBJECT_UNLOCKED (mem);
       gmem->version = mem->latest_version;
     }
+  /* if we're only doing import, set the import evt's CQ = the user evt's CQ */
+  if (!do_export)
+    dev_cq = user_cmd->queue;
 
 FINISH_VER_SETUP:
   /* If the command is a write-use, increase the version. */
