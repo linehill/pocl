@@ -94,6 +94,10 @@ public:
                         const std::vector<cl_event> &WaitIntEvents,
                         const std::vector<cl_event> &WaitExtEvents);
   // MT safe
+  ze_event_handle_t appendSignalEvent();
+  // MT safe
+  void eventsCanBeReused(std::queue<ze_event_handle_t> &Events);
+  // MT safe
   int flush();
 
 private:
@@ -370,7 +374,9 @@ public:
 
   ze_event_handle_t getOrCreateLzEvForClEv(cl_event Ev);
   bool notifyAndFreeLzEvForClEv(cl_event Ev);
-  void appendEventToWait(ze_event_handle_t WaitEvt, std::vector<ClEvLzEvMsg> &&EnqueuedEvents);
+  void appendCmdListToWaitOn(ze_event_handle_t WaitEvt, Level0CmdList *CmdList,
+                             std::vector<ClEvLzEvMsg> &&EnqueuedEvents,
+                             std::queue<ze_event_handle_t> &&DeviceEventsToReset);
 
   // void pushCommand(_cl_command_node *Command);
   // void pushCommandBatch(BatchType Batch);
@@ -544,6 +550,8 @@ private:
   alignas(64)
   std::mutex EventProcessingLock;
   std::map<ze_event_handle_t, std::vector<ClEvLzEvMsg>> Events2Process;
+  std::map<ze_event_handle_t, std::queue<ze_event_handle_t>> Events2Reset;
+  std::map<ze_event_handle_t, Level0CmdList *> CmdLists;
   std::thread EventProcessingThread;
   std::condition_variable EventProcessingCond;
   bool EventProcessingExit = false;
@@ -695,6 +703,15 @@ private:
 };
 
 using Level0DefaultAllocatorUPtr = std::unique_ptr<Level0DefaultAllocator>;
+
+struct PoclL0EventData {
+    pocl_cond_t Cond;
+};
+
+struct PoclL0QueueData {
+    Level0CmdList *CmdList = nullptr;
+    pocl_cond_t Cond;
+};
 
 /// manages multiple device allocations for a single buffer
 /// automatically allocates export memory first and releases it last

@@ -76,15 +76,6 @@ using namespace pocl;
 static std::vector<Level0DriverUPtr> L0DriverInstances;
 static unsigned TotalL0Devices;
 
-struct PoclL0EventData {
-  pocl_cond_t Cond;
-};
-
-struct PoclL0QueueData {
-  Level0CmdList *CmdList = nullptr;
-  pocl_cond_t Cond;
-};
-
 static void pocl_level0_local_size_optimizer(cl_device_id Dev, cl_kernel Ker,
                                              unsigned DeviceI,
                                              size_t MaxGroupSize,
