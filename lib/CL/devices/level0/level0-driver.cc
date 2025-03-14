@@ -3428,35 +3428,60 @@ void Level0Device::appendEventToWait(ze_event_handle_t WaitEvt, std::vector<ClEv
 }
 
 void Level0Device::eventProcessingLoop() {
-    static constexpr unsigned SleepForUs = 200;
+    const auto PauseDuration = std::chrono::microseconds(200);
     bool ShouldExit = EventProcessingExit;
-    std::list<ze_event_handle_t> Events;
+    std::list<ze_event_handle_t> WaitForEvents;
+    std::list<ClEvLzEvMsg> UnreadyEvents;
     do {
         // POCL_MSG_WARN ("@@ EVENTS VECTOR START \n");
-        for (auto It = Events.begin(); It != Events.end();) {
+        for (auto It = WaitForEvents.begin(); It != WaitForEvents.end();) {
           ze_event_handle_t Ev = *It;
           //POCL_MSG_WARN ("@@ EVENT HOST SYNC %p \n", Ev);
           ze_result_t Res = zeEventQueryStatus(Ev);
           // POCL_MSG_WARN ("@@ DONE: EVENT HOST SYNC \n");
           if (Res == ZE_RESULT_SUCCESS) {
-            std::vector<ClEvLzEvMsg> FinishedEvts;
+            std::vector<ClEvLzEvMsg> FlushedEvts;
             {
               std::unique_lock<std::mutex> Lock(EventProcessingLock);
               auto It = Events2Process.find(Ev);
               assert(It != Events2Process.end());
-              FinishedEvts = std::move(It->second);
+              FlushedEvts = std::move(It->second);
               Events2Process.erase(It);
             }
-            for (auto [ClEv, ZeEv, Msg] : FinishedEvts) {
-              POCL_UPDATE_EVENT_COMPLETE_MSG(ClEv, Msg);
+            for (auto [ClEv, ZeEv, Msg] : FlushedEvts) {
+              if (ClEv->wait_list == nullptr) {
+                POCL_MSG_WARN("ClEvent %zu READY, marking COMPLETE\n", ClEv->id);
+                POCL_UPDATE_EVENT_COMPLETE_MSG(ClEv, Msg);
+              } else {
+                POCL_MSG_WARN("ClEvent %zu NOT READY, moving to UNREADY list\n", ClEv->id);
+                UnreadyEvents.emplace_back(ClEv, ZeEv, Msg);
+              }
             }
-            Events.erase(It++);
+            WaitForEvents.erase(It++);
           } else {
             ++It;
           }
         }
         // POCL_MSG_WARN ("@@ EVENTS VECTOR END \n");
-        std::this_thread::sleep_for(std::chrono::microseconds(SleepForUs));
+
+        if (!UnreadyEvents.empty()) {
+        bool UnreadyChanged = false;
+        do {
+          for (auto It = UnreadyEvents.begin(); It != UnreadyEvents.end();) {
+            cl_event ClEv = std::get<cl_event>(*It);
+            const char* Msg = std::get<const char*>(*It);
+            if (ClEv->wait_list == nullptr) {
+              POCL_UPDATE_EVENT_COMPLETE_MSG(ClEv, Msg);
+              UnreadyEvents.erase(It++);
+              UnreadyChanged = true;
+            } else {
+              ++It;
+            }
+          }
+        } while (UnreadyChanged);
+        }
+
+        std::this_thread::sleep_for(PauseDuration);
 
         {
           // POCL_MSG_WARN ("@@ LOCK2 START \n");
@@ -3465,10 +3490,10 @@ void Level0Device::eventProcessingLoop() {
             EventProcessingCond.wait(Lock2);
           ShouldExit = EventProcessingExit;
 
-          if (Events2Process.size() > Events.size()) {
-            Events.clear();
+          if (Events2Process.size() > WaitForEvents.size()) {
+            WaitForEvents.clear();
             for (auto &[Key, Val] : Events2Process) {
-              Events.push_back(Key);
+              WaitForEvents.push_back(Key);
             }
           }
           // POCL_MSG_WARN ("@@ LOCK2 END \n");
