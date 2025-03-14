@@ -467,7 +467,7 @@ int Level0CmdList::flush() {
     }
 
     POCL_MSG_WARN ("@@@@@@@@@@@ FLUSHING, EVENTS SIZE: %zu\n", EnqueuedEvents.size());
-    Device->appendEventToProcess(WaitE, std::move(EnqueuedEvents));
+    Device->appendEventToWait(WaitE, std::move(EnqueuedEvents));
     POCL_MSG_WARN ("@@@@@@@@@@@ FLUSHED \n");
     reset();
 
@@ -3420,7 +3420,7 @@ ze_event_handle_t Level0Device::getNewEvent() {
   return EventPools.front().getEvent();
 }
 
-void Level0Device::appendEventToProcess(ze_event_handle_t WaitEvt, std::vector<ClEvLzEvMsg> &&EnqueuedEvents) {
+void Level0Device::appendEventToWait(ze_event_handle_t WaitEvt, std::vector<ClEvLzEvMsg> &&EnqueuedEvents) {
   std::lock_guard<std::mutex> LockGuard(EventProcessingLock);
   assert(!EnqueuedEvents.empty());
   Events2Process.emplace(WaitEvt, std::move(EnqueuedEvents));
@@ -3428,15 +3428,15 @@ void Level0Device::appendEventToProcess(ze_event_handle_t WaitEvt, std::vector<C
 }
 
 void Level0Device::eventProcessingLoop() {
-    static constexpr unsigned Timeout = 200000000;
+    static constexpr unsigned SleepForUs = 200;
     bool ShouldExit = EventProcessingExit;
     std::list<ze_event_handle_t> Events;
     do {
         // POCL_MSG_WARN ("@@ EVENTS VECTOR START \n");
         for (auto It = Events.begin(); It != Events.end();) {
           ze_event_handle_t Ev = *It;
-          POCL_MSG_WARN ("@@ EVENT HOST SYNC %p \n", Ev);
-          ze_result_t Res = zeEventHostSynchronize(Ev, Timeout);
+          //POCL_MSG_WARN ("@@ EVENT HOST SYNC %p \n", Ev);
+          ze_result_t Res = zeEventQueryStatus(Ev);
           // POCL_MSG_WARN ("@@ DONE: EVENT HOST SYNC \n");
           if (Res == ZE_RESULT_SUCCESS) {
             std::vector<ClEvLzEvMsg> FinishedEvts;
@@ -3456,6 +3456,7 @@ void Level0Device::eventProcessingLoop() {
           }
         }
         // POCL_MSG_WARN ("@@ EVENTS VECTOR END \n");
+        std::this_thread::sleep_for(std::chrono::microseconds(SleepForUs));
 
         {
           // POCL_MSG_WARN ("@@ LOCK2 START \n");
@@ -3568,6 +3569,7 @@ void *Level0Device::createCmdBuf(cl_command_buffer_khr CmdBuf) {
 */
 
 ze_event_handle_t Level0Device::getOrCreateLzEvForClEv(cl_event Ev) {
+    POCL_MSG_WARN("@@@@ L0 : GET LZEVT FOR CLEV %zu\n", Ev->id);
     std::lock_guard<std::mutex> LockGuard(EventMapLock);
     auto It = Cl2LzEventMap.find(Ev->id);
     if (It != Cl2LzEventMap.end())
@@ -3579,6 +3581,7 @@ ze_event_handle_t Level0Device::getOrCreateLzEvForClEv(cl_event Ev) {
 }
 
 bool Level0Device::notifyAndFreeLzEvForClEv(cl_event Ev) {
+    POCL_MSG_WARN("@@@@ L0 : NOTIFY & FREE LZEV FOR CLEV %zu\n", Ev->id);
     ze_event_handle_t LzEv = nullptr;
     {
         std::lock_guard<std::mutex> LockGuard(EventMapLock);

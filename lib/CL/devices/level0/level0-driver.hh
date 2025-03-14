@@ -368,6 +368,10 @@ public:
   Level0Device(Level0Device const &&) = delete;
   Level0Device& operator=(Level0Device &&) = delete;
 
+  ze_event_handle_t getOrCreateLzEvForClEv(cl_event Ev);
+  bool notifyAndFreeLzEvForClEv(cl_event Ev);
+  void appendEventToWait(ze_event_handle_t WaitEvt, std::vector<ClEvLzEvMsg> &&EnqueuedEvents);
+
   // void pushCommand(_cl_command_node *Command);
   // void pushCommandBatch(BatchType Batch);
 
@@ -400,8 +404,7 @@ public:
   bool freeUSMMemBlocking(void *Ptr);
   // void freeCmdBuf(void *CmdBufData);
   // void *createCmdBuf(cl_command_buffer_khr CmdBuf);
-  ze_event_handle_t getOrCreateLzEvForClEv(cl_event Ev);
-  bool notifyAndFreeLzEvForClEv(cl_event Ev);
+
   Level0CmdList *createCmdList(cl_queue_priority_khr OclPriority, bool PreferThroughput,
                                bool Inorder);
   void destroyCmdList(Level0CmdList *);
@@ -457,7 +460,6 @@ public:
   cl_mem_alloc_flags_intel getMemFlags(const void *USMPtr);
 
   ze_event_handle_t getNewEvent();
-  void appendEventToProcess(ze_event_handle_t WaitEvt, std::vector<ClEvLzEvMsg> &&EnqueuedEvents);
   ze_device_handle_t getDeviceHandle() { return DeviceHandle; }
   ze_context_handle_t getContextHandle() { return ContextHandle; }
   Level0CompilationJobScheduler &getJobSched();
