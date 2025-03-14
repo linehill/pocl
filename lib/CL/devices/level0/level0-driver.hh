@@ -64,6 +64,7 @@ void execCommandBuffer(_cl_command_node *Node);
 
 */
 
+using ClEvLzEvMsg = std::tuple<cl_event, ze_event_handle_t, const char*>;
 
 class Level0Device;
 
@@ -85,17 +86,15 @@ public:
   Level0CmdList(Level0CmdList const &&) = delete;
   Level0CmdList& operator=(Level0CmdList &&) = delete;
 
-  // can be called from multiple user threads simultaneously
+  // MT safe
   // IntEvents = event dependencies on the same queue
   // WaitExtEvents = external event dependencies
   // (= events from non-LZ devices we must wait for)
   int appendEventToList(cl_event Ev,
                         const std::vector<cl_event> &WaitIntEvents,
                         const std::vector<cl_event> &WaitExtEvents);
-  // can be called from multiple user threads simultaneously
-  int enqueue();
-  // can be called from multiple user threads simultaneously
-  int hostSynchronize();
+  // MT safe
+  int flush();
 
 private:
   // std::map<void *, size_t> MemPtrsToMakeResident;
@@ -104,7 +103,7 @@ private:
   // void syncMemHostPtrs();
   void allocNextFreeEvent();
   void reset();
-  void close(std::queue<ze_event_handle_t> *EvtList = nullptr);
+  void close(ze_event_handle_t &WaitEvt);
 
 /****************************************************************/
   // append various command types to the list
@@ -220,7 +219,6 @@ private:
                          size_t RowPitch, size_t SlicePitch);
 
 private:
-  using ClEvLzEvMsg = std::tuple<cl_event, ze_event_handle_t, const char*>;
   // recycled events from previous enqueues
   std::queue<ze_event_handle_t> ReusableDeviceEvents;
   // device events currently used by appended commands that need to be reset
@@ -229,14 +227,13 @@ private:
   std::vector<ClEvLzEvMsg> EnqueuedEvents;
 
   // state of the CmdList. For Imm Cmdlist, the ClosedEnqueued is meaningless
-  enum class CmdListState {
-      Appending,
-      // ClosedEnqueued,
-      Synchronizing
-  };
-  std::mutex StateLock;
-  std::condition_variable StateCond;
-  CmdListState State = CmdListState::Appending;
+  // enum class CmdListState {
+  //     Appending,
+  //     Flushing
+  // };
+  std::mutex CmdListLock;
+  // std::condition_variable StateCond;
+  // CmdListState State = CmdListState::Appending;
 
   // list of dependencies for currently appended event
   std::vector<ze_event_handle_t> CurrentEventDependeciesVec;
@@ -460,6 +457,7 @@ public:
   cl_mem_alloc_flags_intel getMemFlags(const void *USMPtr);
 
   ze_event_handle_t getNewEvent();
+  void appendEventToProcess(ze_event_handle_t WaitEvt, std::vector<ClEvLzEvMsg> &&EnqueuedEvents);
   ze_device_handle_t getDeviceHandle() { return DeviceHandle; }
   ze_context_handle_t getContextHandle() { return ContextHandle; }
   Level0CompilationJobScheduler &getJobSched();
@@ -525,18 +523,28 @@ public:
   }
 
 private:
-  Level0AllocatorSPtr Alloc;
-  std::deque<Level0EventPool> EventPools;
-  std::mutex EventPoolLock;
   Level0QueueGroup CopyQueues;
   Level0QueueGroup ComputeQueues;
   Level0QueueGroup UniversalQueues;
 
+  alignas(64)
+  std::mutex EventPoolLock;
+  std::deque<Level0EventPool> EventPools;
+
   std::map<std::string, Level0Kernel *> MemfillKernels;
   std::map<std::string, Level0Kernel *> ImagefillKernels;
+  Level0AllocatorSPtr Alloc;
 
-  std::map<uint64_t, ze_event_handle_t> Cl2LzEventMap;
+  alignas(64)
   std::mutex EventMapLock;
+  std::map<uint64_t, ze_event_handle_t> Cl2LzEventMap;
+
+  alignas(64)
+  std::mutex EventProcessingLock;
+  std::map<ze_event_handle_t, std::vector<ClEvLzEvMsg>> Events2Process;
+  std::thread EventProcessingThread;
+  std::condition_variable EventProcessingCond;
+  bool EventProcessingExit = false;
 
   Level0Driver *Driver;
   cl_device_id ClDev;
@@ -586,6 +594,7 @@ private:
   // backing string for ClDev->llvm_target_triplet
   std::string LLVMTargetTriple;
 
+  void eventProcessingLoop();
   /// initializes kernels used internally by the driver
   /// to implement functionality missing in the Level Zero API,
   /// e.g. FillImage, FillBuffer with large patterns etc

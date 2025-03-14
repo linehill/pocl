@@ -82,7 +82,7 @@ struct PoclL0EventData {
 
 struct PoclL0QueueData {
   Level0CmdList *CmdList = nullptr;
-  // pocl_cond_t Cond;
+  pocl_cond_t Cond;
 };
 
 static void pocl_level0_local_size_optimizer(cl_device_id Dev, cl_kernel Ker,
@@ -273,12 +273,9 @@ void pocl_level0_init_device_ops(struct pocl_device_ops *Ops) {
   /* TODO get timing data from level0 API */
   /* ops->get_timer_value = pocl_level0_get_timer_value; */
 
-  // TODO implement wait on events
-  //Ops->wait_event = pocl_level0_wait_event;
-  // Ops->notify_event_finished = pocl_level0_notify_event_finished;
-
-  // the pocl_level0_join is MT-safe, so this is not required:
-  // Ops->notify_cmdq_finished = pocl_level0_notify_cmdq_finished;
+  Ops->wait_event = pocl_level0_wait_event;
+  Ops->notify_event_finished = pocl_level0_notify_event_finished;
+  Ops->notify_cmdq_finished = pocl_level0_notify_cmdq_finished;
   Ops->free_event_data = pocl_level0_free_event_data;
   Ops->update_event = pocl_level0_update_event;
 
@@ -1381,7 +1378,7 @@ int pocl_level0_init_queue(cl_device_id Dev, cl_command_queue Queue) {
   POCL_RETURN_ERROR_COND((QD == nullptr), CL_OUT_OF_HOST_MEMORY);
   Queue->data = QD;
   QD->CmdList = CList;
-  // POCL_INIT_COND(QD->Cond);
+  POCL_INIT_COND(QD->Cond);
   return CL_SUCCESS;
 }
 
@@ -1394,19 +1391,18 @@ int pocl_level0_free_queue(cl_device_id Dev, cl_command_queue Queue) {
 
   if (QD->CmdList)
     Device->destroyCmdList(QD->CmdList);
-  // POCL_DESTROY_COND(QD->Cond);
+  POCL_DESTROY_COND(QD->Cond);
   delete QD;
   Queue->data = nullptr;
   return CL_SUCCESS;
 }
 
-// TODO
-/*
 void pocl_level0_notify_cmdq_finished(cl_command_queue Queue) {
   // must be called with CQ already locked.
   // this must be a broadcast since there could be multiple
   // user threads waiting on the same command queue
   // in pthread_scheduler_wait_cq().
+    POCL_MSG_WARN ("@@@ LEVEL0 : NOTIFY CMDQ FINISHED\n");
   PoclL0QueueData *QD = (PoclL0QueueData *)Queue->data;
   POCL_BROADCAST_COND(QD->Cond);
 }
@@ -1415,7 +1411,6 @@ void pocl_level0_notify_event_finished(cl_event Event) {
   PoclL0EventData *EvData = (PoclL0EventData *)Event->data;
   POCL_BROADCAST_COND(EvData->Cond);
 }
-*/
 
 void pocl_level0_free_event_data(cl_event Event) {
   if (Event->data == nullptr) {
@@ -1430,19 +1425,38 @@ void pocl_level0_join(cl_device_id Device, cl_command_queue Queue) {
   POCL_LOCK_OBJ(Queue);
   PoclL0QueueData *QD = (PoclL0QueueData *)Queue->data;
   assert(QD);
-  POCL_UNLOCK_OBJ(Queue);
 
-  QD->CmdList->hostSynchronize();
+  while (true) {
+      if (Queue->command_count == 0) {
+          POCL_UNLOCK_OBJ(Queue);
+          return;
+      } else {
+          POCL_WAIT_COND(QD->Cond, Queue->pocl_lock);
+      }
+  }
+  POCL_UNLOCK_OBJ(Queue);
+}
+
+void pocl_level0_wait_event(cl_device_id ClDevice, cl_event Event) {
+    POCL_MSG_PRINT_LEVEL0("device->wait_event on event %zu\n", Event->id);
+    assert(Event->data);
+    PoclL0EventData *EvData = (PoclL0EventData *)Event->data;
+
+    POCL_LOCK_OBJ(Event);
+    while (Event->status > CL_COMPLETE) {
+        POCL_WAIT_COND(EvData->Cond, Event->pocl_lock);
+    }
+    POCL_UNLOCK_OBJ(Event);
 }
 
 void pocl_level0_flush(cl_device_id ClDev, cl_command_queue Queue) {
-  // Immediate CmdList doesn't need an flush;
-  // Regular Cmdlist could be flushed, but doing so would break
-  // with this code pattern:
-  // enqueue, flush, enqueue, flush, finish
-  // ... because execution requires closing a list,
-  // and AFAIK we can't append to a closed LZ Cmdlist
-    POCL_MSG_WARN("Flush called on Queue: %p | ID %zu\n", Queue, Queue->id);
+  POCL_MSG_WARN("Flush called on Queue: %p | ID %zu\n", Queue, Queue->id);
+  Level0Device *Device = (Level0Device *)ClDev->data;
+  assert(Device);
+  PoclL0QueueData *QD = (PoclL0QueueData *)Queue->data;
+  assert(QD);
+  int R = QD->CmdList->flush();
+  assert(R == 0);
 }
 
 void pocl_level0_submit(_cl_command_node *Node, cl_command_queue Queue) {
@@ -1512,19 +1526,10 @@ void pocl_level0_update_event(cl_device_id ClDevice, cl_event Event) {
   }
 }
 
-/*
-void pocl_level0_wait_event(cl_device_id ClDevice, cl_event Event) {
-  POCL_MSG_PRINT_LEVEL0("device->wait_event on event %zu\n", Event->id);
-  assert(Event->data);
-  PoclL0EventData *EvData = (PoclL0EventData *)Event->data;
-
-  POCL_LOCK_OBJ(Event);
-  while (Event->status > CL_COMPLETE) {
-    POCL_WAIT_COND(EvData->Cond, Event->pocl_lock);
-  }
-  POCL_UNLOCK_OBJ(Event);
-}
-*/
+/***********************************************************************************************************/
+/***********************************************************************************************************/
+/***********************************************************************************************************/
+/***********************************************************************************************************/
 
 int pocl_level0_alloc_mem_obj(cl_device_id ClDevice, cl_mem Mem, void *HostPtr) {
   Level0Device *Device = (Level0Device *)ClDevice->data;
