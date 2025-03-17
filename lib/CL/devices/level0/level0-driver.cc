@@ -78,6 +78,10 @@
 #define ENABLE_LARGE_ALLOC
 #endif
 
+#ifdef ENABLE_LEVEL0_OCLOC
+#undef ENABLE_FP64
+#endif
+
 #define ENABLE_WG_COLLECTIVE
 #define ENABLE_GENERIC_AS
 
