@@ -239,7 +239,7 @@ extern "C" {
    * \param [in] Bitcode input bitcode as raw string. can be nullptr
    * \param [out] Program, DeviceI any error messages will be attached to
    *             the string in program->buildlog[DeviceI]
-   * \param [out] useIntelExts bool if true, add Intel specific spirv
+   * \param [out] SPV extensions list of SPV extensions to enable
    * extensions \param [out] TempSpirvPathOut path to output file. can be
    * nullptr \param [out] SpirvContent pointer where to store the raw output.
    *              can be nullptr
