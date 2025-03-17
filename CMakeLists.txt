@@ -383,6 +383,14 @@ option(ENABLE_RDMA "Enable usage of RDMA libraries for memory allocations. Requi
 
 option(RENAME_POCL "Rename PoCL's OpenCL functions to PO<ocl_function>. Allows an user to call both PoCL and another OpenCL implementation." OFF)
 
+option(POCL_DEBUG_LOCKS "Debug time spent in pocl object locks" OFF)
+
+if(POCL_DEBUG_LOCKS)
+  if(NOT DEFINED POCL_MAX_LOCK_TIME_IN_NS)
+    set(POCL_MAX_LOCK_TIME_IN_NS 40000)
+  endif()
+endif()
+
 ##########################################################
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)

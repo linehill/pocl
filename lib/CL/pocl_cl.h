@@ -55,6 +55,7 @@
 #include "pocl_runtime_config.h"
 #include "pocl_threads.h"
 #include "pocl_tracing.h"
+#include "pocl_timing.h"
 #ifdef BUILD_ICD
 #  include "pocl_icd.h"
 #endif
@@ -141,10 +142,36 @@
 #define UNSET_VALIDITY_MARKERS(__OBJ__) do {} while(0)
 #endif
 
+#if !(POCL_MAX_LOCK_TIME_IN_NS > 0)
+#undef POCL_MAX_LOCK_TIME_IN_NS
+#define POCL_MAX_LOCK_TIME_IN_NS 40000
+#endif
+
+#ifdef POCL_DEBUG_LOCKS
+#define INIT_OBJ_LOCK_DEBUG(X) X->pocl_lock_start = 0; X->pocl_lock_finish = 0; X->pocl_lock_num_locks = 0; X->pocl_lock_total_time = 0; X->pocl_lock_place = NULL
+#define DESTROY_OBJ_LOCK_DEBUG(X) if (X->pocl_lock_num_locks > 0) { \
+  size_t pocl_lock_avg_time = X->pocl_lock_total_time / X->pocl_lock_num_locks; \
+  POCL_MSG_WARN("POCL LOCK OBJ @ %s:%i  || average time %zu ns | exceeded %zu times\n", \
+                 __FILE__, __LINE__, pocl_lock_avg_time, X->pocl_lock_num_locks); \
+}
+#define START_OBJ_LOCK_DEBUG(X) X->pocl_lock_start = pocl_gettimemono_ns()
+#define FINISH_OBJ_LOCK_DEBUG(X) X->pocl_lock_finish = pocl_gettimemono_ns(); \
+if (X->pocl_lock_finish - X->pocl_lock_start > POCL_MAX_LOCK_TIME_IN_NS) { \
+  X->pocl_lock_total_time += X->pocl_lock_finish - X->pocl_lock_start; \
+} \
+X->pocl_lock_start = 0; X->pocl_lock_finish = 0
+#else
+#define INIT_OBJ_LOCK_DEBUG(X)
+#define DESTROY_OBJ_LOCK_DEBUG(X)
+#define START_OBJ_LOCK_DEBUG(X)
+#define FINISH_OBJ_LOCK_DEBUG(X)
+#endif
+
 #define POCL_LOCK_OBJ(__OBJ__)                                                \
   do                                                                          \
     {                                                                         \
       CHECK_VALIDITY_MARKERS(__OBJ__);                                        \
+      START_OBJ_LOCK_DEBUG(__OBJ__);                        \
       POCL_LOCK ((__OBJ__)->pocl_lock);                                       \
       assert ((__OBJ__)->pocl_refcount > 0);                                  \
     }                                                                         \
@@ -161,6 +188,7 @@
   do                                                                          \
     {                                                                         \
       CHECK_VALIDITY_MARKERS (__OBJ__);                                       \
+      FINISH_OBJ_LOCK_DEBUG(__OBJ__);                        \
       assert ((__OBJ__)->pocl_refcount >= 0);                                 \
       POCL_UNLOCK ((__OBJ__)->pocl_lock);                                     \
     }                                                                         \
@@ -213,6 +241,7 @@ extern pocl_obj_id_t last_object_id;
       (__OBJ__)->pocl_refcount = 1;                                           \
       POCL_INIT_LOCK ((__OBJ__)->pocl_lock);                                  \
       (__OBJ__)->id = POCL_ATOMIC_INC (last_object_id);                       \
+      INIT_OBJ_LOCK_DEBUG(__OBJ__);                                \
     }                                                                         \
   while (0)
 
@@ -239,12 +268,25 @@ extern pocl_obj_id_t last_object_id;
     {                                                                         \
       UNSET_VALIDITY_MARKERS(__OBJ__);                                        \
       POCL_DESTROY_LOCK ((__OBJ__)->pocl_lock);                               \
+      DESTROY_OBJ_LOCK_DEBUG(__OBJ__);                                \
     }                                                                         \
   while (0)
+
+#ifdef POCL_DEBUG_LOCKS
+#define POCL_DEBUG_LOCK_VARIABLES uint64_t pocl_lock_start; \
+      uint64_t pocl_lock_finish; \
+uint64_t pocl_lock_num_locks; \
+uint64_t pocl_lock_total_time; \
+const char* pocl_lock_place;
+#else
+#define POCL_DEBUG_LOCK_VARIABLES
+#endif
+
 
 /* Declares the generic pocl object attributes inside a struct. */
 #ifdef ENABLE_EXTRA_VALIDITY_CHECKS
 #define POCL_OBJECT                                                           \
+  POCL_DEBUG_LOCK_VARIABLES                                               \
   uint64_t magic_1;                                                           \
   uint64_t id;                                                                \
   pocl_lock_t pocl_lock;                                                      \
@@ -252,6 +294,7 @@ extern pocl_obj_id_t last_object_id;
   int pocl_refcount
 #else
 #define POCL_OBJECT                                                           \
+  POCL_DEBUG_LOCK_VARIABLES                                               \
   uint64_t id;                                                                \
   pocl_lock_t pocl_lock;                                                      \
   int pocl_refcount

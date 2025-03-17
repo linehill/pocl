@@ -133,6 +133,10 @@
 
 #cmakedefine ENABLE_LOADABLE_DRIVERS
 
+#cmakedefine POCL_DEBUG_LOCKS
+
+#define POCL_MAX_LOCK_TIME_IN_NS @POCL_MAX_LOCK_TIME_IN_NS@
+
 /* this is used all over the runtime code */
 #define HOST_CPU_CACHELINE_SIZE @HOST_CPU_CACHELINE_SIZE@
 
