@@ -571,13 +571,11 @@ void Level0CmdList::close(ze_event_handle_t &WaitEvt) {
   if (ImmediateInorder)
     LEVEL0_CHECK_ABORT(zeCommandListAppendSignalEvent(CmdListH,
                                    WaitEvt));
-  else
+  else {
     LEVEL0_CHECK_ABORT(zeCommandListAppendBarrier(CmdListH,
                          WaitEvt, // signal event
                          0, nullptr)); // 0 = wait on all previous events
-
-  if (!ImmediateInorder) {
-      LEVEL0_CHECK_ABORT(zeCommandListClose(CmdListH));
+    LEVEL0_CHECK_ABORT(zeCommandListClose(CmdListH));
   }
 }
 
@@ -1682,12 +1680,14 @@ bool Level0CmdList::setupKernelArgs(ze_module_handle_t ModuleH,
         void *MemPtr = memid->mem_ptr;
         Res = zeKernelSetArgumentValue(KernelH, i, sizeof(void *), &MemPtr);
         LEVEL0_CHECK_ABORT(Res);
+/*
         // optimization for read-only buffers
         ze_memory_advice_t Adv =
             (PoclArg[i].is_readonly ? ZE_MEMORY_ADVICE_SET_READ_MOSTLY
                                     : ZE_MEMORY_ADVICE_CLEAR_READ_MOSTLY);
         Res = zeCommandListAppendMemAdvise(CmdListH, Device->getDeviceHandle(),
                                            MemPtr, arg_buf->size, Adv);
+*/
       }
       LEVEL0_CHECK_ABORT(Res);
 
