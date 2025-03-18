@@ -3643,12 +3643,12 @@ bool Level0Device::notifyAndFreeLzEvForClEv(cl_event Ev) {
     return true;
 }
 
-// TODO FIXME: figure out which devices benefit from ImmCmdList
 bool Level0Device::prefersImmCmdList() {
     int Preference = pocl_get_bool_option("POCL_LEVEL0_IMM_CMD_LIST", -1);
     if (Preference >= 0)
       return Preference > 0;
-    return Integrated && DeviceIPVersion < 0x90807060;
+    // value returned for Intel Arc 750 (DG1)
+    return DeviceIPVersion >= 0x30dc008;
 }
 
 static ze_command_queue_priority_t convertOclPriorityToZe(cl_queue_priority_khr OclPrio) {
