@@ -64,11 +64,14 @@ void execCommandBuffer(_cl_command_node *Node);
 
 */
 
+// #define LEVEL0_PER_QUEUE_THREAD
+
 using ClEvLzEvMsg = std::tuple<cl_event, ze_event_handle_t, const char*>;
 
 class Level0Device;
+class Level0CmdQueue;
 
-void execCommand(_cl_command_node *Cmd);
+//void execCommand(_cl_command_node *Cmd);
 // void execCommandBatch(BatchType &Batch);
 
 class Level0CmdList {
@@ -76,7 +79,8 @@ class Level0CmdList {
 public:
     Level0CmdList(ze_command_list_handle_t L,
                   ze_command_queue_handle_t Q,
-                  Level0Device *D,
+                  Level0Device *L0D,
+                  Level0CmdQueue *L0Q,
                   bool ImmInorder,
                   size_t MaxPatternSize);
   ~Level0CmdList();
@@ -251,6 +255,7 @@ private:
   ze_command_queue_handle_t CmdQueueH = nullptr;
 
   Level0Device *Device = nullptr;
+  Level0CmdQueue *Queue = nullptr;
 
   double DeviceFrequency;
   double DeviceNsPerCycle;
@@ -282,6 +287,11 @@ public:
     Level0CmdQueue& operator=(Level0CmdQueue &&) = delete;
 
     Level0CmdList *createRegCmdList(ze_command_list_flags_t ListFlags);
+#ifdef LEVEL0_PER_QUEUE_THREAD
+    void appendCmdListToWaitOn(ze_event_handle_t WaitEvt, Level0CmdList *CmdList,
+                               std::vector<ClEvLzEvMsg> &&EnqueuedEvents,
+                               std::queue<ze_event_handle_t> &&DeviceEventsToReset);
+#endif
 
 private:
     Level0Device *Device = nullptr;
@@ -290,6 +300,17 @@ private:
     ze_device_handle_t DeviceH = nullptr;
     size_t MaxPatternSize = 0;
     unsigned Ordinal = 0;
+#ifdef LEVEL0_PER_QUEUE_THREAD
+    void eventProcessingLoop();
+
+    std::mutex EventProcessingLock;
+    std::map<ze_event_handle_t, std::vector<ClEvLzEvMsg>> Events2Process;
+    std::map<ze_event_handle_t, std::queue<ze_event_handle_t>> Events2Reset;
+    std::map<ze_event_handle_t, Level0CmdList *> CmdLists;
+    std::thread EventProcessingThread;
+    std::condition_variable EventProcessingCond;
+    bool EventProcessingExit = false;
+#endif
 };
 
 class Level0QueueGroup {
@@ -374,9 +395,11 @@ public:
 
   ze_event_handle_t getOrCreateLzEvForClEv(cl_event Ev);
   bool notifyAndFreeLzEvForClEv(cl_event Ev);
+#ifndef LEVEL0_PER_QUEUE_THREAD
   void appendCmdListToWaitOn(ze_event_handle_t WaitEvt, Level0CmdList *CmdList,
                              std::vector<ClEvLzEvMsg> &&EnqueuedEvents,
                              std::queue<ze_event_handle_t> &&DeviceEventsToReset);
+#endif
 
   // void pushCommand(_cl_command_node *Command);
   // void pushCommandBatch(BatchType Batch);
@@ -547,6 +570,7 @@ private:
   std::mutex EventMapLock;
   std::map<uint64_t, ze_event_handle_t> Cl2LzEventMap;
 
+#ifndef LEVEL0_PER_QUEUE_THREAD
   alignas(64)
   std::mutex EventProcessingLock;
   std::map<ze_event_handle_t, std::vector<ClEvLzEvMsg>> Events2Process;
@@ -555,6 +579,8 @@ private:
   std::thread EventProcessingThread;
   std::condition_variable EventProcessingCond;
   bool EventProcessingExit = false;
+  void eventProcessingLoop();
+#endif
 
   Level0Driver *Driver;
   cl_device_id ClDev;
@@ -604,7 +630,6 @@ private:
   // backing string for ClDev->llvm_target_triplet
   std::string LLVMTargetTriple;
 
-  void eventProcessingLoop();
   /// initializes kernels used internally by the driver
   /// to implement functionality missing in the Level Zero API,
   /// e.g. FillImage, FillBuffer with large patterns etc

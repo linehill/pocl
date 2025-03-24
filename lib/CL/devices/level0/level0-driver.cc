@@ -139,13 +139,13 @@ int Level0CmdList::appendEventToList(cl_event Ev,
   assert(dev);
   _cl_command_t *cmd = &Cmd->command;
   assert(cmd);
-  auto FindF = [&](ClEvLzEvMsg &Arg) -> bool {
-      return std::get<cl_event>(Arg) == Ev;
-  };
   // events from the same queue are added to the dependencies
   // only if the queue is not Inorder
   if (!ImmediateInorder) {
       for (auto E: WaitIntEvents) {
+        auto FindF = [&](ClEvLzEvMsg &Arg) -> bool {
+          return std::get<cl_event>(Arg) == E;
+        };
         auto It = std::find_if(EnqueuedEvents.begin(),
                                EnqueuedEvents.end(),
                                FindF);
@@ -521,7 +521,11 @@ int Level0CmdList::flush() {
 
     if (!EnqueuedEvents.empty()) {
       POCL_MSG_WARN ("@@@@@@@@@@@ FLUSHING, EVENTS SIZE: %zu\n", EnqueuedEvents.size());
+#ifdef LEVEL0_PER_QUEUE_THREAD
+      Queue->appendCmdListToWaitOn(WaitEv, this, std::move(EnqueuedEvents), std::move(DeviceEventsToReset));
+#else
       Device->appendCmdListToWaitOn(WaitEv, this, std::move(EnqueuedEvents), std::move(DeviceEventsToReset));
+#endif
       // POCL_MSG_WARN ("@@@@@@@@@@@ FLUSHED \n");
     }
 
@@ -1916,13 +1920,15 @@ void Level0CmdList::runNDRangeKernel(_cl_command_run *RunCmd, cl_device_id Dev,
 
 Level0CmdList::Level0CmdList(ze_command_list_handle_t L,
                              ze_command_queue_handle_t Q,
-                             Level0Device *D,
+                             Level0Device *L0D,
+                             pocl::Level0CmdQueue *L0Q,
                              bool ImmInorder,
                              size_t MaxPatternSize) {
 
   CmdListH = L;
   CmdQueueH = Q;
-  Device = D;
+  Device = L0D;
+  Queue = L0Q;
   ImmediateInorder = ImmInorder;
   if (ImmInorder)
     assert(Q == nullptr);
@@ -1973,6 +1979,9 @@ Level0CmdQueue::Level0CmdQueue(Level0Device *Dev,
     Ordinal = Ord;
     ContextH = Dev->getContextHandle();
     DeviceH = Dev->getDeviceHandle();
+#ifdef LEVEL0_PER_QUEUE_THREAD
+    EventProcessingThread = std::thread(&Level0CmdQueue::eventProcessingLoop, this);
+#endif
 }
 
 Level0CmdList *Level0CmdQueue::createRegCmdList(ze_command_list_flags_t ListFlags) {
@@ -1986,10 +1995,112 @@ Level0CmdList *Level0CmdQueue::createRegCmdList(ze_command_list_flags_t ListFlag
     ZeRes = zeCommandListCreate(ContextH, DeviceH, &cmdListDesc, &CmdListH);
     LEVEL0_CHECK_RET(nullptr, ZeRes);
     return new Level0CmdList(CmdListH, QueueH,
-                             Device, false, MaxPatternSize);
+                             Device, this, false, MaxPatternSize);
 }
 
+#ifdef LEVEL0_PER_QUEUE_THREAD
+void Level0CmdQueue::appendCmdListToWaitOn(ze_event_handle_t WaitEvt,
+                                         Level0CmdList *CmdList,
+                                         std::vector<ClEvLzEvMsg> &&EnqueuedEvents,
+                                         std::queue<ze_event_handle_t> &&DeviceEventsToReset) {
+    std::lock_guard<std::mutex> LockGuard(EventProcessingLock);
+    assert(!EnqueuedEvents.empty());
+    Events2Process.emplace(WaitEvt, std::move(EnqueuedEvents));
+    Events2Reset.emplace(WaitEvt, std::move(DeviceEventsToReset));
+    CmdLists.emplace(WaitEvt, CmdList);
+    EventProcessingCond.notify_one();
+}
+
+void Level0CmdQueue::eventProcessingLoop() {
+    const auto PauseDuration = std::chrono::microseconds(200);
+    bool ShouldExit = EventProcessingExit;
+    std::list<ze_event_handle_t> WaitForEvents;
+
+    do {
+        // POCL_MSG_WARN ("@@ EVENTS VECTOR START \n");
+        for (auto It = WaitForEvents.begin(); It != WaitForEvents.end();) {
+            ze_event_handle_t Ev = *It;
+            //POCL_MSG_WARN ("@@ EVENT HOST SYNC %p \n", Ev);
+            ze_result_t Res = zeEventQueryStatus(Ev);
+            // POCL_MSG_WARN ("@@ DONE: EVENT HOST SYNC \n");
+            if (Res == ZE_RESULT_SUCCESS) {
+                std::vector<ClEvLzEvMsg> FlushedEvts;
+                std::queue<ze_event_handle_t> ResetEvts;
+                Level0CmdList *CmdList;
+                {
+                    std::unique_lock<std::mutex> Lock(EventProcessingLock);
+
+                    auto It = Events2Process.find(Ev);
+                    assert(It != Events2Process.end());
+                    FlushedEvts = std::move(It->second);
+                    Events2Process.erase(It);
+
+                    auto It2 = Events2Reset.find(Ev);
+                    assert(It2 != Events2Reset.end());
+                    ResetEvts = std::move(It2->second);
+                    Events2Reset.erase(It2);
+
+                    auto It3 = CmdLists.find(Ev);
+                    assert(It3 != CmdLists.end());
+                    CmdList = It3->second;
+                    CmdLists.erase(It3);
+                }
+
+                for (auto [ClEv, ZeEv, Msg] : FlushedEvts) {
+                    while (ClEv->wait_list != nullptr) {
+                        POCL_MSG_WARN("ClEvent %zu NOT READY, waiting on it\n", ClEv->id);
+                        cl_event WaitEv = ClEv->wait_list->event;
+                        // TODO lock inorder
+                        POname(clRetainEvent)(WaitEv);
+                        cl_device_id Dev = WaitEv->queue->device;
+                        Dev->ops->wait_event(Dev, WaitEv);
+                        POCL_MSG_WARN("ClEvent %zu BECAME READY\n", WaitEv->id);
+                        POname(clReleaseEvent)(WaitEv);
+                    }
+                    POCL_MSG_WARN("ClEvent %zu READY, marking COMPLETE\n", ClEv->id);
+                    POCL_UPDATE_EVENT_COMPLETE_MSG(ClEv, Msg);
+                }
+
+                CmdList->eventsCanBeReused(ResetEvts);
+
+                WaitForEvents.erase(It++);
+            } else {
+                ++It;
+            }
+        }
+        // POCL_MSG_WARN ("@@ EVENTS VECTOR END \n");
+
+        std::this_thread::sleep_for(PauseDuration);
+
+        {
+            // POCL_MSG_WARN ("@@ LOCK2 START \n");
+            std::unique_lock<std::mutex> Lock2(EventProcessingLock);
+            while (Events2Process.empty() && !EventProcessingExit)
+                EventProcessingCond.wait(Lock2);
+            ShouldExit = EventProcessingExit;
+
+            if (Events2Process.size() > WaitForEvents.size()) {
+                WaitForEvents.clear();
+                for (auto &[Key, Val] : Events2Process) {
+                    WaitForEvents.push_back(Key);
+                }
+            }
+            // POCL_MSG_WARN ("@@ LOCK2 END \n");
+        }
+    } while (!ShouldExit);
+}
+#endif
+
 Level0CmdQueue::~Level0CmdQueue() {
+#ifdef LEVEL0_PER_QUEUE_THREAD
+    {
+        std::lock_guard<std::mutex> LockG(EventProcessingLock);
+        EventProcessingExit = true;
+        EventProcessingCond.notify_one();
+    }
+    if (EventProcessingThread.joinable())
+        EventProcessingThread.join();
+#endif
     if (QueueH != nullptr) {
         zeCommandQueueDestroy(QueueH);
     }
@@ -2049,9 +2160,14 @@ Level0CmdList *Level0QueueGroup::createImmCmdList(ze_command_queue_flags_t Queue
 
     ze_command_list_handle_t CmdListH = nullptr;
 
+    Level0CmdQueue *UpQ = createQueue(QueueFlags, Priority);
+    if (UpQ == nullptr)
+        return nullptr;
+
     ZeRes = zeCommandListCreateImmediate(ContextH, DeviceH, &cmdQueueDesc, &CmdListH);
     LEVEL0_CHECK_RET(nullptr, ZeRes);
-    return new Level0CmdList(CmdListH, nullptr, Device,
+    return new Level0CmdList(CmdListH, nullptr,
+                             Device, UpQ,
                              true, MaxPatternSize);
 }
 
@@ -3233,7 +3349,9 @@ Level0Device::Level0Device(Level0Driver *Drv, ze_device_handle_t DeviceH,
 
   POCL_MSG_PRINT_LEVEL0("Device %s initialized & available\n", ClDev->short_name);
   this->Available = CL_TRUE;
+#ifndef LEVEL0_PER_QUEUE_THREAD
   EventProcessingThread = std::thread(&Level0Device::eventProcessingLoop, this);
+#endif
 }
 
 Level0CompilationJobScheduler &Level0Device::getJobSched() {
@@ -3248,6 +3366,7 @@ Level0Device::~Level0Device() {
   UniversalQueues.uninit();
   ComputeQueues.uninit();
   CopyQueues.uninit();
+#ifndef LEVEL0_PER_QUEUE_THREAD
   {
     std::lock_guard<std::mutex> LockG(EventProcessingLock);
     EventProcessingExit = true;
@@ -3255,6 +3374,7 @@ Level0Device::~Level0Device() {
   }
   if (EventProcessingThread.joinable())
     EventProcessingThread.join();
+#endif
   destroyHelperKernels();
   EventPools.clear();
   Alloc->clear(this);
@@ -3418,6 +3538,7 @@ ze_event_handle_t Level0Device::getNewEvent() {
   return EventPools.front().getEvent();
 }
 
+#ifndef LEVEL0_PER_QUEUE_THREAD
 void Level0Device::appendCmdListToWaitOn(ze_event_handle_t WaitEvt,
                                          Level0CmdList *CmdList,
                                          std::vector<ClEvLzEvMsg> &&EnqueuedEvents,
@@ -3522,6 +3643,7 @@ void Level0Device::eventProcessingLoop() {
         }
     } while (!ShouldExit);
 }
+#endif
 
 void *Level0Device::allocUSMSharedMem(uint64_t Size, bool EnableCompression,
                                       ze_device_mem_alloc_flags_t DevFlags,
