@@ -2021,7 +2021,8 @@ void Level0CmdQueue::eventProcessingLoop() {
         for (auto It = WaitForEvents.begin(); It != WaitForEvents.end();) {
             ze_event_handle_t Ev = *It;
             //POCL_MSG_WARN ("@@ EVENT HOST SYNC %p \n", Ev);
-            ze_result_t Res = zeEventQueryStatus(Ev);
+            //ze_result_t Res = zeEventQueryStatus(Ev);
+            ze_result_t Res = zeEventHostSynchronize(Ev, 10000000000UL);
             // POCL_MSG_WARN ("@@ DONE: EVENT HOST SYNC \n");
             if (Res == ZE_RESULT_SUCCESS) {
                 std::vector<ClEvLzEvMsg> FlushedEvts;
