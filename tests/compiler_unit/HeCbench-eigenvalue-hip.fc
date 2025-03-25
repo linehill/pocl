@@ -1,0 +1,12 @@
+# This test case has a kernel loop that is horizontally vectorizable when
+# called from the calNumEigenValueInterval() kernel, but not from
+# recalculateEigenIntervals(). Check for vectorized output.
+# SPV is produced by chipStar 1.3-pre and LLVM 19.
+
+CHECK: define void @_pocl_kernel__Z24calNumEigenValueIntervalPjPKfS1_S1_j
+CHECK: load <16 x float>
+
+CHECK: define void @_pocl_kernel__Z25recalculateEigenIntervalsPfPKfPKjS1_S1_jf
+CHECK-NOT: load <16 x float>
+
+
