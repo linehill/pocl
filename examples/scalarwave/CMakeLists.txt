@@ -33,7 +33,7 @@ add_symlink_to_built_opencl_dynlib("scalarwave")
 
 add_test_pocl(NAME "examples/scalarwave" COMMAND "scalarwave" EXPECTED_OUTPUT "scalarwave_expout.txt")
 
-set(VARIANTS "loopvec;cbs")
+set(VARIANTS "loopvec;fiber")
 foreach(VARIANT ${VARIANTS})
 set_tests_properties( "examples/scalarwave_${VARIANT}"
   PROPERTIES

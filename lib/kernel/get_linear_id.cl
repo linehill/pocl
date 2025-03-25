@@ -39,13 +39,9 @@ constant extern const size_t _global_offset_x;
 constant extern const size_t _global_offset_y;
 constant extern const size_t _global_offset_z;
 
-extern const size_t _local_size_x;
-extern const size_t _local_size_y;
-extern const size_t _local_size_z;
-
-extern const size_t _num_groups_x;
-extern const size_t _num_groups_y;
-extern const size_t _num_groups_z;
+constant extern const size_t _num_groups_x;
+constant extern const size_t _num_groups_y;
+constant extern const size_t _num_groups_z;
 
 /* attribute optnone disables all optimizations.
  * This was necessary, because running opt on kernel library

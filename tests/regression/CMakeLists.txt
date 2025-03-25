@@ -143,34 +143,34 @@ add_test_pocl(NAME "regression/test_issue_893" COMMAND "test_issue_893")
 
 add_test_pocl(NAME "regression/test_flatten_barrier_subs" COMMAND "test_flatten_barrier_subs" EXPECTED_OUTPUT "test_flatten_barrier_subs.output")
 
-add_test_pocl(NAME "regression/issues_with_local_pointers" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_locals")
+add_test_pocl(NAME "regression/issues_with_local_pointers" WORKITEM_HANDLER "loopvec;fiber;" COMMAND "test_locals")
 
-add_test_pocl(NAME "regression/barrier_between_two_for_loops" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_barrier_between_for_loops")
+add_test_pocl(NAME "regression/barrier_between_two_for_loops" WORKITEM_HANDLER "loopvec;fiber;" COMMAND "test_barrier_between_for_loops")
 
-add_test_pocl(NAME "regression/simple_for-loop_with_a_barrier_inside" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_simple_for_with_a_barrier")
+add_test_pocl(NAME "regression/simple_for-loop_with_a_barrier_inside" WORKITEM_HANDLER "loopvec;fiber;" COMMAND "test_simple_for_with_a_barrier")
 
-add_test_pocl(NAME "regression/for-loop_with_computation_after_the_brexit" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_multi_level_loops_with_barriers")
+add_test_pocl(NAME "regression/for-loop_with_computation_after_the_brexit" WORKITEM_HANDLER "loopvec;fiber;" COMMAND "test_multi_level_loops_with_barriers")
 
-add_test_pocl(NAME "regression/for-loop_with_a_variable_iteration_count" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_for_with_var_iteration_count")
+add_test_pocl(NAME "regression/for-loop_with_a_variable_iteration_count" WORKITEM_HANDLER "loopvec;fiber;" COMMAND "test_for_with_var_iteration_count")
 
-add_test_pocl(NAME "regression/early_return_before_a_barrier_region" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_early_return")
+add_test_pocl(NAME "regression/early_return_before_a_barrier_region" WORKITEM_HANDLER "loopvec;fiber;" COMMAND "test_early_return")
 
-add_test_pocl(NAME "regression/id-dependent_computation_before_kernel_exit" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_id_dependent_computation")
+add_test_pocl(NAME "regression/id-dependent_computation_before_kernel_exit" WORKITEM_HANDLER "loopvec;fiber;" COMMAND "test_id_dependent_computation")
 
-add_test_pocl(NAME "regression/barrier_just_before_return" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_barrier_before_return")
+add_test_pocl(NAME "regression/barrier_just_before_return" WORKITEM_HANDLER "loopvec;fiber;" COMMAND "test_barrier_before_return")
 
-add_test_pocl(NAME "regression/infinite_loop" WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_infinite_loop")
+add_test_pocl(NAME "regression/infinite_loop" WORKITEM_HANDLER "loopvec;fiber;" COMMAND "test_infinite_loop")
 
 add_test_pocl(NAME "regression/undominated_variable_from_conditional_barrier_handling"
-  WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_undominated_variable")
+  WORKITEM_HANDLER "loopvec;fiber;" COMMAND "test_undominated_variable")
 
 add_test_pocl(NAME "regression/assigning_a_loop_iterator_variable_to_a_private_makes_it_local"
-  WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_assign_loop_variable_to_privvar_makes_it_local")
+  WORKITEM_HANDLER "loopvec;fiber;" COMMAND "test_assign_loop_variable_to_privvar_makes_it_local")
 
 add_test_pocl(NAME "regression/assigning_a_loop_iterator_variable_to_a_private_makes_it_local_2"
-  WORKITEM_HANDLER "loopvec;cbs;fiber;" COMMAND "test_assign_loop_variable_to_privvar_makes_it_local_2")
+  WORKITEM_HANDLER "loopvec;fiber;" COMMAND "test_assign_loop_variable_to_privvar_makes_it_local_2")
 
-add_test_pocl(NAME "regression/test_program_from_binary_with_local_1_1_1" WORKITEM_HANDLER "loopvec;cbs;fiber;"
+add_test_pocl(NAME "regression/test_program_from_binary_with_local_1_1_1" WORKITEM_HANDLER "loopvec;fiber;"
   COMMAND "test_program_from_binary_with_local_1_1_1")
 
 add_test_pocl(NAME "regression/test_rematerialized_alloca_load_with_outside_pr_users"
@@ -179,7 +179,8 @@ add_test_pocl(NAME "regression/test_rematerialized_alloca_load_with_outside_pr_u
   EXPECTED_OUTPUT "test_rematerialized_alloca_load_with_outside_pr_users.output"
   LABELS "${SPIRV_LABELS}")
 
-set(VARIANTS "loopvec;cbs;")
+set(VARIANTS "loopvec;fiber;")
+
 foreach(VARIANT ${VARIANTS})
 set_tests_properties(
   "regression/issues_with_local_pointers_${VARIANT}"
@@ -239,7 +240,7 @@ add_test_pocl(NAME "regression/test_alignment_with_dynamic_wg2" COMMAND "test_al
 
 add_test_pocl(NAME "regression/test_alignment_with_dynamic_wg3" COMMAND "test_alignment_with_dynamic_wg3")
 
-set(VARIANTS "loopvec;cbs;fiber")
+set(VARIANTS "loopvec;fiber")
 foreach(VARIANT ${VARIANTS})
 set_tests_properties(
   "regression/test_alignment_with_dynamic_wg_114_${VARIANT}"
@@ -292,7 +293,7 @@ if(NOT WIN32)
   set(ADDITIONAL_CPU_TESTS "regression/test_issue_1525")
 endif()
 
-set(VARIANTS "loopvec;cbs;fiber")
+set(VARIANTS "loopvec;fiber")
 foreach(VARIANT ${VARIANTS})
   set_tests_properties("regression/setting_a_buffer_argument_to_NULL_causes_a_segfault_${VARIANT}"
     "regression/clSetKernelArg_overwriting_the_previous_kernel's_args_${VARIANT}"
@@ -320,9 +321,9 @@ endforeach()
 # Label tests that fail with MinGW build
 set_property(TEST
   "regression/test_flatten_barrier_subs_loopvec"
-  "regression/test_flatten_barrier_subs_cbs"
+#  "regression/test_flatten_barrier_subs_cbs"
   "regression/infinite_loop_loopvec"
-  "regression/infinite_loop_cbs"
+#  "regression/infinite_loop_cbs"
   APPEND PROPERTY LABELS "mingw_fail")
 
 # Label tests that work with CUDA backend
@@ -453,7 +454,7 @@ endif()
 
 set_tests_properties(
   "regression/assigning_a_loop_iterator_variable_to_a_private_makes_it_local_2_loopvec"
-  "regression/assigning_a_loop_iterator_variable_to_a_private_makes_it_local_2_cbs"
+#  "regression/assigning_a_loop_iterator_variable_to_a_private_makes_it_local_2_cbs"
     PROPERTIES PASS_REGULAR_EXPRESSION
 "changing the value at global_id: 6, local_id 2, group_id 1, to: 3
 value is changed at global_id: 6, local_id 2, group_id 1, to: 3

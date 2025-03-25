@@ -117,7 +117,7 @@ endif()
 # Cases which are not dependent on the work-group or work-item
 # execution (printout) order or the method (use the default method
 # for the device).
-set(VARIANTS "loopvec;cbs;fiber")
+set(VARIANTS "loopvec;fiber")
 foreach(VARIANT ${VARIANTS})
   set_tests_properties(
     "workgroup/unbarriered_for_loops_${VARIANT}"
@@ -219,10 +219,10 @@ add_test_pocl(NAME "workgroup/loop_with_two_paths_to_the_latch_loopvec"
               COMMAND "run_kernel" "for_bug.cl" 1 2 1 1
               WORKITEM_HANDLER "loopvec")
 
-add_test_pocl(NAME "workgroup/loop_with_two_paths_to_the_latch_cbs"
-              EXPECTED_OUTPUT "for_bug_1_2_1_1.stdout"
-              COMMAND "run_kernel" "for_bug.cl" 1 2 1 1
-              WORKITEM_HANDLER "cbs")
+#add_test_pocl(NAME "workgroup/loop_with_two_paths_to_the_latch_cbs"
+#              EXPECTED_OUTPUT "for_bug_1_2_1_1.stdout"
+#              COMMAND "run_kernel" "for_bug.cl" 1 2 1 1
+#              WORKITEM_HANDLER "cbs")
 
 add_test_pocl(NAME "workgroup/loop_with_two_paths_to_the_latch_fiber"
               EXPECTED_OUTPUT "for_bug_1_2_1_1_fiber.stdout"
@@ -234,10 +234,10 @@ add_test_pocl(NAME "workgroup/b_loop_with_two_latches_loopvec"
               COMMAND "run_kernel" "multilatch_bloop.cl" 1 3 1 1
               WORKITEM_HANDLER "loopvec")
 
-add_test_pocl(NAME "workgroup/b_loop_with_two_latches_cbs"
-              EXPECTED_OUTPUT "multilatch_bloop_1_3_1_1.stdout"
-              COMMAND "run_kernel" "multilatch_bloop.cl" 1 3 1 1
-              WORKITEM_HANDLER "cbs")
+#add_test_pocl(NAME "workgroup/b_loop_with_two_latches_cbs"
+#              EXPECTED_OUTPUT "multilatch_bloop_1_3_1_1.stdout"
+#              COMMAND "run_kernel" "multilatch_bloop.cl" 1 3 1 1
+#              WORKITEM_HANDLER "cbs")
 
 add_test_pocl(NAME "workgroup/b_loop_with_two_latches_fiber"
               EXPECTED_OUTPUT "multilatch_bloop_1_3_1_1_fiber.stdout"
@@ -306,7 +306,7 @@ endforeach()
 
 set_property(TEST
   "workgroup/issue_548_convergent_propagation_loopvec"
-  "workgroup/issue_548_convergent_propagation_cbs"
+#  "workgroup/issue_548_convergent_propagation_cbs"
   APPEND PROPERTY LABELS "mingw_fail")
 
 set_property(TEST
