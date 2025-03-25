@@ -116,8 +116,9 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
 
   if (WIH != WorkitemHandlerType::FIBER) {
     Changed = enforceOuterLoopParIfBeneficial(F, LI, VUA) || Changed;
-    REFRESH_LOOP_INFO();
+    Changed = canonicalizeBarriers(F) || Changed;
 
+    REFRESH_LOOP_INFO();
     Changed = addLoopConstructIsolationBarriers(F, LI, VUA, DT) || Changed;
     REFRESH_LOOP_INFO();
 
@@ -137,10 +138,9 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
 
     // TODO: Run CBS if chosen.
     Changed = addWorkItemLoops(F, DT, PDT, LI, VUA) || Changed;
-  }
-
-  if (WIH == WorkitemHandlerType::FIBER)
+  } else {
     Changed = addFiberExecution(F, DT, PDT, LI, VUA) || Changed;
+  }
 
   return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }
