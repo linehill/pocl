@@ -98,7 +98,6 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
     return PreservedAnalyses::all();
 
   auto &LI = AM.getResult<LoopAnalysis>(F);
-  auto &VUA = AM.getResult<pocl::VariableUniformityAnalysis>(F);
   auto &PDT = AM.getResult<PostDominatorTreeAnalysis>(F);
   auto &DT = AM.getResult<llvm::DominatorTreeAnalysis>(F);
 
@@ -106,9 +105,11 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
 
   WorkitemHandlerType WIH = getWorkitemHandler();
 
-
-  Changed = convertPHIsToAllocaAccesses(F, VUA) || Changed;
+  Changed = convertPHIsToAllocaAccesses(F) || Changed;
   REFRESH_LOOP_INFO();
+
+  pocl::VariableUniformityAnalysisResult VUA;
+  VUA.runOnFunction(F, LI, PDT);
 
   Changed = canonicalizeBarriers(F) || Changed;
   REFRESH_LOOP_INFO();

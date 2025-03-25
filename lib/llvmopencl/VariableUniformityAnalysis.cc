@@ -638,7 +638,7 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
   }
 
   if (llvm::PHINode *PHI = dyn_cast<llvm::PHINode>(V)) {
-    // Do not try to prove PHIs uniform for now due to recursivity.
+    assert(false && "PHINodes should not appear at this point.");
     setUniform(F, V, false);
     return false;
   }

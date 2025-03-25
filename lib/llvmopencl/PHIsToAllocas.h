@@ -37,10 +37,8 @@ class VariableUniformityAnalysisResult;
 /// The control flow transformations DeSPMD performs do not handle PHI nodes.
 /// When we compile from sources, the input is unoptimized and not in SSA form,
 /// thus there should not be PHI nodes either, but when the input originates
-/// from SPIR-V there could be PHI nodes we should get rid of. Maintains
-/// uniformity info in \p VUA that has been produced with the PHIs intact.
-bool convertPHIsToAllocaAccesses(llvm::Function &F,
-                                 VariableUniformityAnalysisResult &VUA);
+/// from SPIR-V there could be PHI nodes we should get rid of.
+bool convertPHIsToAllocaAccesses(llvm::Function &F);
 
 } // namespace pocl
 

@@ -508,9 +508,6 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
 
     // Run loop-simplify to make more of the loops manageable by WILoops.
     addPass(Passes, "loop-simplify");
-    // TODO: Does the new pass manager require explicitly adding the analysis
-    // the passes need?
-    addAnalysis(Passes, "pocl-vua");
     addPass(Passes, "despmd");
   } else {
     // Attempt to move all allocas to the entry block to avoid the need for

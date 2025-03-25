@@ -50,8 +50,7 @@ namespace pocl {
 
 using namespace llvm;
 
-bool convertPHIsToAllocaAccesses(llvm::Function &F,
-                                 VariableUniformityAnalysisResult &VUA) {
+bool convertPHIsToAllocaAccesses(llvm::Function &F) {
 
   std::vector<PHINode *> PHIs;
   for (auto &BB : F) {
@@ -63,16 +62,10 @@ bool convertPHIsToAllocaAccesses(llvm::Function &F,
   }
 
   for (PHINode *Phi : PHIs) {
-    // Loop iteration variables and other data flow can be analyzed more
-    // reliably when they are implemented using PHI nodes (and SSA in general).
-    // Maintain information we have produced from the PHI nodes in the VUA by
-    // first analyzing the function with the PHIs intact and propagating the
-    // uniformity info of the PHI nodes to the produced allocas.
     std::string AllocaName = std::string(Phi->getName().str()) + ".ex_phi";
 
     llvm::Function *Function = Phi->getParent()->getParent();
 
-    const bool OriginalPHIWasUniform = VUA.isUniform(Function, Phi);
     IRBuilder<> Builder(&*(Function->getEntryBlock().getFirstInsertionPt()));
 
     llvm::Instruction *AllocaI =
@@ -84,28 +77,12 @@ bool convertPHIsToAllocaAccesses(llvm::Function &F,
       BasicBlock *IncomingBB = Phi->getIncomingBlock(Incoming);
       Builder.SetInsertPoint(IncomingBB->getTerminator());
       llvm::Instruction *Store = Builder.CreateStore(Val, AllocaI);
-      if (OriginalPHIWasUniform)
-        VUA.setUniform(Function, Store);
     }
     Builder.SetInsertPoint(Phi);
 
     llvm::Instruction *LoadedValue =
         Builder.CreateLoad(Phi->getType(), AllocaI);
     Phi->replaceAllUsesWith(LoadedValue);
-
-    if (OriginalPHIWasUniform) {
-#ifdef DEBUG_PHIS_TO_ALLOCAS
-      std::cout << "PHIsToAllocas: Original PHI was uniform" << std::endl
-                << "original:";
-      Phi->dump();
-      std::cout << "alloca:";
-      AllocaI->dump();
-      std::cout << "loadedValue:";
-      LoadedValue->dump();
-#endif
-      VUA.setUniform(Function, AllocaI);
-      VUA.setUniform(Function, LoadedValue);
-    }
     Phi->eraseFromParent();
   }
   return PHIs.size() > 0;
