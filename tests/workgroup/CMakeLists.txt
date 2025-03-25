@@ -188,15 +188,17 @@ add_test_pocl(NAME "workgroup/forcing_horizontal_parallelization_to_some_outer_l
               COMMAND "run_kernel" "outerlooppar.cl" 2 2 1 1
               WORKITEM_HANDLER "loopvec")
 
-add_test_pocl(NAME "workgroup/outerloop_intelligence_loopvec"
-              EXPECTED_OUTPUT "outerloop_intelligence_1_2_1_1.stdout"
-              COMMAND "run_kernel" "outerloop_intelligence.cl" 1 2 1 1
-              WORKITEM_HANDLER "loopvec")
+# Bring this back when we have more intelligence on choosing the WI/kernel
+# loop vectorization.
+#add_test_pocl(NAME "workgroup/outerloop_intelligence_loopvec"
+#              EXPECTED_OUTPUT "outerloop_intelligence_1_2_1_1.stdout"
+#              COMMAND "run_kernel" "outerloop_intelligence.cl" 1 2 1 1
+#              WORKITEM_HANDLER "loopvec")
 
-add_test_pocl(NAME "workgroup/outerloop_intelligence_fiber"
-              EXPECTED_OUTPUT "outerloop_intelligence_1_2_1_1.stdout"
-              COMMAND "run_kernel" "outerloop_intelligence.cl" 1 2 1 1
-              WORKITEM_HANDLER "fiber")
+#add_test_pocl(NAME "workgroup/outerloop_intelligence_fiber"
+#              EXPECTED_OUTPUT "outerloop_intelligence_1_2_1_1.stdout"
+#              COMMAND "run_kernel" "outerloop_intelligence.cl" 1 2 1 1
+#              WORKITEM_HANDLER "fiber")
 
 add_test_pocl(NAME "workgroup/reduce"
               EXPECTED_OUTPUT "reduce_2_512_1_1.stdout"
@@ -290,7 +292,7 @@ foreach(VARIANT ${VARIANTS})
   "workgroup/range_md_small_grid_${VARIANT}"
   "workgroup/range_md_large_grid_${VARIANT}"
   "workgroup/issue_1747_wg_divergent_barrier_${VARIANT}"
-  "workgroup/outerloop_intelligence_${VARIANT}"
+#  "workgroup/outerloop_intelligence_${VARIANT}"
   )
   set_tests_properties(
     ${TEST_LIST}

@@ -133,6 +133,13 @@ static size_t countWorkitemIDTerms(Value *Term, int RecursionDepth) {
 /// be difficult to add the context data etc. needed for producing the outer
 /// loop case there.
 static bool outerLoopIsLikelyBeneficial(Loop &L) {
+#if 1
+  /// The below check is too simplistic as many loops are restricted by loop
+  /// carried dependencies, unsafe floating point arithmetics, etc. and most
+  /// often than not WI-loop vectorizes better since the OpenCL C is written
+  /// with GPUs/SPMD in mind.
+  return true;
+#else
   /// Check the memory accessess of the loop. If the loop more often has the
   /// work item id as a term, than not, we assume it's more efficient to
   /// vectorize over the WI loop. Note that LLVM loopvec can unroll loops to
@@ -163,9 +170,8 @@ static bool outerLoopIsLikelyBeneficial(Loop &L) {
   std::cerr << "### WIAddresses: " << WIAddresses
             << " NonWIAddresses: " << NonWIAddresses << std::endl;
 #endif
-  // TODO: Consider the iteration count. If it's low or unknown,
-  // it's likely best to outer-loop parallelize anyhow.
   return WIAddresses > 0;
+#endif
 }
 
 /// Adds implicit barriers to the given loop such that its body
