@@ -55,6 +55,8 @@
 typedef ze_graph_dditable_ext_t graph_dditable_ext_t;
 #endif
 
+#include "pocl_zex_module.h"
+
 #ifndef POCL_LIB_CL_DEVICES_LEVEL0_LEVEL0_COMPILATION_HH
 #define POCL_LIB_CL_DEVICES_LEVEL0_LEVEL0_COMPILATION_HH
 
@@ -154,6 +156,9 @@ class Level0BuiltinProgramBuild;
 typedef std::unique_ptr<Level0BuiltinProgramBuild>
     Level0BuiltinProgramBuildUPtr;
 #endif
+
+using L0KernelGetArgumentSize = decltype(&zexKernelGetArgumentSize);
+using L0KernelGetArgumentType = decltype(&zexKernelGetArgumentType);
 
 ///
 /// \brief Stores a map of Specializations to ZE kernel+module handles,
@@ -927,6 +932,10 @@ public:
                      ze_module_handle_t &Mod,
                      ze_kernel_handle_t &Ker);
 
+  bool supportsBinary(ze_device_handle_t DeviceH,
+                      ze_context_handle_t ContextH,
+                      const char *Binary, size_t Length);
+
 #ifdef ENABLE_NPU
   Level0BuiltinProgram *
   createBuiltinProgram(ze_context_handle_t Ctx, ze_device_handle_t Dev,
@@ -951,6 +960,9 @@ public:
 private:
   std::mutex ProgramsLock;
   ze_driver_handle_t DriverH = nullptr;
+  L0KernelGetArgumentSize kernelGetArgumentSizeFunc = nullptr;
+  L0KernelGetArgumentType kernelGetArgumentTypeFunc = nullptr;
+
 #ifdef ENABLE_NPU
   graph_dditable_ext_t *GraphDDITable;
   ze_graph_profiling_dditable_ext_t *GraphProfDDITable;

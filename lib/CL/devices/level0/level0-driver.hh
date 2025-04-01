@@ -450,8 +450,12 @@ public:
                                    cl_bool NormalizedCoords);
   static void freeSampler(ze_sampler_handle_t SamplerH);
 
+  bool supportsBinary(const char *Binary, size_t Length) {
+      return getJobSched().supportsBinary(DeviceHandle, ContextHandle, Binary, Length);
+  }
   int createSpirvProgram(cl_program Program, cl_uint DeviceI);
   int createBuiltinProgram(cl_program Program, cl_uint DeviceI);
+  int createGPUBinaryProgram(cl_program Program, cl_uint DeviceI);
   int freeProgram(cl_program Program, cl_uint DeviceI);
 
   int createKernel(cl_program Program, cl_kernel Kernel,
@@ -586,6 +590,7 @@ private:
   cl_device_id ClDev;
   ze_device_handle_t DeviceHandle;
   ze_context_handle_t ContextHandle;
+
   // OpenCL extensions
   std::string Extensions;
   // SPV extensions
@@ -649,6 +654,7 @@ private:
   bool setupCacheProperties();
   bool setupImageProperties();
   bool setupPCIAddress();
+  bool setupZexModule();
 };
 
 typedef std::unique_ptr<Level0Device> Level0DeviceUPtr;
@@ -684,6 +690,8 @@ public:
   cl_device_id getClDevForHandle(ze_device_handle_t H) {
     return HandleToIDMap[H];
   }
+
+  void *getExtensionAddr(const char* Extension);
 
 private:
   ze_driver_handle_t DriverH = nullptr;

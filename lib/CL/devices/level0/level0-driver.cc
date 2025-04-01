@@ -42,6 +42,7 @@
 #include <iostream>
 #include <sstream>
 
+
 #if defined(ENABLE_CONFORMANCE) && defined(ENABLE_LEVEL0_EXTRA_FEATURES)
 #error Defined both ENABLE_CONFORMANCE and ENABLE_LEVEL0_EXTRA_FEATURES
 #endif
@@ -2993,6 +2994,7 @@ void Level0Device::setupGlobalMemSize(bool HasRelaxedAllocLimits) {
 #endif
 }
 
+
 // dev -> Dev
 Level0Device::Level0Device(Level0Driver *Drv, ze_device_handle_t DeviceH,
                            cl_device_id dev, const char *Parameters)
@@ -4184,6 +4186,78 @@ int Level0Device::createSpirvProgram(cl_program Program, cl_uint DeviceI) {
   return CL_SUCCESS;
 }
 
+int Level0Device::createGPUBinaryProgram(cl_program Program, cl_uint DeviceI) {
+
+    cl_device_id Dev = Program->devices[DeviceI];
+
+    // std::vector<uint8_t> Spirv(Program->program_il,
+    //                            Program->program_il + Program->program_il_size);
+
+    std::vector<char> ProgramBC;
+    char *BinaryPtr = (char *)Program->binaries[DeviceI];
+    size_t BinarySize = Program->binary_sizes[DeviceI];
+    int TestR = pocl_bitcode_is_triple(BinaryPtr, BinarySize, "spir");
+    assert(TestR && "Program->binaries[] is not LLVM bitcode!");
+    ProgramBC.insert(ProgramBC.end(), BinaryPtr, BinaryPtr + BinarySize);
+
+    assert(Program->data[DeviceI] == nullptr);
+    char ProgramCacheDir[POCL_MAX_PATHNAME_LENGTH];
+    pocl_cache_program_path(ProgramCacheDir, Program, DeviceI);
+
+    std::vector<uint32_t> SpecConstantIDs;
+    std::vector<const void *> SpecConstantPtrs;
+    std::vector<size_t> SpecConstantSizes;
+
+    if (Program->num_spec_consts != 0u) {
+        for (size_t i = 0; i < Program->num_spec_consts; ++i) {
+            if (Program->spec_const_is_set[i] == CL_FALSE) {
+                continue;
+            }
+            SpecConstantIDs.push_back(Program->spec_const_ids[i]);
+            SpecConstantPtrs.push_back(&Program->spec_const_values[i]);
+            SpecConstantSizes.push_back(sizeof(uint64_t));
+        }
+    }
+
+    std::string UserJITPref(pocl_get_string_option("POCL_LEVEL0_JIT", "auto"));
+    bool JITCompilation = false;
+    if (UserJITPref == "0")
+        JITCompilation = false;
+    else if (UserJITPref == "1")
+        JITCompilation = true;
+    else {
+        // use heuristic
+        if (UserJITPref != "auto")
+            POCL_MSG_WARN("unknown option given to POCL_LEVEL0_JIT: '%s' \n",
+                          UserJITPref.c_str());
+        JITCompilation =
+            (Program->num_kernels > 256 && Program->program_il_size > 128000);
+    }
+    POCL_MSG_PRINT_LEVEL0("createProgram | using JIT: %s\n",
+                          (JITCompilation ? "YES" : "NO"));
+
+    bool Optimize = Program->parsed_options.cl_opt_disable == 0;
+
+    std::string BuildLog;
+    Level0Program *ProgramData = Driver->getJobSched().createProgram(
+        ContextHandle, DeviceHandle, JITCompilation, BuildLog, Optimize,
+        Supports64bitBuffers, SpecConstantIDs.size(), SpecConstantIDs.data(),
+        SpecConstantPtrs.data(), SpecConstantSizes.data(), Spirv, ProgramBC,
+        ProgramCacheDir, KernelCacheHash);
+
+    if (ProgramData == nullptr) {
+        if (!BuildLog.empty()) {
+            pocl_append_to_buildlog(Program, DeviceI, strdup(BuildLog.c_str()),
+                                    BuildLog.size());
+        }
+        POCL_RETURN_ERROR_ON(1, CL_BUILD_PROGRAM_FAILURE,
+                             "Failed to compile program\n");
+    }
+
+    Program->data[DeviceI] = ProgramData;
+    return CL_SUCCESS;
+}
+
 int Level0Device::createBuiltinProgram(cl_program Program, cl_uint DeviceI) {
 #ifdef ENABLE_NPU
 
@@ -4223,6 +4297,7 @@ int Level0Device::createBuiltinProgram(cl_program Program, cl_uint DeviceI) {
   return CL_BUILD_PROGRAM_FAILURE;
 #endif
 }
+
 
 int Level0Device::freeProgram(cl_program Program, cl_uint DeviceI) {
   // module can be NULL if compilation fails.
@@ -4640,6 +4715,12 @@ void Level0Driver::releaseDevice(Level0Device *Dev) {
       --NumDevices;
     }
   }
+}
+
+void *Level0Driver::getExtensionAddr(const char* Extension) {
+  void *RetVal = nullptr;
+  ze_result_t Res = zeDriverGetExtensionFunctionAddress(DriverH, Extension, &RetVal);
+  return Res == ZE_RESULT_SUCCESS ? RetVal : nullptr;
 }
 
 Level0Device *Level0Driver::getExportDevice() {

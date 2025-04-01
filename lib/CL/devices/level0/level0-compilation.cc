@@ -1873,8 +1873,7 @@ Level0CompilerThread::~Level0CompilerThread() {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool Level0CompilationJobScheduler::init(
-    ze_driver_handle_t H, std::vector<ze_device_handle_t> &DevicesH) {
+bool Level0CompilationJobScheduler::init(ze_driver_handle_t H, std::vector<ze_device_handle_t> &DevicesH) {
 
   DriverH = H;
 
@@ -1897,6 +1896,11 @@ bool Level0CompilationJobScheduler::init(
   }
 #endif
 
+  zeDriverGetExtensionFunctionAddress(DriverH, "zexKernelGetArgumentSize",
+                                      reinterpret_cast<void **>(&kernelGetArgumentSizeFunc));
+  zeDriverGetExtensionFunctionAddress(DriverH, "zexKernelGetArgumentType",
+                                      reinterpret_cast<void **>(&kernelGetArgumentTypeFunc));
+
   JobQueue = std::make_unique<Level0CompilerJobQueue>();
   unsigned NumDevices = DevicesH.size();
   unsigned NumThreads = std::min((NumDevices * 2), std::thread::hardware_concurrency());
@@ -1913,6 +1917,7 @@ bool Level0CompilationJobScheduler::init(
       return false;
     }
   }
+
   return true;
 }
 
@@ -1924,6 +1929,23 @@ void Level0CompilationJobScheduler::addCompilationJob(
 Level0CompilationJobScheduler::~Level0CompilationJobScheduler() {
   JobQueue->clearAndExit();
   CompilerThreads.clear();
+}
+
+bool Level0CompilationJobScheduler::supportsBinary(ze_device_handle_t DeviceH, ze_context_handle_t ContextH,
+                                                   const char *Binary, size_t Length) {
+    ze_module_handle_t ModuleH = nullptr;
+    ze_module_desc_t ModuleDesc{ZE_STRUCTURE_TYPE_MODULE_DESC, nullptr};
+    ModuleDesc.format = ZE_MODULE_FORMAT_NATIVE;
+    ModuleDesc.pInputModule = reinterpret_cast<const uint8_t *>(Binary);
+    ModuleDesc.inputSize = Length;
+    ModuleDesc.pBuildFlags = nullptr;
+    ModuleDesc.pConstants = nullptr;
+    ze_result_t Res = zeModuleCreate(ContextH, DeviceH, &ModuleDesc, &ModuleH, nullptr);
+    if (Res == ZE_RESULT_SUCCESS) {
+      zeModuleDestroy(ModuleH);
+      return true;
+    } else
+      return false;
 }
 
 Level0Program *Level0CompilationJobScheduler::createProgram(ze_context_handle_t Ctx,

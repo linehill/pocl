@@ -39,6 +39,7 @@
 #include "pocl_local_size.h"
 #include "pocl_timing.h"
 #include "pocl_util.h"
+#include "pocl_spirv_utils.hh"
 
 #include <ze_api.h>
 
@@ -397,37 +398,10 @@ cl_int pocl_level0_init(unsigned J, cl_device_id ClDevice,
 
 cl_int pocl_level0_uninit(unsigned J, cl_device_id ClDevice) {
   Level0Device *Device = (Level0Device *)ClDevice->data;
-
-  // GPUDriverInstance->releaseDevice(Device);
-  // // TODO should this be done at all ?
-  // if (GPUDriverInstance->empty()) {
-  //   delete GPUDriverInstance;
-  //   GPUDriverInstance = nullptr;
-  // }
-
   return CL_SUCCESS;
 }
 
 cl_int pocl_level0_reinit(unsigned J, cl_device_id ClDevice, const char *parameters) {
-
-  /*
-    if (GPUDriverInstance == nullptr) {
-      GPUDriverInstance = new Level0Driver();
-    }
-    assert(J < GPUDriverInstance->getNumDevices());
-    POCL_MSG_PRINT_LEVEL0("Initializing device %u\n", J);
-
-    // TODO: parameters are not passed (this works ATM because they're ignored)
-    Level0Device *Device = GPUDriverInstance->createDevice(J, ClDevice,
-    nullptr);
-
-    if (Device == nullptr) {
-      return CL_FAILED;
-    }
-
-    ClDevice->data = (void *)Device;
-  */
-
   return CL_SUCCESS;
 }
 
@@ -846,17 +820,30 @@ int pocl_level0_build_source(cl_program Program, cl_uint DeviceI,
 #endif
 }
 
-int pocl_level0_supports_binary(cl_device_id Device, size_t Length,
-                                const char *Binary) {
+static bool isFileELF(const char *Binary, size_t Length) {
+    return Length > 4 &&
+           Binary[0] == 0x7f && Binary[1] == 0x45
+           && Binary[2] == 0x4C && Binary[3] == 0x46;
+}
 
-  if (Device->compiler_available == CL_TRUE &&
-      Device->linker_available == CL_TRUE && Device->num_ils_with_version > 0 &&
-      pocl_bitcode_is_spirv_execmodel_kernel(Binary, Length,
-                                             Device->address_bits)) {
-    return 1;
+int pocl_level0_supports_binary(cl_device_id ClDev, size_t Length,
+                                const char *Binary) {
+  if (pocl_bitcode_is_spirv_execmodel_kernel(Binary, Length,
+                                             ClDev->address_bits)) {
+    // currently necessary to have LLVM for parsing the metadata
+    return ClDev->compiler_available == CL_TRUE &&
+           ClDev->linker_available == CL_TRUE &&
+           ClDev->num_ils_with_version > 0;
   }
-  // TODO : possibly support native ZE binaries
-  return 0;
+
+  Level0Device *Device = (Level0Device *)ClDev->data;
+  if (isFileELF(Binary, Length)) {
+    POCL_MSG_WARN("Detected ELF binary\n");
+    return Device->supportsBinary(Binary, Length) ? 1 : 0;
+  } else {
+    POCL_MSG_WARN("Unknown binary - not ELF & not SPIRV\n");
+    return 0;
+  }
 }
 
 char *pocl_level0_init_build(void *Data) {
@@ -936,24 +923,33 @@ int pocl_level0_build_binary(cl_program Program, cl_uint DeviceI,
       assert(Program->binaries[DeviceI] != nullptr);
       assert(Program->binary_sizes[DeviceI] > 0);
 
-      int Triple =
+      bool TripleIsSpir64 =
           pocl_bitcode_is_triple((char *)Program->binaries[DeviceI],
                             Program->binary_sizes[DeviceI], "spir64-unknown");
-      POCL_RETURN_ERROR_ON((Triple == 0), CL_BUILD_PROGRAM_FAILURE,
+      bool IsELF = isFileELF((char *)Program->binaries[DeviceI],
+                             Program->binary_sizes[DeviceI]);
+      POCL_RETURN_ERROR_ON((!TripleIsSpir64 && !IsELF), CL_BUILD_PROGRAM_FAILURE,
                            "the binary supplied to level0 driver is "
                            "not a recognized binary type\n");
 
-      cl_device_id Dev = Program->devices[DeviceI];
-      Level0Device *Device = static_cast<Level0Device *>(Dev->data);
-      Err = pocl_convert_bitcode_to_spirv(
+      if (TripleIsSpir64) {
+        // SPIRV
+        Err = pocl_convert_bitcode_to_spirv(
           ProgramBcPathTemp, (char *)Program->binaries[DeviceI],
           Program->binary_sizes[DeviceI], Program, DeviceI,
           Dev->supported_spirv_extensions, ProgramSpvPathTemp, &OutputBinary,
           &OutputBinarySize, Device->getSupportedSpvVersion());
-      POCL_RETURN_ERROR_ON((Err != 0), CL_BUILD_PROGRAM_FAILURE,
+        POCL_RETURN_ERROR_ON((Err != 0), CL_BUILD_PROGRAM_FAILURE,
                            "failed to compile BC -> SPV\n");
-      Program->program_il = OutputBinary;
-      Program->program_il_size = OutputBinarySize;
+        Program->program_il = OutputBinary;
+        Program->program_il_size = OutputBinarySize;
+      } else {
+        // ELF
+        POCL_RETURN_ERROR_ON((LinkProgram == 0), CL_BUILD_PROGRAM_FAILURE,
+                              "creating multi-part programs via GPU binaries"
+                              " is not supported\n");
+        return Device->createGPUBinaryProgram(Program, DeviceI);
+      }
     }
 
     pocl_cache_create_program_cachedir(Program, DeviceI, Program->program_il,
@@ -1137,20 +1133,45 @@ static int pocl_level0_setup_spirv_metadata(cl_device_id Device,
   Program->kernel_meta = (pocl_kernel_metadata_t *)calloc(
       Program->num_kernels, sizeof(pocl_kernel_metadata_t));
 
-// TODO: currently all metadata is gotten from LLVM instead of the SPIR-V parser
-//  and therefore unnecessary. In the future the LLVM dependency could be
-//  dropped in favor of the SPIR-V parser, see comment:
-//  https://github.com/pocl/pocl/pull/1611#discussion_r1810472798
-#if 0
   uint32_t Idx = 0;
   for (auto &I : KernelInfoMap) {
+    mapToPoCLMetadata(I, Program->num_devices,
+                      &Program->kernel_meta[Idx]);
+    ++Idx;
+  }
 
-    SPIRVParser::mapToPoCLMetadata(I, Program->num_devices, &Program->kernel_meta[Idx]);
+  return 1;
+}
+
+static int pocl_level0_setup_lz_metadata(cl_device_id Device,
+                                            cl_program Program,
+                                            unsigned ProgramDeviceI) {
+    assert(Program->data[ProgramDeviceI] != nullptr);
+
+    // TODO this is using program_il as source
+    int32_t *Stream = (int32_t *)Program->program_il;
+    size_t StreamSize = Program->program_il_size / 4;
+    OpenCLFunctionInfoMap KernelInfoMap;
+    if (!parseSPIRV(Stream, StreamSize, KernelInfoMap)) {
+        POCL_MSG_ERR("Unable to parse SPIR-V module of the program\n");
+        return 0;
+    }
+
+    Program->num_kernels = KernelInfoMap.size();
+    if (Program->num_kernels == 0) {
+        POCL_MSG_WARN("No kernels found in program.\n");
+        return 1;
+    }
+
+    Program->kernel_meta = (pocl_kernel_metadata_t *)calloc(
+        Program->num_kernels, sizeof(pocl_kernel_metadata_t));
+
+  uint32_t Idx = 0;
+  for (auto &I : KernelInfoMap) {
 
     // ZE kernel metadata; TODO with JIT, we don't have the ZE module
     // to extract the metadata - this needs to be extracted from SPIR-V
     // required workgroup size, attributes, subgroups, priv/local mem sizes
-#if 0
     {
       ze_module_handle_t ModuleH = ProgramSPtr->get()->getAnyHandle();
       ze_kernel_handle_t HKernel = nullptr;
@@ -1194,10 +1215,10 @@ static int pocl_level0_setup_spirv_metadata(cl_device_id Device,
       Meta->local_mem_size[ProgramDeviceI] = KernelProps.localMemSize;
       Meta->private_mem_size[ProgramDeviceI] = KernelProps.privateMemSize;
       Meta->spill_mem_size[ProgramDeviceI] = KernelProps.spillMemSize;
-#if 0
-      /// TODO:
-      /// required number of subgroups per thread group,
-      /// or zero if there is no required number of subgroups
+#if 0 \
+    /// TODO: \
+    /// required number of subgroups per thread group, \
+    /// or zero if there is no required number of subgroups
       uint32_t requiredNumSubGroups;
 
       /// [out] required subgroup size,
@@ -1205,14 +1226,13 @@ static int pocl_level0_setup_spirv_metadata(cl_device_id Device,
       uint32_t requiredSubgroupSize;
 #endif
     }
-#endif
 
     ++Idx;
   }
-#endif
 
   return 1;
 }
+
 
 #ifdef ENABLE_NPU
 
@@ -1310,6 +1330,9 @@ int pocl_level0_setup_metadata(cl_device_id Dev, cl_program Program,
   }
   if (Program->program_il && Program->program_il_size) {
     return pocl_level0_setup_spirv_metadata(Dev, Program, ProgramDeviceI);
+  }
+  if (Program->binaries[ProgramDeviceI] && Program->binary_sizes[ProgramDeviceI]) {
+    return pocl_level0_setup_lz_metadata(Dev, Program, ProgramDeviceI);
   }
   POCL_MSG_ERR("LevelZero: Don't know how to setup metadata\n");
   return 0;
