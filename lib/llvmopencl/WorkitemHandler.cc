@@ -130,6 +130,10 @@ void WorkitemHandler::Initialize(Kernel *K_) {
                       M->getOrInsertGlobal(NGROUPS_G_NAME(1), ST),
                       M->getOrInsertGlobal(NGROUPS_G_NAME(2), ST)};
 
+  GlobalOffsetGlobals = {M->getOrInsertGlobal(GOFFS_G_NAME(0), ST),
+                         M->getOrInsertGlobal(GOFFS_G_NAME(1), ST),
+                         M->getOrInsertGlobal(GOFFS_G_NAME(2), ST)};
+
   GlobalIdOrigins = {0, 0, 0};
   GlobalSizes = {0, 0, 0};
 }
@@ -1216,9 +1220,9 @@ bool WorkitemHandler::handleLocalMemAllocas() {
 /// Converts some of the work-item function calls to loads from the pseudo
 /// variables or precomputed values from within the kernel function.
 ///
-/// Currently handles get_global_size(), get_local_id(), get_global_id() and
-/// get_group_id() calls. Expands the calls next to their users for easier
-/// analysis.
+/// Currently handles get_global_size(), get_local_id(), get_global_id(),
+/// get_group_id() and get_global_offset() calls. Expands the calls next to
+/// their users for easier analysis.
 bool WorkitemHandler::handleWorkitemFunctions() {
   std::set<llvm::Instruction *> InstrsToDelete;
 
@@ -1266,6 +1270,8 @@ bool WorkitemHandler::handleWorkitemFunctions() {
             Replacement = getLocalIdInRegion(InsertBefore, Dim);
           else if (Callee->getName() == GS_BUILTIN_NAME)
             Replacement = getGlobalSize(Dim);
+          else if (Callee->getName() == GOFF_BUILTIN_NAME)
+            Replacement = Builder.CreateLoad(ST, GlobalOffsetGlobals[Dim]);
           User->replaceUsesOfWith(Call, Replacement);
           UI = Call->use_begin();
           UE = Call->use_end();

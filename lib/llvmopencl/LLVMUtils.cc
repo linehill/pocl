@@ -722,12 +722,17 @@ llvm::Type *SizeT(llvm::Module *M) {
   return IntegerType::get(M->getContext(), AddressBits);
 }
 
+const std::array<std::string, 7> CompilerExpandableBuiltinNames = {
+    GID_BUILTIN_NAME, GS_BUILTIN_NAME, GROUP_ID_BUILTIN_NAME,
+    LID_BUILTIN_NAME, LS_BUILTIN_NAME, NGROUPS_BUILTIN_NAME,
+    GOFF_BUILTIN_NAME};
+
 bool isWorkitemFunctionWithOnlyCompilerExpandableCalls(
     const llvm::Function &F) {
 
-  if (F.getName() != GID_BUILTIN_NAME && F.getName() != GS_BUILTIN_NAME &&
-      F.getName() != GROUP_ID_BUILTIN_NAME && F.getName() != LID_BUILTIN_NAME &&
-      F.getName() != LS_BUILTIN_NAME && F.getName() != NGROUPS_BUILTIN_NAME)
+  if (std::find(CompilerExpandableBuiltinNames.begin(),
+                CompilerExpandableBuiltinNames.end(),
+                F.getName()) == CompilerExpandableBuiltinNames.end())
     return false;
 
   for (const auto &U : F.uses()) {
@@ -744,12 +749,10 @@ bool isCompilerExpandableWIFunctionCall(const llvm::CallInst &Call) {
   auto Callee = Call.getCalledFunction();
   if (Callee == nullptr /* Inline asm? */)
     return false;
-  if (Callee->getName() != GID_BUILTIN_NAME &&
-      Callee->getName() != GS_BUILTIN_NAME &&
-      Callee->getName() != GROUP_ID_BUILTIN_NAME &&
-      Callee->getName() != LID_BUILTIN_NAME &&
-      Callee->getName() != LS_BUILTIN_NAME &&
-      Callee->getName() != NGROUPS_BUILTIN_NAME)
+
+  if (std::find(CompilerExpandableBuiltinNames.begin(),
+                CompilerExpandableBuiltinNames.end(),
+                Callee->getName()) == CompilerExpandableBuiltinNames.end())
     return false;
   return isa<llvm::ConstantInt>(Call.getArgOperand(0));
 }

@@ -35,6 +35,8 @@
 #define NGROUPS_G_NAME(DIM) (std::string("_num_groups_") + (char)('x' + DIM))
 // Generates the name for the global magic variable for the local size.
 #define LS_G_NAME(DIM) (std::string("_local_size_") + (char)('x' + DIM))
+// Generates the name for the global magic variable for the local size.
+#define GOFFS_G_NAME(DIM) (std::string("_global_offset_") + (char)('x' + DIM))
 
 #ifdef KERNEL_TRIPLE_TARGETS_MSVC_TOOLCHAIN
 // Used 'clang -target x86_64-pc-windows-msvc -cl-std=cl3.0 -S -emit-llvm
