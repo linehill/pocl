@@ -417,6 +417,7 @@ static void convertProgramBcPathToSpv(char *ProgramBcPath,
 
 static constexpr unsigned DefaultCaptureSize = 128 * 1024;
 
+// TODO move to pocl_run_command.c
 static int runAndAppendOutputToBuildLog(cl_program Program, unsigned DeviceI,
                                         const char **Args) {
   int Errcode = CL_SUCCESS;
@@ -831,15 +832,18 @@ int pocl_level0_supports_binary(cl_device_id ClDev, size_t Length,
   if (pocl_bitcode_is_spirv_execmodel_kernel(Binary, Length,
                                              ClDev->address_bits)) {
     // currently necessary to have LLVM for parsing the metadata
+    // return 1 when SPIR-V parser is finished
     return ClDev->compiler_available == CL_TRUE &&
            ClDev->linker_available == CL_TRUE &&
            ClDev->num_ils_with_version > 0;
   }
 
   Level0Device *Device = (Level0Device *)ClDev->data;
-  if (isFileELF(Binary, Length)) {
-    POCL_MSG_WARN("Detected ELF binary\n");
-    return Device->supportsBinary(Binary, Length) ? 1 : 0;
+  //if (isFileELF(Binary, Length)) {
+  // TODO is this safe ?
+  if (Device->supportsBinary(Binary, Length)) {
+    POCL_MSG_WARN("Detected GPU binary\n");
+    return 1;
   } else {
     POCL_MSG_WARN("Unknown binary - not ELF & not SPIRV\n");
     return 0;
@@ -891,13 +895,11 @@ int pocl_level0_build_binary(cl_program Program, cl_uint DeviceI,
     assert(Program->binary_sizes[DeviceI] != 0);
 
   } else {
-
+    // assert(Program->pocl_binaries[DeviceI] == nullptr);
     char *OutputBinary = nullptr;
     uint64_t OutputBinarySize = 0;
 
-    if (Program->pocl_binaries[DeviceI] == nullptr &&
-        Program->binaries[DeviceI] == nullptr) {
-
+    if (Program->binaries[DeviceI] == nullptr) {
       /* we have only program_il, which is SPIR-V*/
       assert(Program->program_il != nullptr);
       assert(Program->program_il_size > 0);
@@ -919,18 +921,18 @@ int pocl_level0_build_binary(cl_program Program, cl_uint DeviceI,
       assert(Program->binary_sizes[DeviceI] != 0);
 #endif
     } else {
-      /* we have program->binaries[] which should be LLVM IR SPIR */
+      /* we have program->binaries[] which could be LLVM IR SPIR, or GPU binary */
       assert(Program->binaries[DeviceI] != nullptr);
       assert(Program->binary_sizes[DeviceI] > 0);
 
       bool TripleIsSpir64 =
           pocl_bitcode_is_triple((char *)Program->binaries[DeviceI],
                             Program->binary_sizes[DeviceI], "spir64-unknown");
-      bool IsELF = isFileELF((char *)Program->binaries[DeviceI],
-                             Program->binary_sizes[DeviceI]);
-      POCL_RETURN_ERROR_ON((!TripleIsSpir64 && !IsELF), CL_BUILD_PROGRAM_FAILURE,
-                           "the binary supplied to level0 driver is "
-                           "not a recognized binary type\n");
+      // bool IsELF = isFileELF((char *)Program->binaries[DeviceI],
+      //                        Program->binary_sizes[DeviceI]);
+      // POCL_RETURN_ERROR_ON((!TripleIsSpir64 && !IsELF), CL_BUILD_PROGRAM_FAILURE,
+      //                      "the binary supplied to level0 driver is "
+      //                      "not a recognized binary type\n");
 
       if (TripleIsSpir64) {
         // SPIRV
@@ -944,11 +946,15 @@ int pocl_level0_build_binary(cl_program Program, cl_uint DeviceI,
         Program->program_il = OutputBinary;
         Program->program_il_size = OutputBinarySize;
       } else {
-        // ELF
+        // GPU binary
         POCL_RETURN_ERROR_ON((LinkProgram == 0), CL_BUILD_PROGRAM_FAILURE,
                               "creating multi-part programs via GPU binaries"
                               " is not supported\n");
-        // TODO don't skip creating cache dir!!!
+        // don't skip creating cache dir
+        pocl_cache_create_program_cachedir(Program, DeviceI, (char *)Program->binaries[DeviceI],
+                                           Program->binary_sizes[DeviceI], ProgramBcPath);
+        convertProgramBcPathToSpv(ProgramBcPath, ProgramSpvPath);
+
         return Device->createGPUBinaryProgram(Program, DeviceI);
       }
     }
@@ -992,7 +998,6 @@ int pocl_level0_link_program(cl_program Program, cl_uint DeviceI,
   char ProgramBcPath[POCL_MAX_PATHNAME_LENGTH];
   char ProgramSpvPath[POCL_MAX_PATHNAME_LENGTH];
 
-  /* we have program->binaries[] which is SPIR-V */
   assert(Program->pocl_binaries[DeviceI] == nullptr);
   assert(Program->binaries[DeviceI] == nullptr);
   assert(Program->binary_sizes[DeviceI] == 0);
@@ -1146,28 +1151,26 @@ static int pocl_level0_setup_spirv_metadata(cl_device_id Device,
 static int pocl_level0_setup_lz_metadata(cl_device_id Device,
                                          cl_program Program,
                                          unsigned ProgramDeviceI) {
-    assert(Program->data[ProgramDeviceI] != nullptr);
-    Level0SpecProgram *L0Prog = (Level0SpecProgram *)Program->data[ProgramDeviceI];
-    L0Prog->isOptimized();
-/*
-      // TODO
-     size_t getNumKernels();
-     getKernelMetadata()
-*/
+  assert(Program->data[ProgramDeviceI] != nullptr);
+  Level0NativeProgram *L0Prog = (Level0NativeProgram *)Program->data[ProgramDeviceI];
 
-    Program->num_kernels = L0Prog->getNumKernels();
+  std::vector<std::string> KernelNames;
+  if (!L0Prog->getKernelNames(KernelNames))
+    return 0;
+  Program->num_kernels = KernelNames.size();
 
-    if (Program->num_kernels == 0) {
-        POCL_MSG_WARN("No kernels found in program.\n");
-        return 1;
-    }
+  if (Program->num_kernels == 0) {
+    POCL_MSG_WARN("No kernels found in program.\n");
+    return 1;
+  }
 
-    Program->kernel_meta = (pocl_kernel_metadata_t *)calloc(
-        Program->num_kernels, sizeof(pocl_kernel_metadata_t));
-
+  Program->kernel_meta = (pocl_kernel_metadata_t *)calloc(
+    Program->num_kernels, sizeof(pocl_kernel_metadata_t));
 
   for (uint32_t Idx = 0; Idx < Program->num_kernels; ++Idx) {
 
+    if (L0Prog->getKernelMetadata(KernelNames[Idx]))
+      return 0;
     // ZE kernel metadata; TODO with JIT, we don't have the ZE module
     // to extract the metadata - this needs to be extracted from SPIR-V
     // required workgroup size, attributes, subgroups, priv/local mem sizes
@@ -1354,6 +1357,7 @@ int pocl_level0_free_kernel(cl_device_id Dev, cl_program Program,
 
 int pocl_level0_build_poclbinary(cl_program Program, cl_uint DeviceI) {
 
+  // TODO deal with GPU binary somehow
   assert(Program->build_status == CL_BUILD_SUCCESS);
 
   if (Program->num_kernels == 0) {

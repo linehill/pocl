@@ -1650,9 +1650,8 @@ void Level0CmdList::svmAdvise(const void *ptr, size_t size,
   LEVEL0_CHECK_ABORT(Res);
 }
 
-bool Level0CmdList::setupKernelArgs(ze_module_handle_t ModuleH,
-                                  ze_kernel_handle_t KernelH, cl_device_id Dev,
-                                  unsigned DeviceI, _cl_command_run *RunCmd) {
+bool Level0CmdList::setupKernelArgs(ze_kernel_handle_t KernelH, cl_device_id Dev,
+                                    unsigned DeviceI, _cl_command_run *RunCmd) {
   cl_kernel Kernel = RunCmd->kernel;
   struct pocl_argument *PoclArg = RunCmd->arguments;
 
@@ -1823,11 +1822,10 @@ void Level0CmdList::runNDRangeKernel(_cl_command_run *RunCmd, cl_device_id Dev,
                                    cl_kernel Kernel, unsigned DeviceI,
                                    pocl_buffer_migration_info *MigInfos) {
   struct pocl_context *PoclCtx = &RunCmd->pc;
-
+  ze_kernel_handle_t KernelH = nullptr;
+  Level0KernelBase *L0KernelB = nullptr;
   assert(Program->data[DeviceI] != nullptr);
-  Level0SpecProgram *L0Program = (Level0SpecProgram *)Program->data[DeviceI];
   assert(Kernel->data[DeviceI] != nullptr);
-  Level0SpecKernel *L0Kernel = (Level0SpecKernel *)Kernel->data[DeviceI];
 
   uint32_t TotalWGsX = PoclCtx->num_groups[0];
   uint32_t TotalWGsY = PoclCtx->num_groups[1];
@@ -1849,13 +1847,25 @@ void Level0CmdList::runNDRangeKernel(_cl_command_run *RunCmd, cl_device_id Dev,
 
   unsigned TotalLocalWGSize =
       PoclCtx->local_size[0] * PoclCtx->local_size[1] * PoclCtx->local_size[2];
-  ze_kernel_handle_t KernelH = nullptr;
-  ze_module_handle_t ModuleH = nullptr;
-  bool Res = Device->getBestKernel(L0Program, L0Kernel, Needs64bitPtrs,
-                                   TotalLocalWGSize, ModuleH, KernelH);
-  assert(Res == true);
+
+  if (Program->program_il == nullptr) {
+    Level0NativeProgram *L0Program = (Level0NativeProgram *)Program->data[DeviceI];
+    Level0NativeKernel *L0Kernel = (Level0NativeKernel *)Kernel->data[DeviceI];
+    KernelH = L0Kernel->getHandle();
+    assert(KernelH);
+    L0KernelB = L0Kernel;
+  } else {
+    Level0SpecProgram *L0Program = (Level0SpecProgram *)Program->data[DeviceI];
+    ze_module_handle_t ModuleH = nullptr;
+    Level0SpecKernel *L0Kernel = (Level0SpecKernel *)Kernel->data[DeviceI];
+    bool Res = Device->getBestKernel(L0Program, L0Kernel, Needs64bitPtrs,
+                                     TotalLocalWGSize, ModuleH, KernelH);
+    assert(Res == true);
+    L0KernelB = L0Kernel;
+  }
+
   assert(KernelH);
-  assert(ModuleH);
+  assert(L0KernelB);
 
   // zeKernelSetCacheConfig();
 
@@ -1865,15 +1875,15 @@ void Level0CmdList::runNDRangeKernel(_cl_command_run *RunCmd, cl_device_id Dev,
   // zeCommandListAppendKernel
   // TODO this might be not enough: we might need to hold the lock until after
   // zeQueueSubmit
-  std::lock_guard<std::mutex> KernelLockGuard(L0Kernel->getMutex());
+  std::lock_guard<std::mutex> KernelLockGuard(L0KernelB->getMutex());
 
-  ze_kernel_indirect_access_flags_t Flags = L0Kernel->getIndirectFlags();
+  ze_kernel_indirect_access_flags_t Flags = L0KernelB->getIndirectFlags();
   if (Flags != 0) {
     ze_result_t Res = zeKernelSetIndirectAccess(KernelH, Flags);
     LEVEL0_CHECK_ABORT(Res);
   }
   const std::map<void *, size_t> &AccessedPointers =
-      L0Kernel->getAccessedPointers();
+      L0KernelB->getAccessedPointers();
   for (auto &I : AccessedPointers) {
     void *Ptr = I.first;
     size_t Size = I.second;
@@ -1887,7 +1897,7 @@ void Level0CmdList::runNDRangeKernel(_cl_command_run *RunCmd, cl_device_id Dev,
     assert(Res == ZE_RESULT_SUCCESS);
   }
 
-  if (setupKernelArgs(ModuleH, KernelH, Dev, DeviceI, RunCmd)) {
+  if (setupKernelArgs(KernelH, Dev, DeviceI, RunCmd)) {
     POCL_MSG_ERR("Level0: Failed to setup kernel arguments\n");
     return;
   }
@@ -4188,62 +4198,23 @@ int Level0Device::createSpirvProgram(cl_program Program, cl_uint DeviceI) {
 
 int Level0Device::createGPUBinaryProgram(cl_program Program, cl_uint DeviceI) {
 
-    cl_device_id Dev = Program->devices[DeviceI];
+  cl_device_id Dev = Program->devices[DeviceI];
 
-    // std::vector<uint8_t> Spirv(Program->program_il,
-    //                            Program->program_il + Program->program_il_size);
+  unsigned char *BinaryPtr = Program->binaries[DeviceI];
+  size_t BinarySize = Program->binary_sizes[DeviceI];
+  std::vector<uint8_t> GPUBinary(BinaryPtr, BinaryPtr + BinarySize);
+  assert(GPUBinary.size() > 10);
+  assert(Program->data[DeviceI] == nullptr);
 
-    std::vector<char> ProgramBC;
-    char *BinaryPtr = (char *)Program->binaries[DeviceI];
-    size_t BinarySize = Program->binary_sizes[DeviceI];
-    int TestR = pocl_bitcode_is_triple(BinaryPtr, BinarySize, "spir");
-    assert(TestR && "Program->binaries[] is not LLVM bitcode!");
-    ProgramBC.insert(ProgramBC.end(), BinaryPtr, BinaryPtr + BinarySize);
+  char ProgramCacheDir[POCL_MAX_PATHNAME_LENGTH];
+  pocl_cache_program_path(ProgramCacheDir, Program, DeviceI);
 
-    assert(Program->data[DeviceI] == nullptr);
-    char ProgramCacheDir[POCL_MAX_PATHNAME_LENGTH];
-    pocl_cache_program_path(ProgramCacheDir, Program, DeviceI);
+  bool Optimize = Program->parsed_options.cl_opt_disable == 0;
 
-    std::vector<uint32_t> SpecConstantIDs;
-    std::vector<const void *> SpecConstantPtrs;
-    std::vector<size_t> SpecConstantSizes;
-
-    if (Program->num_spec_consts != 0u) {
-        for (size_t i = 0; i < Program->num_spec_consts; ++i) {
-            if (Program->spec_const_is_set[i] == CL_FALSE) {
-                continue;
-            }
-            SpecConstantIDs.push_back(Program->spec_const_ids[i]);
-            SpecConstantPtrs.push_back(&Program->spec_const_values[i]);
-            SpecConstantSizes.push_back(sizeof(uint64_t));
-        }
-    }
-
-    std::string UserJITPref(pocl_get_string_option("POCL_LEVEL0_JIT", "auto"));
-    bool JITCompilation = false;
-    if (UserJITPref == "0")
-        JITCompilation = false;
-    else if (UserJITPref == "1")
-        JITCompilation = true;
-    else {
-        // use heuristic
-        if (UserJITPref != "auto")
-            POCL_MSG_WARN("unknown option given to POCL_LEVEL0_JIT: '%s' \n",
-                          UserJITPref.c_str());
-        JITCompilation =
-            (Program->num_kernels > 256 && Program->program_il_size > 128000);
-    }
-    POCL_MSG_PRINT_LEVEL0("createProgram | using JIT: %s\n",
-                          (JITCompilation ? "YES" : "NO"));
-
-    bool Optimize = Program->parsed_options.cl_opt_disable == 0;
-
-    std::string BuildLog;
-    Level0SpecProgram *ProgramData = Driver->getJobSched().createProgram(
-        ContextHandle, DeviceHandle, JITCompilation, BuildLog, Optimize,
-        Supports64bitBuffers, SpecConstantIDs.size(), SpecConstantIDs.data(),
-        SpecConstantPtrs.data(), SpecConstantSizes.data(), Spirv, ProgramBC,
-        ProgramCacheDir, KernelCacheHash);
+  std::string BuildLog;
+  Level0NativeProgram *ProgramData = Driver->getJobSched().createNativeProgram(
+        ContextHandle, DeviceHandle, BuildLog, Optimize,
+        GPUBinary, ProgramCacheDir, KernelCacheHash);
 
     if (ProgramData == nullptr) {
         if (!BuildLog.empty()) {
@@ -4314,6 +4285,10 @@ int Level0Device::freeProgram(cl_program Program, cl_uint DeviceI) {
 #else
     return CL_OUT_OF_RESOURCES;
 #endif
+  } else if (Program->program_il == nullptr) {
+    Level0NativeProgram *ProgramData = (Level0NativeProgram *)Program->data[DeviceI];
+    Driver->getJobSched().releaseNativeProgram(ProgramData);
+    Program->data[DeviceI] = nullptr;
   } else {
     Level0SpecProgram *ProgramData = (Level0SpecProgram *)Program->data[DeviceI];
     Driver->getJobSched().releaseProgram(ProgramData);
@@ -4334,6 +4309,9 @@ int Level0Device::createKernel(cl_program Program, cl_kernel Kernel,
 #else
     return CL_OUT_OF_RESOURCES;
 #endif
+  } else if (Program->program_il == nullptr) {
+      Level0NativeProgram *L0Program = (Level0NativeProgram *)Program->data[ProgramDeviceI];
+      Kernel->data[ProgramDeviceI] = L0Program->createKernel(Kernel->name);
   } else {
     Level0SpecProgram *L0Program = (Level0SpecProgram *)Program->data[ProgramDeviceI];
     Level0SpecKernel *Ker =
@@ -4358,10 +4336,14 @@ int Level0Device::freeKernel(cl_program Program, cl_kernel Kernel,
 #else
     return CL_OUT_OF_RESOURCES;
 #endif
+  } else if (Program->program_il == nullptr) {
+    Level0NativeProgram *L0Program = (Level0NativeProgram *)Program->data[ProgramDeviceI];
+    Level0NativeKernel *L0Ker = (Level0NativeKernel *)Kernel->data[ProgramDeviceI];
+    Res = L0Program->releaseKernel(L0Ker);
   } else {
     Level0SpecProgram *L0Program = (Level0SpecProgram *)Program->data[ProgramDeviceI];
-    Level0SpecKernel *Ker = (Level0SpecKernel *)Kernel->data[ProgramDeviceI];
-    Res = Driver->getJobSched().releaseKernel(L0Program, Ker);
+    Level0SpecKernel *L0Ker = (Level0SpecKernel *)Kernel->data[ProgramDeviceI];
+    Res = Driver->getJobSched().releaseKernel(L0Program, L0Ker);
   }
 
   return Res == true ? CL_SUCCESS : CL_INVALID_KERNEL;

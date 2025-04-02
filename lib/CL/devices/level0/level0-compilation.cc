@@ -69,7 +69,7 @@ static std::string getStringHash(const std::string &Input) {
   return getStringHash((const uint8_t *)Input.data(), Input.size());
 }
 
-Level0SpecKernel::Level0SpecKernel(const std::string N) : Name(N) {
+Level0KernelBase::Level0KernelBase(const std::string N) : Name(N) {
   CacheUUID = getStringHash(N);
 }
 
@@ -125,7 +125,7 @@ ze_kernel_handle_t Level0SpecKernel::getAnyCreated() {
   }
 }
 
-void Level0SpecKernel::setIndirectAccess(
+void Level0KernelBase::setIndirectAccess(
     ze_kernel_indirect_access_flag_t AccessFlag, bool Value) {
   std::lock_guard<std::mutex> LockGuard(Mutex);
   if (Value) { // set flag
@@ -151,10 +151,17 @@ void Level0SpecKernel::setIndirectAccess(
   }
 }
 
-void Level0SpecKernel::setAccessedPointers(const std::map<void *, size_t> &Ptrs) {
+void Level0KernelBase::setAccessedPointers(const std::map<void *, size_t> &Ptrs) {
   std::lock_guard<std::mutex> LockGuard(Mutex);
   AccessedPointers = Ptrs;
 }
+
+Level0NativeKernel::~Level0NativeKernel() {
+  if (KernelH)
+    zeKernelDestroy(KernelH);
+}
+
+/***************************************************************************/
 
 Level0SpecProgram::~Level0SpecProgram() {
   std::lock_guard<std::mutex> LockGuard(Mutex);
@@ -183,8 +190,6 @@ static ze_result_t getTargetSpvVersion(ze_device_handle_t Dev,
   assert(VersionOut.major && "Unexpected SPIR-V version!");
   return Result;
 }
-
-/***************************************************************************/
 
 Level0SpecProgram::Level0SpecProgram(ze_context_handle_t Ctx, ze_device_handle_t Dev,
                              bool EnableJIT, bool Optimize, uint32_t NumSpecs,
@@ -379,16 +384,17 @@ Level0JITProgramBuild *Level0SpecProgram::getLinkinBuild(BuildSpecialization Spe
 
 Level0SpecKernel *Level0SpecProgram::createKernel(const std::string Name) {
   std::lock_guard<std::mutex> LockGuard(Mutex);
-  Level0SpecKernelSPtr Kernel = std::make_shared<Level0SpecKernel>(Name);
+  Level0SpecKernelUPtr Kernel = std::make_unique<Level0SpecKernel>(Name);
+  Level0SpecKernel *RetVal = Kernel.get();
   Kernels.push_back(Kernel);
-  return Kernel.get();
+  return RetVal;
 }
 
 bool Level0SpecProgram::releaseKernel(Level0SpecKernel *Kernel) {
   std::lock_guard<std::mutex> LockGuard(Mutex);
 
   auto Iter = std::find_if(Kernels.begin(), Kernels.end(),
-      [&Kernel](Level0SpecKernelSPtr &K) { return K.get() == Kernel; });
+      [&Kernel](Level0SpecKernelUPtr &K) { return K.get() == Kernel; });
 
   if (Iter == Kernels.end())
     return false;
@@ -480,29 +486,38 @@ Level0NativeProgram::Level0NativeProgram(ze_context_handle_t Ctx,
     NativeBinary(GPUBinary) { }
 
 bool Level0NativeProgram::init() {
-  BuildSpecialization S;
-  Build.reset(new Level0Build());
+
 }
 
 Level0NativeProgram::~Level0NativeProgram() {
   std::lock_guard<std::mutex> LockGuard(Mutex);
   Kernels.clear();
+  if (ModuleH)
+    zeModuleDestroy(ModuleH);
 }
 
 // TODO these should be refactored
-// (identical to Level0Program::{create,release}Kernel)
-Level0SpecKernel *Level0NativeProgram::createKernel(const std::string Name) {
+Level0NativeKernel *Level0NativeProgram::createKernel(const std::string &Name) {
   std::lock_guard<std::mutex> LockGuard(Mutex);
-  Level0SpecKernelSPtr Kernel = std::make_shared<Level0SpecKernel>(Name);
+  ze_kernel_handle_t KernelH = nullptr;
+  ze_kernel_flags_t Flags = ZE_KERNEL_FLAG_EXPLICIT_RESIDENCY;
+  ze_kernel_desc_t Desc = {
+    ZE_STRUCTURE_TYPE_KERNEL_DESC, nullptr, Flags, Name.c_str()
+  };
+  ze_result_t Res = zeKernelCreate(ModuleH, &Desc, &KernelH);
+  if (Res != ZE_RESULT_SUCCESS)
+    return nullptr;
+  Level0NativeKernelUPtr Kernel = std::make_unique<Level0NativeKernel>(Name, KernelH);
+  Level0NativeKernel *RetVal = Kernel.get();
   Kernels.push_back(Kernel);
-  return Kernel.get();
+  return RetVal;
 }
 
-bool Level0NativeProgram::releaseKernel(Level0SpecKernel *Kernel) {
+bool Level0NativeProgram::releaseKernel(Level0NativeKernel *Kernel) {
   std::lock_guard<std::mutex> LockGuard(Mutex);
 
   auto Iter = std::find_if(Kernels.begin(), Kernels.end(),
-      [&Kernel](Level0SpecKernelSPtr &K) { return K.get() == Kernel; });
+      [&Kernel](Level0NativeKernelUPtr &K) { return K.get() == Kernel; });
 
   if (Iter == Kernels.end())
     return false;
@@ -511,6 +526,7 @@ bool Level0NativeProgram::releaseKernel(Level0SpecKernel *Kernel) {
   return true;
 }
 
+/*
 bool Level0NativeProgram::getBestKernel(Level0SpecKernel *Kernel,
                                         ze_module_handle_t &Mod,
                                         ze_kernel_handle_t &Ker) {
@@ -527,6 +543,7 @@ bool Level0NativeProgram::getBestKernel(Level0SpecKernel *Kernel,
   Ker = Kernel->getOrCreateForBuild(NativeBuild.get());
   return true;
 }
+*/
 
 /***************************************************************************/
 
@@ -802,6 +819,7 @@ Level0SpecBuild::~Level0SpecBuild() {
 
 /***************************************************************************/
 
+/*
 Level0NativeBuild::~Level0NativeBuild() {
   if (ModuleH != nullptr) {
     zeModuleDestroy(ModuleH);
@@ -820,6 +838,7 @@ bool Level0NativeBuild::compareSameClass(Level0BuildBase *Other) {
   Level0NativeBuild *OtherBuild = static_cast<Level0NativeBuild *>(Other);
   return Program == OtherBuild->Program;
 }
+*/
 
 /*
 void Level0NativeBuild::run(ze_context_handle_t ContextH) {

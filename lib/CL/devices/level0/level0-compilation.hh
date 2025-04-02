@@ -115,8 +115,13 @@ struct BuildSpecialization {
   }
 };
 
+class Level0KernelBase;
+
 class Level0SpecKernel;
-typedef std::shared_ptr<Level0SpecKernel> Level0SpecKernelSPtr;
+typedef std::unique_ptr<Level0SpecKernel> Level0SpecKernelUPtr;
+
+class Level0NativeKernel;
+typedef std::unique_ptr<Level0NativeKernel> Level0NativeKernelUPtr;
 
 class Level0ProgramBase;
 typedef std::shared_ptr<Level0ProgramBase> Level0ProgramBaseSPtr;
@@ -136,8 +141,8 @@ typedef std::unique_ptr<Level0SpecBuild> Level0SpecBuildUPtr;
 class Level0ProgramBuild;
 typedef std::unique_ptr<Level0ProgramBuild> Level0ProgramBuildUPtr;
 
-class Level0NativeBuild;
-typedef std::unique_ptr<Level0NativeBuild> Level0NativeBuildUPtr;
+// class Level0NativeBuild;
+// typedef std::unique_ptr<Level0NativeBuild> Level0NativeBuildUPtr;
 
 class Level0KernelBuild;
 typedef std::unique_ptr<Level0KernelBuild> Level0KernelBuildUPtr;
@@ -166,6 +171,43 @@ typedef std::unique_ptr<Level0BuiltinProgramBuild>
 using L0KernelGetArgumentSize = decltype(&zexKernelGetArgumentSize);
 using L0KernelGetArgumentType = decltype(&zexKernelGetArgumentType);
 
+// abstract base class for ZE kernels
+class Level0KernelBase {
+public:
+    Level0KernelBase(const std::string N);
+    virtual ~Level0KernelBase() = 0;
+
+    Level0KernelBase(Level0KernelBase const &) = delete;
+    Level0KernelBase &operator=(Level0KernelBase const &) = delete;
+    Level0KernelBase(Level0KernelBase const &&) = delete;
+    Level0KernelBase &operator=(Level0KernelBase &&) = delete;
+
+    /// this is necessary for the Level0Queue's run() function to lock the kernel
+    std::mutex &getMutex() { return Mutex; }
+
+    const std::string &getName() { return Name; }
+    const std::string &getCacheUUID() { return CacheUUID; }
+
+    void setIndirectAccess(ze_kernel_indirect_access_flag_t AccessFlag,
+                           bool Value);
+    void setAccessedPointers(const std::map<void *, size_t> &Ptrs);
+    ze_kernel_indirect_access_flags_t getIndirectFlags() {
+        return IndirectAccessFlags;
+    }
+    const std::map<void *, size_t> &getAccessedPointers() {
+        return AccessedPointers;
+    }
+
+protected:
+    /// for indirect access
+    std::map<void *, size_t> AccessedPointers;
+    ze_kernel_indirect_access_flags_t IndirectAccessFlags = 0;
+    std::mutex Mutex;
+    std::string Name;
+    std::string CacheUUID;
+};
+
+
 ///
 /// \brief Stores a map of Specializations to ZE kernel+module handles,
 ///        for a particular cl_kernel + device (= kernel->data[device_i])
@@ -174,55 +216,62 @@ using L0KernelGetArgumentType = decltype(&zexKernelGetArgumentType);
 /// needed. If the program was created with lazy-compilation, this triggers a
 /// new compilation
 ///
-class Level0SpecKernel {
+class Level0SpecKernel : public Level0KernelBase {
 
 public:
-  Level0SpecKernel(const std::string N);
-  ~Level0SpecKernel();
+  Level0SpecKernel(const std::string N) : Level0KernelBase(N) {}
+  virtual ~Level0SpecKernel();
 
   Level0SpecKernel(Level0SpecKernel const &) = delete;
   Level0SpecKernel& operator=(Level0SpecKernel const &) = delete;
   Level0SpecKernel(Level0SpecKernel const &&) = delete;
   Level0SpecKernel& operator=(Level0SpecKernel &&) = delete;
 
-  /// this is necessary for the Level0Queue's run() function to lock the kernel
-  std::mutex &getMutex() { return Mutex; }
-
   ///  returns any existing handle.
   /// Used only in pocl_level0_local_size_optimizer() for zeKernelSuggestGroupSize().
   /// For getting a handle for running a kernel, use Level0Program->getBestKernel() ///
   ze_kernel_handle_t getAnyCreated();
-
-  const std::string &getName() { return Name; }
-  const std::string &getCacheUUID() { return CacheUUID; }
-
-  void setIndirectAccess(ze_kernel_indirect_access_flag_t AccessFlag,
-                         bool Value);
-  void setAccessedPointers(const std::map<void *, size_t> &Ptrs);
-  ze_kernel_indirect_access_flags_t getIndirectFlags() {
-    return IndirectAccessFlags;
-  }
-  const std::map<void *, size_t> &getAccessedPointers() {
-    return AccessedPointers;
-  }
 
   /// returns (or creates a new) ze_kernel_handle_t + ze_module_handle_t
   /// for a particular program build specialization
   ze_kernel_handle_t getOrCreateForBuild(Level0SpecBuild *Build);
 
 private:
-  std::mutex Mutex;
   /// map of program build specializations to Kernel handles
   std::map<BuildSpecialization, ze_kernel_handle_t> KernelHandles;
-  /// for indirect access
-  std::map<void *, size_t> AccessedPointers;
-
-  std::string Name;
-  std::string CacheUUID;
-  ze_kernel_indirect_access_flags_t IndirectAccessFlags = 0;
 
   bool createForBuild(BuildSpecialization Spec, ze_module_handle_t Mod);
 };
+
+
+///
+/// \brief Stores a map of Specializations to ZE kernel+module handles,
+///        for a particular cl_kernel + device (= kernel->data[device_i])
+///
+/// New handles are dynamically created by getOrCreateForBuild() when they're
+/// needed. If the program was created with lazy-compilation, this triggers a
+/// new compilation
+///
+class Level0NativeKernel : public Level0KernelBase {
+
+public:
+    Level0NativeKernel(const std::string N, ze_kernel_handle_t KH)
+        : Level0KernelBase(N), KernelH(KH) {}
+    virtual ~Level0NativeKernel();
+
+    Level0NativeKernel(Level0NativeKernel const &) = delete;
+    Level0NativeKernel& operator=(Level0NativeKernel const &) = delete;
+    Level0NativeKernel(Level0NativeKernel const &&) = delete;
+    Level0NativeKernel& operator=(Level0NativeKernel &&) = delete;
+
+    ze_kernel_handle_t getHandle() { return KernelH; }
+
+private:
+    /// map of program build specializations to Kernel handles
+    ze_kernel_handle_t KernelH;
+};
+
+
 
 class Level0ProgramBase {
 public:
@@ -347,7 +396,7 @@ private:
   /// pocl::ProgramWithContext object, has its own lock
   void *ProgramLLVMCtx;
 
-  std::list<Level0SpecKernelSPtr> Kernels;
+  std::list<Level0SpecKernelUPtr> Kernels;
 
   ////////////////////////////////////////////////////////////////////////
 
@@ -399,11 +448,6 @@ public:
 
     // bool isOptimized() const { return Optimize; }
 
-    /// for cl_kernel creation device->ops callback
-    Level0SpecKernel *createKernel(const std::string Name);
-    /// for cl_kernel deletion device->ops callback
-    bool releaseKernel(Level0SpecKernel *Kernel);
-
     ///
     /// \brief returns the best available specialization of a Kernel,
     ///        for the given set of specialization options (currently just one).
@@ -412,41 +456,34 @@ public:
     /// \param [out] Ker the ze_kernel_handle_t of the found specialization, or null
     /// \returns false if can't find any build specialization
     ///
-    bool getBestKernel(Level0SpecKernel *Kernel,
-                       ze_module_handle_t &Mod,
-                       ze_kernel_handle_t &Ker);
+    // ze_kernel_handle_t createKernel(const std::string &Name);
+    // bool freeKernel(ze_kernel_handle_t Ker);
+    bool getKernelNames(std::vector<std::string> &Names);
+
+    /// for cl_kernel creation device->ops callback
+    Level0NativeKernel *createKernel(const std::string &Name);
+    /// for cl_kernel deletion device->ops callback
+    bool releaseKernel(Level0NativeKernel *Kernel);
 
 private:
     std::vector<uint8_t> NativeBinary;
-    Level0NativeBuildUPtr NativeBuild;
-    std::list<Level0SpecKernelSPtr> Kernels;
+    ze_module_handle_t ModuleH;
+    // Level0NativeBuildUPtr NativeBuild;
+    std::list<Level0NativeKernelUPtr> Kernels;
     // bool Optimize;
 };
 
 
 #ifdef ENABLE_NPU
-class Level0BuiltinKernel {
+class Level0BuiltinKernel : public Level0KernelBase {
 public:
-  Level0BuiltinKernel(const std::string N); //, ze_graph_handle_t G);
-  ~Level0BuiltinKernel() {};
+  Level0BuiltinKernel(const std::string N) : Level0KernelBase(N) {}
+  virtual ~Level0BuiltinKernel() {};
 
   Level0BuiltinKernel(Level0BuiltinKernel const &) = delete;
   Level0BuiltinKernel &operator=(Level0BuiltinKernel const &) = delete;
   Level0BuiltinKernel(Level0BuiltinKernel const &&) = delete;
   Level0BuiltinKernel &operator=(Level0BuiltinKernel &&) = delete;
-
-  /// this is necessary for the Level0Queue's run() function to lock the kernel
-  std::mutex &getMutex() { return Mutex; }
-
-  const std::string &getName() { return Name; }
-  const std::string &getCacheUUID() { return CacheUUID; }
-
-private:
-  std::mutex Mutex;
-  ze_graph_handle_t GraphH;
-
-  std::string Name;
-  std::string CacheUUID;
 };
 
 class Level0BuiltinProgram : public Level0ProgramBase {
@@ -586,6 +623,7 @@ protected:
   BuildSpecialization Spec;
 };
 
+/*
 class Level0NativeBuild : public Level0BuildBase {
 
 public:
@@ -614,10 +652,10 @@ public:
 
   virtual bool compareSameClass(Level0BuildBase *Other) override;
 
-/*
+
   /// tries loading the binary in the provided context
-  virtual void run(ze_context_handle_t ContextH) override;
-*/
+//  virtual void run(ze_context_handle_t ContextH) override;
+
 
 protected:
   /// compiled binary in ZE native format
@@ -631,6 +669,8 @@ protected:
 
   // BuildSpecialization Spec;
 };
+*/
+
 
 #ifdef ENABLE_NPU
 struct Level0BuiltinKernelBuildResult {
@@ -1030,10 +1070,29 @@ public:
                      unsigned LocalWGSize,
                      ze_module_handle_t &Mod,
                      ze_kernel_handle_t &Ker);
+  /*********************** native binaries ***********************/
 
   bool supportsBinary(ze_device_handle_t DeviceH,
                       ze_context_handle_t ContextH,
                       const char *Binary, size_t Length);
+
+  TODO;
+  Level0NativeProgram *createNativeProgram(ze_context_handle_t Ctx, ze_device_handle_t Dev,
+                                           std::string &BuildLog, bool Optimize,
+                                           std::vector<uint8_t> &GPUBinary,
+                                           const char *CDir, const std::string &UUID);
+  TODO;
+  bool releaseNativeProgram(Level0NativeProgram *Prog);
+
+  Level0NativeKernel *createNativeKernel(Level0NativeProgram *Prog,
+                                           const char *Name);
+
+  bool releaseNativeKernel(Level0NativeProgram *Prog,
+                            Level0NativeKernel *Kernel);
+
+  bool getBestNativeKernel(Level0NativeProgram *Program,
+                            Level0NativeKernel *Kernel,
+                            ze_graph_handle_t &Graph);
 
 #ifdef ENABLE_NPU
   Level0BuiltinProgram *
@@ -1055,6 +1114,8 @@ public:
                             Level0BuiltinKernel *Kernel,
                             ze_graph_handle_t &Graph);
 #endif
+
+
 
 private:
   std::mutex ProgramsLock;

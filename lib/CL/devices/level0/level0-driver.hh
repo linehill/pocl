@@ -207,7 +207,7 @@ private:
                   size_t *sizes);
   void svmAdvise(const void *ptr, size_t size, cl_mem_advice_intel advice);
 
-  bool setupKernelArgs(ze_module_handle_t ModuleH, ze_kernel_handle_t KernelH,
+  bool setupKernelArgs(ze_kernel_handle_t KernelH,
                        cl_device_id Dev, unsigned DeviceI,
                        _cl_command_run *RunCmd);
   void runWithOffsets(struct pocl_context *PoclCtx, ze_kernel_handle_t KernelH);
