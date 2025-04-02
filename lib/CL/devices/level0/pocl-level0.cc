@@ -1154,9 +1154,7 @@ static int pocl_level0_setup_lz_metadata(cl_device_id Device,
   assert(Program->data[ProgramDeviceI] != nullptr);
   Level0NativeProgram *L0Prog = (Level0NativeProgram *)Program->data[ProgramDeviceI];
 
-  std::vector<std::string> KernelNames;
-  if (!L0Prog->getKernelNames(KernelNames))
-    return 0;
+  const std::vector<std::string> &KernelNames = L0Prog->getKernelNames();
   Program->num_kernels = KernelNames.size();
 
   if (Program->num_kernels == 0) {
@@ -1169,19 +1167,13 @@ static int pocl_level0_setup_lz_metadata(cl_device_id Device,
 
   for (uint32_t Idx = 0; Idx < Program->num_kernels; ++Idx) {
 
-    if (L0Prog->getKernelMetadata(KernelNames[Idx]))
+    Level0NativeKernel *K = L0Prog->createKernel(KernelNames[Idx]);
+    pocl_kernel_metadata_t *Meta = &Program->kernel_meta[Idx];
+    if (K == nullptr)
       return 0;
     // ZE kernel metadata; TODO with JIT, we don't have the ZE module
     // to extract the metadata - this needs to be extracted from SPIR-V
     // required workgroup size, attributes, subgroups, priv/local mem sizes
-    {
-      ze_module_handle_t ModuleH = ProgramSPtr->get()->getAnyHandle();
-      ze_kernel_handle_t HKernel = nullptr;
-      ze_kernel_desc_t KernelDesc = {
-          ZE_STRUCTURE_TYPE_KERNEL_DESC, nullptr,
-          0, // flags | ZE_KERNEL_FLAG_FORCE_RESIDENCY
-          Meta->name};
-      LEVEL0_CHECK_RET(0, zeKernelCreate(ModuleH, &KernelDesc, &HKernel));
 
       ze_kernel_preferred_group_size_properties_t PrefGroupSize = {
           ZE_STRUCTURE_TYPE_KERNEL_PREFERRED_GROUP_SIZE_PROPERTIES, NULL, 0};
@@ -1206,7 +1198,7 @@ static int pocl_level0_setup_lz_metadata(cl_device_id Device,
         Meta->attributes = strdup(AttrString);
       }
 
-      LEVEL0_CHECK_RET(0, zeKernelDestroy(HKernel));
+
 
       Meta->max_subgroups[ProgramDeviceI] = KernelProps.maxSubgroupSize;
       Meta->compile_subgroups[ProgramDeviceI] =
@@ -1227,9 +1219,6 @@ static int pocl_level0_setup_lz_metadata(cl_device_id Device,
       /// or zero if there is no required subgroup size
       uint32_t requiredSubgroupSize;
 #endif
-    }
-
-    ++Idx;
   }
 
   return 1;
