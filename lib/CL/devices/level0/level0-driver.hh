@@ -462,7 +462,7 @@ public:
                    unsigned ProgramDeviceI);
   int freeKernel(cl_program Program, cl_kernel Kernel, unsigned ProgramDeviceI);
 
-  bool getBestKernel(Level0Program *Program, Level0Kernel *Kernel,
+  bool getBestKernel(Level0SpecProgram *Program, Level0SpecKernel *Kernel,
                      bool LargeOffset, unsigned LocalWGSize,
                      ze_module_handle_t &Mod, ze_kernel_handle_t &Ker);
 
@@ -472,13 +472,13 @@ public:
                             ze_graph_handle_t &Graph);
 #endif
 
-  bool getMemfillKernel(unsigned PatternSize, Level0Kernel **L0Kernel,
+  bool getMemfillKernel(unsigned PatternSize, Level0SpecKernel **L0Kernel,
                         ze_module_handle_t &ModH, ze_kernel_handle_t &KerH);
 
   bool getImagefillKernel(cl_channel_type ChType,
                           cl_channel_order ChOrder,
                           cl_mem_object_type ImgType,
-                          Level0Kernel **L0Kernel,
+                          Level0SpecKernel **L0Kernel,
                           ze_module_handle_t &ModH,
                           ze_kernel_handle_t &KerH);
 
@@ -503,9 +503,9 @@ public:
   void getMaxWGs(uint32_t_3 *MaxWGs);
   uint32_t getMaxWGSize() { return ClDev->max_work_group_size; }
   // max WorkGroup size for a particular Kernel
-  uint32_t getMaxWGSizeForKernel(Level0Kernel *Kernel);
+  uint32_t getMaxWGSizeForKernel(Level0SpecKernel *Kernel);
   // max SubGroup size for a particular Kernel
-  uint32_t getMaxSGSizeForKernel(Level0Kernel *Kernel) {
+  uint32_t getMaxSGSizeForKernel(Level0SpecKernel *Kernel) {
     // TODO we should get the real value from the L0 API somehow
     return 8;
   }
@@ -566,8 +566,8 @@ private:
   std::mutex EventPoolLock;
   std::deque<Level0EventPool> EventPools;
 
-  std::map<std::string, Level0Kernel *> MemfillKernels;
-  std::map<std::string, Level0Kernel *> ImagefillKernels;
+  std::map<std::string, Level0SpecKernel *> MemfillKernels;
+  std::map<std::string, Level0SpecKernel *> ImagefillKernels;
   Level0AllocatorSPtr Alloc;
 
   alignas(64)
@@ -602,8 +602,8 @@ private:
   ze_device_properties_t DeviceProperties;
   uint32_t DeviceIPVersion;
 
-  Level0Program *MemfillProgram;
-  Level0Program *ImagefillProgram;
+  Level0SpecProgram *MemfillProgram;
+  Level0SpecProgram *ImagefillProgram;
 
   // TODO: it seems libze just returs zeroes for KernelUUID
   ze_native_kernel_uuid_t KernelUUID;

@@ -69,11 +69,11 @@ static std::string getStringHash(const std::string &Input) {
   return getStringHash((const uint8_t *)Input.data(), Input.size());
 }
 
-Level0Kernel::Level0Kernel(const std::string N) : Name(N) {
+Level0SpecKernel::Level0SpecKernel(const std::string N) : Name(N) {
   CacheUUID = getStringHash(N);
 }
 
-Level0Kernel::~Level0Kernel() {
+Level0SpecKernel::~Level0SpecKernel() {
   for (auto &Pair : KernelHandles) {
     ze_kernel_handle_t Kern = Pair.second;
     ze_result_t Res = zeKernelDestroy(Kern);
@@ -83,7 +83,7 @@ Level0Kernel::~Level0Kernel() {
   }
 }
 
-bool Level0Kernel::createForBuild(BuildSpecialization Spec,
+bool Level0SpecKernel::createForBuild(BuildSpecialization Spec,
                                   ze_module_handle_t Mod) {
   ze_kernel_handle_t KernelH = nullptr;
   ze_module_handle_t ModuleH = Mod;
@@ -102,7 +102,7 @@ bool Level0Kernel::createForBuild(BuildSpecialization Spec,
   return true;
 }
 
-ze_kernel_handle_t Level0Kernel::getOrCreateForBuild(Level0Build *Build) {
+ze_kernel_handle_t Level0SpecKernel::getOrCreateForBuild(Level0SpecBuild *Build) {
   std::lock_guard<std::mutex> LockGuard(Mutex);
   BuildSpecialization Spec = Build->getSpec();
   ze_module_handle_t Mod = Build->getModuleHandle();
@@ -116,7 +116,7 @@ ze_kernel_handle_t Level0Kernel::getOrCreateForBuild(Level0Build *Build) {
   return KernelHandles[Spec];
 }
 
-ze_kernel_handle_t Level0Kernel::getAnyCreated() {
+ze_kernel_handle_t Level0SpecKernel::getAnyCreated() {
   std::lock_guard<std::mutex> LockGuard(Mutex);
   if (KernelHandles.empty()) {
     return nullptr;
@@ -125,7 +125,7 @@ ze_kernel_handle_t Level0Kernel::getAnyCreated() {
   }
 }
 
-void Level0Kernel::setIndirectAccess(
+void Level0SpecKernel::setIndirectAccess(
     ze_kernel_indirect_access_flag_t AccessFlag, bool Value) {
   std::lock_guard<std::mutex> LockGuard(Mutex);
   if (Value) { // set flag
@@ -151,12 +151,12 @@ void Level0Kernel::setIndirectAccess(
   }
 }
 
-void Level0Kernel::setAccessedPointers(const std::map<void *, size_t> &Ptrs) {
+void Level0SpecKernel::setAccessedPointers(const std::map<void *, size_t> &Ptrs) {
   std::lock_guard<std::mutex> LockGuard(Mutex);
   AccessedPointers = Ptrs;
 }
 
-Level0Program::~Level0Program() {
+Level0SpecProgram::~Level0SpecProgram() {
   std::lock_guard<std::mutex> LockGuard(Mutex);
   Kernels.clear();
   ProgBuilds.clear();
@@ -184,7 +184,9 @@ static ze_result_t getTargetSpvVersion(ze_device_handle_t Dev,
   return Result;
 }
 
-Level0Program::Level0Program(ze_context_handle_t Ctx, ze_device_handle_t Dev,
+/***************************************************************************/
+
+Level0SpecProgram::Level0SpecProgram(ze_context_handle_t Ctx, ze_device_handle_t Dev,
                              bool EnableJIT, bool Optimize, uint32_t NumSpecs,
                              uint32_t *SpecIDs, const void **SpecValues,
                              size_t *SpecValSizes,
@@ -197,7 +199,7 @@ Level0Program::Level0Program(ze_context_handle_t Ctx, ze_device_handle_t Dev,
   setupSpecConsts(NumSpecs, SpecIDs, SpecValues, SpecValSizes);
 }
 
-bool Level0Program::init() {
+bool Level0SpecProgram::init() {
 
   // InitializeLLVM();
   if (SPIRV.size() <= 20)
@@ -238,7 +240,7 @@ bool Level0Program::init() {
   return true;
 }
 
-bool Level0Program::addFinishedBuild(Level0BuildBaseUPtr B) {
+bool Level0SpecProgram::addFinishedBuild(Level0BuildBaseUPtr B) {
 
   std::lock_guard<std::mutex> LockGuard(Mutex);
   BuildLog.append(B->getBuildLog());
@@ -247,7 +249,7 @@ bool Level0Program::addFinishedBuild(Level0BuildBaseUPtr B) {
          BT == Level0BuildBase::BuildType::JITProgram ||
          BT == Level0BuildBase::BuildType::Program);
 
-  Level0Build *Build = static_cast<Level0Build *>(B.get());
+  Level0SpecBuild *Build = static_cast<Level0SpecBuild *>(B.get());
   if (!Build->isSuccessful() || !Build->loadBinary(ContextH, DeviceH)) {
     BuildLog.append("Error: build not successful or "
                     "couldn't load built binary\n");
@@ -323,13 +325,13 @@ static Build *findBuild(bool MustUseLargeOffsets, bool CanBeSmallWG,
     return AnyRet;
 }
 
-bool Level0Program::getBestKernel(Level0Kernel *Kernel,
+bool Level0SpecProgram::getBestKernel(Level0SpecKernel *Kernel,
                                   bool MustUseLargeOffsets,
                                   bool CanBeSmallWG,
                                   ze_module_handle_t &Mod,
                                   ze_kernel_handle_t &Ker) {
   std::lock_guard<std::mutex> LockGuard(Mutex);
-  Level0Build *Build = nullptr;
+  Level0SpecBuild *Build = nullptr;
   std::string KernelName = Kernel->getName();
   if (JITCompilation) {
     Build = findBuild<Level0KernelBuild>(
@@ -355,7 +357,7 @@ bool Level0Program::getBestKernel(Level0Kernel *Kernel,
   return true;
 }
 
-Level0JITProgramBuild *Level0Program::getLinkinBuild(BuildSpecialization Spec) {
+Level0JITProgramBuild *Level0SpecProgram::getLinkinBuild(BuildSpecialization Spec) {
   std::lock_guard<std::mutex> LockGuard(Mutex);
 
   // try to find exact build first
@@ -375,18 +377,18 @@ Level0JITProgramBuild *Level0Program::getLinkinBuild(BuildSpecialization Spec) {
       [](Level0JITProgramBuild *B) { return false; }, JITProgBuilds);
 }
 
-Level0Kernel *Level0Program::createKernel(const std::string Name) {
+Level0SpecKernel *Level0SpecProgram::createKernel(const std::string Name) {
   std::lock_guard<std::mutex> LockGuard(Mutex);
-  Level0KernelSPtr Kernel = std::make_shared<Level0Kernel>(Name);
+  Level0SpecKernelSPtr Kernel = std::make_shared<Level0SpecKernel>(Name);
   Kernels.push_back(Kernel);
   return Kernel.get();
 }
 
-bool Level0Program::releaseKernel(Level0Kernel *Kernel) {
+bool Level0SpecProgram::releaseKernel(Level0SpecKernel *Kernel) {
   std::lock_guard<std::mutex> LockGuard(Mutex);
 
   auto Iter = std::find_if(Kernels.begin(), Kernels.end(),
-      [&Kernel](Level0KernelSPtr &K) { return K.get() == Kernel; });
+      [&Kernel](Level0SpecKernelSPtr &K) { return K.get() == Kernel; });
 
   if (Iter == Kernels.end())
     return false;
@@ -396,7 +398,7 @@ bool Level0Program::releaseKernel(Level0Kernel *Kernel) {
 }
 
 
-void Level0Program::setupSpecConsts(uint32_t NumSpecs, const uint32_t *SpecIDs,
+void Level0SpecProgram::setupSpecConsts(uint32_t NumSpecs, const uint32_t *SpecIDs,
                                     const void **SpecValues,
                                     size_t *SpecValSizes) {
   if (NumSpecs == 0) {
@@ -421,7 +423,7 @@ void Level0Program::setupSpecConsts(uint32_t NumSpecs, const uint32_t *SpecIDs,
   SpecConstants.pConstantValues = ConstantVoidPtrs.data();
 }
 
-bool Level0Program::extractKernelSPIRV(std::string &KernelName,
+bool Level0SpecProgram::extractKernelSPIRV(std::string &KernelName,
                                        std::vector<uint8_t> &SPIRV) {
   {
     std::lock_guard<std::mutex> LockGuard(Mutex);
@@ -465,11 +467,68 @@ bool Level0Program::extractKernelSPIRV(std::string &KernelName,
   }
 }
 
-Level0Build::~Level0Build() {
-  if (ModuleH != nullptr) {
-    zeModuleDestroy(ModuleH);
-  }
+/***************************************************************************/
+
+
+Level0NativeProgram::Level0NativeProgram(ze_context_handle_t Ctx,
+                                         ze_device_handle_t Dev,
+                                         // bool Optimize,
+                                         std::vector<uint8_t> &&GPUBinary,
+                                         const char* CDir,
+                                         const std::string &UUID)
+    : Level0ProgramBase(Ctx, Dev, CDir, UUID), //Optimize(Optimize),
+    NativeBinary(GPUBinary) { }
+
+bool Level0NativeProgram::init() {
+  BuildSpecialization S;
+  Build.reset(new Level0Build());
 }
+
+Level0NativeProgram::~Level0NativeProgram() {
+  std::lock_guard<std::mutex> LockGuard(Mutex);
+  Kernels.clear();
+}
+
+// TODO these should be refactored
+// (identical to Level0Program::{create,release}Kernel)
+Level0SpecKernel *Level0NativeProgram::createKernel(const std::string Name) {
+  std::lock_guard<std::mutex> LockGuard(Mutex);
+  Level0SpecKernelSPtr Kernel = std::make_shared<Level0SpecKernel>(Name);
+  Kernels.push_back(Kernel);
+  return Kernel.get();
+}
+
+bool Level0NativeProgram::releaseKernel(Level0SpecKernel *Kernel) {
+  std::lock_guard<std::mutex> LockGuard(Mutex);
+
+  auto Iter = std::find_if(Kernels.begin(), Kernels.end(),
+      [&Kernel](Level0SpecKernelSPtr &K) { return K.get() == Kernel; });
+
+  if (Iter == Kernels.end())
+    return false;
+
+  Kernels.erase(Iter);
+  return true;
+}
+
+bool Level0NativeProgram::getBestKernel(Level0SpecKernel *Kernel,
+                                        ze_module_handle_t &Mod,
+                                        ze_kernel_handle_t &Ker) {
+  std::lock_guard<std::mutex> LockGuard(Mutex);
+  std::string KernelName = Kernel->getName();
+
+  if (!NativeBuild) {
+    Mod = nullptr;
+    Ker = nullptr;
+    return false;
+  }
+
+  Mod = NativeBuild->getModuleHandle();
+  Ker = Kernel->getOrCreateForBuild(NativeBuild.get());
+  return true;
+}
+
+/***************************************************************************/
 
 static bool loadZeBinary(ze_context_handle_t ContextH,
                          ze_device_handle_t DeviceH,
@@ -550,7 +609,7 @@ static bool loadZeBinary(ze_context_handle_t ContextH,
   return (ZeRes == ZE_RESULT_SUCCESS);
 }
 
-static void getNativeCachePath(Level0Program *Program,
+static void getNativeCachePath(Level0SpecProgram *Program,
                                BuildSpecialization BSpec,
                                const std::string &KernelCacheUUID,
                                // output vars
@@ -601,7 +660,7 @@ static void getNativeCachePath(Level0Program *Program,
   ProgCachePath.append(".native");
 }
 
-static bool findInNativeCache(Level0Program *Program,
+static bool findInNativeCache(Level0SpecProgram *Program,
                               BuildSpecialization BSpec,
                               const std::string &KernelCacheUUID,
                               // output vars
@@ -630,7 +689,26 @@ static bool findInNativeCache(Level0Program *Program,
   return false;
 }
 
-static bool compileSPIRVtoNativeZE(Level0Program *Program,
+static void getLZBuildLog(std::string &BuildLog, ze_result_t Res,
+                          ze_module_build_log_handle_t BuildLogH) {
+    BuildLog.append("zeModuleCreate failed with error: ");
+    BuildLog.append(std::to_string(Res));
+    BuildLog.append("\n");
+    size_t LogSize = 0;
+    // should be null terminated.
+    zeModuleBuildLogGetString(BuildLogH, &LogSize, nullptr);
+    if (LogSize > 0) {
+      BuildLog.append("Output of zeModuleCreate:\n");
+      char *Log = (char *)malloc(LogSize);
+      assert(Log);
+      zeModuleBuildLogGetString(BuildLogH, &LogSize, Log);
+      zeModuleBuildLogDestroy(BuildLogH);
+      BuildLog.append(Log);
+      free(Log);
+    }
+}
+
+static bool compileSPIRVtoNativeZE(Level0SpecProgram *Program,
                                    const std::vector<uint8_t>& SPIRV,
                                    ze_context_handle_t ContextH,
                                    std::string &BuildFlags,
@@ -665,21 +743,7 @@ static bool compileSPIRVtoNativeZE(Level0Program *Program,
   ZeRes = zeModuleCreate(ContextH, DeviceH, &ModuleDesc, &ModuleH, &BuildLogH);
 
   if (ZeRes != ZE_RESULT_SUCCESS) {
-    BuildLog.append("zeModuleCreate failed with error: ");
-    BuildLog.append(std::to_string(ZeRes));
-    BuildLog.append("\n");
-    size_t LogSize = 0;
-    // should be null terminated.
-    zeModuleBuildLogGetString(BuildLogH, &LogSize, nullptr);
-    if (LogSize > 0) {
-      BuildLog.append("Output of zeModuleCreate:\n");
-      char *Log = (char *)malloc(LogSize);
-      assert(Log);
-      zeModuleBuildLogGetString(BuildLogH, &LogSize, Log);
-      zeModuleBuildLogDestroy(BuildLogH);
-      BuildLog.append(Log);
-      free(Log);
-    }
+    getLZBuildLog(BuildLog, ZeRes, BuildLogH);
     goto FINISH;
   } else {
     zeModuleBuildLogDestroy(BuildLogH);
@@ -714,21 +778,85 @@ FINISH:
   return Res;
 }
 
-bool Level0Build::loadBinary(ze_context_handle_t ContextH,
+bool Level0SpecBuild::loadBinary(ze_context_handle_t ContextH,
                              ze_device_handle_t DeviceH) {
   return loadZeBinary(ContextH, DeviceH, NativeBinary,
                       (Type != BuildType::JITProgram),
                       nullptr, BuildLog, ModuleH);
 }
 
-bool Level0Build::compareSameClass(Level0BuildBase *Other) {
-  Level0Build *OtherBuild = static_cast<Level0Build *>(Other);
+bool Level0SpecBuild::compareSameClass(Level0BuildBase *Other) {
+  Level0SpecBuild *OtherBuild = static_cast<Level0SpecBuild *>(Other);
   if (Program != OtherBuild->Program)
     return false;
   if (Spec != OtherBuild->Spec)
     return false;
   return true;
 }
+
+Level0SpecBuild::~Level0SpecBuild() {
+  if (ModuleH != nullptr) {
+    zeModuleDestroy(ModuleH);
+  }
+}
+
+/***************************************************************************/
+
+Level0NativeBuild::~Level0NativeBuild() {
+  if (ModuleH != nullptr) {
+    zeModuleDestroy(ModuleH);
+  }
+}
+
+bool Level0NativeBuild::loadBinary(ze_context_handle_t ContextH,
+                             ze_device_handle_t DeviceH) {
+  return loadZeBinary(ContextH, DeviceH, NativeBinary,
+                      true, //finalize
+                      nullptr,
+                      BuildLog, ModuleH);
+}
+
+bool Level0NativeBuild::compareSameClass(Level0BuildBase *Other) {
+  Level0NativeBuild *OtherBuild = static_cast<Level0NativeBuild *>(Other);
+  return Program == OtherBuild->Program;
+}
+
+/*
+void Level0NativeBuild::run(ze_context_handle_t ContextH) {
+  assert(Program != nullptr);
+  POCL_MEASURE_START(compilation);
+
+  POCL_MSG_PRINT_LEVEL0(
+      "Measuring Native Program loading of %zu byte binary\n",
+      NativeBinary.size());
+
+  ze_module_build_log_handle_t BuildLogH = nullptr;
+  ze_device_handle_t DeviceH = Program->getDevice();
+  ze_module_handle_t ModH = nullptr;
+  ze_module_desc_t ModuleDesc {ZE_STRUCTURE_TYPE_MODULE_DESC,
+  nullptr, ZE_MODULE_FORMAT_NATIVE, NativeBinary.size(), NativeBinary.data(),
+  nullptr, // buildFlags
+  nullptr, // Constants
+  };
+  ze_result_t ZeRes = zeModuleCreate(ContextH, DeviceH, &ModuleDesc,
+                    &ModH, &BuildLogH);
+  if (ZeRes != ZE_RESULT_SUCCESS) {
+    getLZBuildLog(BuildLog, ZeRes, BuildLogH);
+  } else {
+    zeModuleBuildLogDestroy(BuildLogH);
+  }
+
+  if (ModuleH != nullptr) {
+    zeModuleDestroy(ModuleH);
+  }
+
+  Program = nullptr;
+  BuildSuccessful = ZeRes == ZE_RESULT_SUCCESS;
+}
+*/
+
+/***************************************************************************/
+
 
 bool Level0KernelBuild::loadBinary(ze_context_handle_t ContextH,
                                    ze_device_handle_t DeviceH) {
@@ -1948,7 +2076,7 @@ bool Level0CompilationJobScheduler::supportsBinary(ze_device_handle_t DeviceH, z
       return false;
 }
 
-Level0Program *Level0CompilationJobScheduler::createProgram(ze_context_handle_t Ctx,
+Level0SpecProgram *Level0CompilationJobScheduler::createProgram(ze_context_handle_t Ctx,
                                                             ze_device_handle_t Dev,
                                                             bool EnableJIT,
                                                             std::string &BuildLog,
@@ -1959,7 +2087,7 @@ Level0Program *Level0CompilationJobScheduler::createProgram(ze_context_handle_t 
                                                             std::vector<char> &ProgramBCData,
                                                             const char* CDir,
                                                             const std::string &UUID) {
-  Level0ProgramSPtr Prog = std::make_shared<Level0Program>(Ctx, Dev, EnableJIT, Optimize,
+  Level0SpecProgramSPtr Prog = std::make_shared<Level0SpecProgram>(Ctx, Dev, EnableJIT, Optimize,
                                            NumSpecs, SpecIDs,
                                            SpecValues, SpecValSizes, SpvData,
                                            ProgramBCData, CDir, UUID);
@@ -1980,11 +2108,11 @@ Level0Program *Level0CompilationJobScheduler::createProgram(ze_context_handle_t 
   return Prog.get();
 }
 
-bool Level0CompilationJobScheduler::releaseProgram(Level0Program *Prog) {
+bool Level0CompilationJobScheduler::releaseProgram(Level0SpecProgram *Prog) {
   JobQueue->cancelAllJobsForProgram(Prog);
 
-  Level0ProgramSPtr Program =
-      findProgram<Level0Program, Level0ProgramSPtr>(Prog, Programs, true);
+  Level0SpecProgramSPtr Program =
+      findProgram<Level0SpecProgram, Level0SpecProgramSPtr>(Prog, Programs, true);
   return (bool)Program;
 }
 
@@ -2016,21 +2144,21 @@ Level0CompilationJobScheduler::findProgram(Level0BuiltinProgram *Prog) {
 }
 #endif
 
-Level0ProgramSPtr
-Level0CompilationJobScheduler::findProgram(Level0Program *Prog) {
-  return findProgram<Level0Program, Level0ProgramSPtr>(Prog, Programs);
+Level0SpecProgramSPtr
+Level0CompilationJobScheduler::findProgram(Level0SpecProgram *Prog) {
+  return findProgram<Level0SpecProgram, Level0SpecProgramSPtr>(Prog, Programs);
 }
 
-Level0Kernel *Level0CompilationJobScheduler::createKernel(Level0Program *Prog,
+Level0SpecKernel *Level0CompilationJobScheduler::createKernel(Level0SpecProgram *Prog,
                                                           const char *Name) {
-  Level0ProgramSPtr Program = findProgram(Prog);
+  Level0SpecProgramSPtr Program = findProgram(Prog);
 
   if (!Program) {
     POCL_MSG_ERR("cannot find a program %p\n", Prog);
     return nullptr;
   }
 
-  Level0Kernel *K = Program->createKernel(Name);
+  Level0SpecKernel *K = Program->createKernel(Name);
   if (!K)
     return nullptr;
 
@@ -2064,9 +2192,9 @@ Level0Kernel *Level0CompilationJobScheduler::createKernel(Level0Program *Prog,
   return K;
 }
 
-bool Level0CompilationJobScheduler::releaseKernel(Level0Program *Prog,
-                                                  Level0Kernel *Kernel) {
-  Level0ProgramSPtr Program = findProgram(Prog);
+bool Level0CompilationJobScheduler::releaseKernel(Level0SpecProgram *Prog,
+                                                  Level0SpecKernel *Kernel) {
+  Level0SpecProgramSPtr Program = findProgram(Prog);
   if (!Program) {
     POCL_MSG_ERR("cannot find a program %p\n", Prog);
     return false;
@@ -2075,7 +2203,7 @@ bool Level0CompilationJobScheduler::releaseKernel(Level0Program *Prog,
 }
 
 bool Level0CompilationJobScheduler::createProgramBuilds(
-    Level0ProgramSPtr Program, std::string &BuildLog,
+    Level0SpecProgramSPtr Program, std::string &BuildLog,
     bool DeviceSupports64bitBuffers, bool Optimize) {
   if (!createProgramBuildFullOptions(Program, BuildLog,
                                      true, // wait
@@ -2098,7 +2226,7 @@ bool Level0CompilationJobScheduler::createProgramBuilds(
 }
 
 bool Level0CompilationJobScheduler::createProgramBuildFullOptions(
-    Level0ProgramSPtr Program, std::string &BuildLog, bool WaitForFinish,
+    Level0SpecProgramSPtr Program, std::string &BuildLog, bool WaitForFinish,
     bool Optimize, bool LargeOffsets, bool SmallWG, bool HighPrio) {
 
   BuildSpecialization Spec = { Optimize, LargeOffsets, false, SmallWG };
@@ -2127,7 +2255,7 @@ bool Level0CompilationJobScheduler::createProgramBuildFullOptions(
 }
 
 bool Level0CompilationJobScheduler::createAndWaitKernelJITBuilds(
-    Level0ProgramSPtr Program, Level0Kernel *Kernel, bool LargeOffsets,
+    Level0SpecProgramSPtr Program, Level0SpecKernel *Kernel, bool LargeOffsets,
     bool SmallWG) {
 
   BuildSpecialization Spec = {Program->isOptimized(), LargeOffsets, false,
@@ -2140,14 +2268,14 @@ bool Level0CompilationJobScheduler::createAndWaitKernelJITBuilds(
   return KernBuildJob->isSuccessful();
 }
 
-bool Level0CompilationJobScheduler::getBestKernel(Level0Program *Prog,
-                                  Level0Kernel *Kernel,
+bool Level0CompilationJobScheduler::getBestKernel(Level0SpecProgram *Prog,
+                                  Level0SpecKernel *Kernel,
                                   bool MustUseLargeOffsets,
                                   unsigned LocalWGSize,
                                   ze_module_handle_t &Mod,
                                   ze_kernel_handle_t &Ker)
 {
-  Level0ProgramSPtr Program = findProgram(Prog);
+  Level0SpecProgramSPtr Program = findProgram(Prog);
   if (!Program) {
     POCL_MSG_ERR("cannot find a program %p\n", Prog);
     return false;

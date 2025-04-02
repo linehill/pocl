@@ -1126,7 +1126,7 @@ void Level0CmdList::memfillImpl(Level0Device *Device,
 
   ze_kernel_handle_t KernelH = nullptr;
   ze_module_handle_t ModuleH = nullptr;
-  Level0Kernel *Ker = nullptr;
+  Level0SpecKernel *Ker = nullptr;
   bool Res = Device->getMemfillKernel(PatternSize, &Ker, ModuleH, KernelH);
   assert(Res == true);
   assert(KernelH);
@@ -1550,7 +1550,7 @@ void Level0CmdList::fillImage(cl_mem Image, pocl_mem_identifier *MemId,
 
   ze_kernel_handle_t KernelH = nullptr;
   ze_module_handle_t ModuleH = nullptr;
-  Level0Kernel *Ker = nullptr;
+  Level0SpecKernel *Ker = nullptr;
   bool Res = Device->getImagefillKernel(Image->image_channel_data_type,
                                         Image->image_channel_order,
                                         Image->type, &Ker, ModuleH, KernelH);
@@ -1825,9 +1825,9 @@ void Level0CmdList::runNDRangeKernel(_cl_command_run *RunCmd, cl_device_id Dev,
   struct pocl_context *PoclCtx = &RunCmd->pc;
 
   assert(Program->data[DeviceI] != nullptr);
-  Level0Program *L0Program = (Level0Program *)Program->data[DeviceI];
+  Level0SpecProgram *L0Program = (Level0SpecProgram *)Program->data[DeviceI];
   assert(Kernel->data[DeviceI] != nullptr);
-  Level0Kernel *L0Kernel = (Level0Kernel *)Kernel->data[DeviceI];
+  Level0SpecKernel *L0Kernel = (Level0SpecKernel *)Kernel->data[DeviceI];
 
   uint32_t TotalWGsX = PoclCtx->num_groups[0];
   uint32_t TotalWGsY = PoclCtx->num_groups[1];
@@ -3406,7 +3406,7 @@ bool Level0Device::initHelperKernels() {
   std::vector<char> ProgramBCData;
   std::string BuildLog;
   SHA1_digest_t BuildHash;
-  Level0Kernel *K;
+  Level0SpecKernel *K;
   char ProgramCacheDir[POCL_MAX_PATHNAME_LENGTH];
   assert(Driver);
 
@@ -4167,7 +4167,7 @@ int Level0Device::createSpirvProgram(cl_program Program, cl_uint DeviceI) {
   bool Optimize = Program->parsed_options.cl_opt_disable == 0;
 
   std::string BuildLog;
-  Level0Program *ProgramData = Driver->getJobSched().createProgram(
+  Level0SpecProgram *ProgramData = Driver->getJobSched().createProgram(
       ContextHandle, DeviceHandle, JITCompilation, BuildLog, Optimize,
       Supports64bitBuffers, SpecConstantIDs.size(), SpecConstantIDs.data(),
       SpecConstantPtrs.data(), SpecConstantSizes.data(), Spirv, ProgramBC,
@@ -4239,7 +4239,7 @@ int Level0Device::createGPUBinaryProgram(cl_program Program, cl_uint DeviceI) {
     bool Optimize = Program->parsed_options.cl_opt_disable == 0;
 
     std::string BuildLog;
-    Level0Program *ProgramData = Driver->getJobSched().createProgram(
+    Level0SpecProgram *ProgramData = Driver->getJobSched().createProgram(
         ContextHandle, DeviceHandle, JITCompilation, BuildLog, Optimize,
         Supports64bitBuffers, SpecConstantIDs.size(), SpecConstantIDs.data(),
         SpecConstantPtrs.data(), SpecConstantSizes.data(), Spirv, ProgramBC,
@@ -4315,7 +4315,7 @@ int Level0Device::freeProgram(cl_program Program, cl_uint DeviceI) {
     return CL_OUT_OF_RESOURCES;
 #endif
   } else {
-    Level0Program *ProgramData = (Level0Program *)Program->data[DeviceI];
+    Level0SpecProgram *ProgramData = (Level0SpecProgram *)Program->data[DeviceI];
     Driver->getJobSched().releaseProgram(ProgramData);
     Program->data[DeviceI] = nullptr;
   }
@@ -4335,8 +4335,8 @@ int Level0Device::createKernel(cl_program Program, cl_kernel Kernel,
     return CL_OUT_OF_RESOURCES;
 #endif
   } else {
-    Level0Program *L0Program = (Level0Program *)Program->data[ProgramDeviceI];
-    Level0Kernel *Ker =
+    Level0SpecProgram *L0Program = (Level0SpecProgram *)Program->data[ProgramDeviceI];
+    Level0SpecKernel *Ker =
         Driver->getJobSched().createKernel(L0Program, Kernel->name);
     Kernel->data[ProgramDeviceI] = Ker;
   }
@@ -4359,15 +4359,15 @@ int Level0Device::freeKernel(cl_program Program, cl_kernel Kernel,
     return CL_OUT_OF_RESOURCES;
 #endif
   } else {
-    Level0Program *L0Program = (Level0Program *)Program->data[ProgramDeviceI];
-    Level0Kernel *Ker = (Level0Kernel *)Kernel->data[ProgramDeviceI];
+    Level0SpecProgram *L0Program = (Level0SpecProgram *)Program->data[ProgramDeviceI];
+    Level0SpecKernel *Ker = (Level0SpecKernel *)Kernel->data[ProgramDeviceI];
     Res = Driver->getJobSched().releaseKernel(L0Program, Ker);
   }
 
   return Res == true ? CL_SUCCESS : CL_INVALID_KERNEL;
 }
 
-bool Level0Device::getBestKernel(Level0Program *Program, Level0Kernel *Kernel,
+bool Level0Device::getBestKernel(Level0SpecProgram *Program, Level0SpecKernel *Kernel,
                                  bool LargeOffset, unsigned LocalWGSize,
                                  ze_module_handle_t &Mod,
                                  ze_kernel_handle_t &Ker) {
@@ -4385,13 +4385,13 @@ bool Level0Device::getBestBuiltinKernel(Level0BuiltinProgram *Program,
 #endif
 
 bool Level0Device::getMemfillKernel(unsigned PatternSize,
-                                    Level0Kernel **L0Kernel,
+                                    Level0SpecKernel **L0Kernel,
                                     ze_module_handle_t &ModH,
                                     ze_kernel_handle_t &KerH) {
 
   std::string KernelName = "memfill_" + std::to_string(PatternSize);
   // TODO locking? errcheck!
-  Level0Kernel *K = MemfillKernels[KernelName];
+  Level0SpecKernel *K = MemfillKernels[KernelName];
   assert(K);
   *L0Kernel = K;
   return Driver->getJobSched().getBestKernel(MemfillProgram, K,
@@ -4403,7 +4403,7 @@ bool Level0Device::getMemfillKernel(unsigned PatternSize,
 bool Level0Device::getImagefillKernel(cl_channel_type ChType,
                                       cl_channel_order ChOrder,
                                       cl_mem_object_type ImgType,
-                                      Level0Kernel **L0Kernel,
+                                      Level0SpecKernel **L0Kernel,
                                       ze_module_handle_t &ModH,
                                       ze_kernel_handle_t &KerH) {
 
@@ -4449,7 +4449,7 @@ bool Level0Device::getImagefillKernel(cl_channel_type ChType,
 
   std::string KernelName = "imagefill_" + ImageType + PixelType;
   // TODO locking? errcheck!
-  Level0Kernel *K = ImagefillKernels[KernelName];
+  Level0SpecKernel *K = ImagefillKernels[KernelName];
   assert(K);
   *L0Kernel = K;
   return Driver->getJobSched().getBestKernel(ImagefillProgram, K,
@@ -4544,7 +4544,7 @@ void Level0Device::getMaxWGs(uint32_t_3 *MaxWGs) {
   std::memcpy(MaxWGs, MaxWGCount, sizeof(uint32_t_3));
 }
 
-uint32_t Level0Device::getMaxWGSizeForKernel(Level0Kernel *Kernel) {
+uint32_t Level0Device::getMaxWGSizeForKernel(Level0SpecKernel *Kernel) {
 #ifdef ZE_STRUCTURE_TYPE_KERNEL_MAX_GROUP_SIZE_EXT_PROPERTIES
   // TODO what default should we return here ?
   if (!Driver->hasExtension("ZE_extension_kernel_max_group_size_properties"))

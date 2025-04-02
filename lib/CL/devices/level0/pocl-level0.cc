@@ -89,7 +89,7 @@ static void pocl_level0_local_size_optimizer(cl_device_id Dev, cl_kernel Ker,
     return;
   }
   assert(Ker->data[DeviceI] != nullptr);
-  Level0Kernel *L0Kernel = (Level0Kernel *)Ker->data[DeviceI];
+  Level0SpecKernel *L0Kernel = (Level0SpecKernel *)Ker->data[DeviceI];
   ze_kernel_handle_t HKernel = L0Kernel->getAnyCreated();
 
   if (GlobalX == 1 && GlobalY == 1 && GlobalZ == 1) {
@@ -1116,7 +1116,6 @@ static int pocl_level0_setup_spirv_metadata(cl_device_id Device,
                                             unsigned ProgramDeviceI) {
   assert(Program->data[ProgramDeviceI] != nullptr);
 
-  // TODO this is using program_il as source
   int32_t *Stream = (int32_t *)Program->program_il;
   size_t StreamSize = Program->program_il_size / 4;
   OpenCLFunctionInfoMap KernelInfoMap;
@@ -1145,12 +1144,19 @@ static int pocl_level0_setup_spirv_metadata(cl_device_id Device,
 }
 
 static int pocl_level0_setup_lz_metadata(cl_device_id Device,
-                                            cl_program Program,
-                                            unsigned ProgramDeviceI) {
+                                         cl_program Program,
+                                         unsigned ProgramDeviceI) {
     assert(Program->data[ProgramDeviceI] != nullptr);
+    Level0SpecProgram *L0Prog = (Level0SpecProgram *)Program->data[ProgramDeviceI];
+    L0Prog->isOptimized();
+/*
+      // TODO
+     size_t getNumKernels();
+     getKernelMetadata()
+*/
 
-    Level0Program *ProgramData = (Level0Program *)Program->data[ProgramDeviceI];
-    Program->num_kernels = ProgramData->getMetaNumKernels();
+    Program->num_kernels = L0Prog->getNumKernels();
+
     if (Program->num_kernels == 0) {
         POCL_MSG_WARN("No kernels found in program.\n");
         return 1;
@@ -1159,8 +1165,8 @@ static int pocl_level0_setup_lz_metadata(cl_device_id Device,
     Program->kernel_meta = (pocl_kernel_metadata_t *)calloc(
         Program->num_kernels, sizeof(pocl_kernel_metadata_t));
 
-  uint32_t Idx = 0;
-  for (auto &I : KernelInfoMap) {
+
+  for (uint32_t Idx = 0; Idx < Program->num_kernels; ++Idx) {
 
     // ZE kernel metadata; TODO with JIT, we don't have the ZE module
     // to extract the metadata - this needs to be extracted from SPIR-V
@@ -1852,7 +1858,7 @@ cl_int pocl_level0_get_subgroup_info_ext(
     void *param_value, size_t *param_value_size_ret) {
 
   Level0Device *Device = (Level0Device *)Dev->data;
-  Level0Kernel *L0Kernel = (Level0Kernel *)Kernel->data[ProgramDeviceI];
+  Level0SpecKernel *L0Kernel = (Level0SpecKernel *)Kernel->data[ProgramDeviceI];
   size_t SgSize = Device->getMaxSGSizeForKernel(L0Kernel);
 
   switch (param_name) {
@@ -1941,7 +1947,7 @@ cl_int pocl_level0_set_kernel_exec_info_ext(
     cl_uint param_name, size_t param_value_size, const void *param_value) {
 
   assert(Kernel->data[ProgramDeviceI] != nullptr);
-  Level0Kernel *L0Kernel = (Level0Kernel *)Kernel->data[ProgramDeviceI];
+  Level0SpecKernel *L0Kernel = (Level0SpecKernel *)Kernel->data[ProgramDeviceI];
   assert(L0Kernel != nullptr);
   switch (param_name) {
   case CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM: {
