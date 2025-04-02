@@ -475,6 +475,89 @@ bool Level0SpecProgram::extractKernelSPIRV(std::string &KernelName,
 
 /***************************************************************************/
 
+static bool loadZeBinary(ze_context_handle_t ContextH,
+                         ze_device_handle_t DeviceH,
+                         const std::vector<uint8_t> &NativeBinary,
+                         bool Finalize, ze_module_handle_t LinkinModuleH,
+                         // output vars
+                         std::string &BuildLog, ze_module_handle_t &ModuleH) {
+    POCL_MEASURE_START(load_binary);
+
+    ze_module_desc_t ModuleDesc = {ZE_STRUCTURE_TYPE_MODULE_DESC,
+                                   nullptr,
+                                   ZE_MODULE_FORMAT_NATIVE,
+                                   NativeBinary.size(),
+                                   NativeBinary.data(),
+                                   nullptr,
+                                   nullptr}; // spec constants
+    ze_module_handle_t TempModuleH = nullptr;
+    ze_module_build_log_handle_t BuildLogH = nullptr;
+    ze_module_build_log_handle_t LinkLogH = nullptr;
+
+    ze_result_t ZeRes =
+        zeModuleCreate(ContextH, DeviceH, &ModuleDesc, &TempModuleH, &BuildLogH);
+    if (ZeRes != ZE_RESULT_SUCCESS) {
+        BuildLog.append("zeModuleCreate failed with error: ");
+        BuildLog.append(std::to_string(ZeRes));
+        BuildLog.append("\n");
+        size_t LogSize = 0;
+        // should be null terminated.
+        zeModuleBuildLogGetString(BuildLogH, &LogSize, nullptr);
+        if (LogSize > 0) {
+            BuildLog.append("Output of zeModuleCreate:\n");
+            char *Log = (char *)malloc(LogSize);
+            assert(Log);
+            zeModuleBuildLogGetString(BuildLogH, &LogSize, Log);
+            zeModuleBuildLogDestroy(BuildLogH);
+            BuildLog.append(Log);
+            free(Log);
+        }
+        if (TempModuleH != nullptr) {
+            zeModuleDestroy(TempModuleH);
+        }
+        ModuleH = nullptr;
+        goto FINISH;
+    } else {
+        zeModuleBuildLogDestroy(BuildLogH);
+        ModuleH = TempModuleH;
+    }
+
+    if (Finalize) {
+        if (LinkinModuleH != nullptr) {
+            ze_module_handle_t Temp[2] = {LinkinModuleH, ModuleH};
+            ZeRes = zeModuleDynamicLink(2, Temp, &LinkLogH);
+        } else {
+            ZeRes = zeModuleDynamicLink(1, &ModuleH, &LinkLogH);
+        }
+
+        if (ZeRes != ZE_RESULT_SUCCESS) {
+            BuildLog.append("zeModuleDynamicLink failed with error: ");
+            BuildLog.append(std::to_string(ZeRes));
+            BuildLog.append("\n");
+            size_t LogSize = 0;
+            // should be null terminated.
+            zeModuleBuildLogGetString(LinkLogH, &LogSize, nullptr);
+            if (LogSize > 0) {
+                BuildLog.append("Output of zeModuleDynamicLink:\n");
+                char *Log = (char *)malloc(LogSize);
+                assert(Log);
+                zeModuleBuildLogGetString(LinkLogH, &LogSize, Log);
+                zeModuleBuildLogDestroy(LinkLogH);
+                BuildLog.append(Log);
+                free(Log);
+            }
+            goto FINISH;
+        } else {
+            zeModuleBuildLogDestroy(LinkLogH);
+        }
+    }
+
+FINISH:
+    POCL_MEASURE_FINISH(load_binary);
+    return (ZeRes == ZE_RESULT_SUCCESS);
+}
+
+/***************************************************************************/
 
 Level0NativeProgram::Level0NativeProgram(ze_context_handle_t Ctx,
                                          ze_device_handle_t Dev,
@@ -482,11 +565,29 @@ Level0NativeProgram::Level0NativeProgram(ze_context_handle_t Ctx,
                                          std::vector<uint8_t> &&GPUBinary,
                                          const char* CDir,
                                          const std::string &UUID)
-    : Level0ProgramBase(Ctx, Dev, CDir, UUID), //Optimize(Optimize),
-    NativeBinary(GPUBinary) { }
+    : Level0ProgramBase(Ctx, Dev, CDir, UUID), ModuleH(nullptr),
+    NativeBinary(GPUBinary) { } //Optimize(Optimize),
 
 bool Level0NativeProgram::init() {
+  if (!loadZeBinary(ContextH, DeviceH, NativeBinary,
+                    true, nullptr, BuildLog, ModuleH))
+    return false;
 
+  unsigned NumKernels = 0;
+  ze_result_t Res = ZE_RESULT_SUCCESS;
+
+  Res = zeModuleGetKernelNames(ModuleH, &NumKernels, nullptr);
+  assert(Res == ZE_RESULT_SUCCESS);
+  assert(NumKernels > 0);
+  std::vector<const char*> Names(NumKernels);
+
+  Res = zeModuleGetKernelNames(ModuleH, &NumKernels, Names.data());
+  assert(Res == ZE_RESULT_SUCCESS);
+  KernelNames.resize(NumKernels);
+  for (unsigned i = 0; i < NumKernels; ++i)
+    KernelNames[i].append(Names[i]);
+
+  return true;
 }
 
 Level0NativeProgram::~Level0NativeProgram() {
@@ -547,84 +648,6 @@ bool Level0NativeProgram::getBestKernel(Level0SpecKernel *Kernel,
 
 /***************************************************************************/
 
-static bool loadZeBinary(ze_context_handle_t ContextH,
-                         ze_device_handle_t DeviceH,
-                         const std::vector<uint8_t> &NativeBinary,
-                         bool Finalize, ze_module_handle_t LinkinModuleH,
-                         // output vars
-                         std::string &BuildLog, ze_module_handle_t &ModuleH) {
-  POCL_MEASURE_START(load_binary);
-
-  ze_module_desc_t ModuleDesc = {ZE_STRUCTURE_TYPE_MODULE_DESC,
-                                 nullptr,
-                                 ZE_MODULE_FORMAT_NATIVE,
-                                 NativeBinary.size(),
-                                 NativeBinary.data(),
-                                 nullptr,
-                                 nullptr}; // spec constants
-  ze_module_handle_t TempModuleH = nullptr;
-  ze_module_build_log_handle_t BuildLogH = nullptr;
-  ze_module_build_log_handle_t LinkLogH = nullptr;
-
-  ze_result_t ZeRes =
-      zeModuleCreate(ContextH, DeviceH, &ModuleDesc, &TempModuleH, &BuildLogH);
-  if (ZeRes != ZE_RESULT_SUCCESS) {
-    BuildLog.append("zeModuleCreate failed with error: ");
-    BuildLog.append(std::to_string(ZeRes));
-    BuildLog.append("\n");
-    size_t LogSize = 0;
-    // should be null terminated.
-    zeModuleBuildLogGetString(BuildLogH, &LogSize, nullptr);
-    if (LogSize > 0) {
-      BuildLog.append("Output of zeModuleCreate:\n");
-      char *Log = (char *)malloc(LogSize);
-      assert(Log);
-      zeModuleBuildLogGetString(BuildLogH, &LogSize, Log);
-      zeModuleBuildLogDestroy(BuildLogH);
-      BuildLog.append(Log);
-      free(Log);
-    }
-    if (TempModuleH != nullptr) {
-      zeModuleDestroy(TempModuleH);
-    }
-    ModuleH = nullptr;
-  } else {
-    zeModuleBuildLogDestroy(BuildLogH);
-    ModuleH = TempModuleH;
-  }
-
-  if (Finalize) {
-    if (LinkinModuleH != nullptr) {
-      ze_module_handle_t Temp[2] = {LinkinModuleH, ModuleH};
-      ZeRes = zeModuleDynamicLink(2, Temp, &LinkLogH);
-    } else {
-      ZeRes = zeModuleDynamicLink(1, &ModuleH, &LinkLogH);
-    }
-
-    if (ZeRes != ZE_RESULT_SUCCESS) {
-      BuildLog.append("zeModuleDynamicLink failed with error: ");
-      BuildLog.append(std::to_string(ZeRes));
-      BuildLog.append("\n");
-      size_t LogSize = 0;
-      // should be null terminated.
-      zeModuleBuildLogGetString(LinkLogH, &LogSize, nullptr);
-      if (LogSize > 0) {
-        BuildLog.append("Output of zeModuleDynamicLink:\n");
-        char *Log = (char *)malloc(LogSize);
-        assert(Log);
-        zeModuleBuildLogGetString(LinkLogH, &LogSize, Log);
-        zeModuleBuildLogDestroy(LinkLogH);
-        BuildLog.append(Log);
-        free(Log);
-      }
-    } else {
-      zeModuleBuildLogDestroy(LinkLogH);
-    }
-  }
-
-  POCL_MEASURE_FINISH(load_binary);
-  return (ZeRes == ZE_RESULT_SUCCESS);
-}
 
 static void getNativeCachePath(Level0SpecProgram *Program,
                                BuildSpecialization BSpec,

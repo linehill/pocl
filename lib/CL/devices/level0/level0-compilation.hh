@@ -426,7 +426,7 @@ private:
 };
 
 ///
-/// \brief Stores a single builds for a GPU Native Binary
+/// \brief Represents a single zeModule for a GPU Native Binary
 ///
 ///
 class Level0NativeProgram : public Level0ProgramBase {
@@ -458,7 +458,7 @@ public:
     ///
     // ze_kernel_handle_t createKernel(const std::string &Name);
     // bool freeKernel(ze_kernel_handle_t Ker);
-    bool getKernelNames(std::vector<std::string> &Names);
+    const std::vector<std::string> &getKernelNames() { return KernelNames; }
 
     /// for cl_kernel creation device->ops callback
     Level0NativeKernel *createKernel(const std::string &Name);
@@ -471,6 +471,7 @@ private:
     // Level0NativeBuildUPtr NativeBuild;
     std::list<Level0NativeKernelUPtr> Kernels;
     // bool Optimize;
+    std::vector<std::string> KernelNames;
 };
 
 
