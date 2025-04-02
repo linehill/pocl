@@ -948,6 +948,7 @@ int pocl_level0_build_binary(cl_program Program, cl_uint DeviceI,
         POCL_RETURN_ERROR_ON((LinkProgram == 0), CL_BUILD_PROGRAM_FAILURE,
                               "creating multi-part programs via GPU binaries"
                               " is not supported\n");
+        // TODO don't skip creating cache dir!!!
         return Device->createGPUBinaryProgram(Program, DeviceI);
       }
     }
@@ -1148,16 +1149,8 @@ static int pocl_level0_setup_lz_metadata(cl_device_id Device,
                                             unsigned ProgramDeviceI) {
     assert(Program->data[ProgramDeviceI] != nullptr);
 
-    // TODO this is using program_il as source
-    int32_t *Stream = (int32_t *)Program->program_il;
-    size_t StreamSize = Program->program_il_size / 4;
-    OpenCLFunctionInfoMap KernelInfoMap;
-    if (!parseSPIRV(Stream, StreamSize, KernelInfoMap)) {
-        POCL_MSG_ERR("Unable to parse SPIR-V module of the program\n");
-        return 0;
-    }
-
-    Program->num_kernels = KernelInfoMap.size();
+    Level0Program *ProgramData = (Level0Program *)Program->data[ProgramDeviceI];
+    Program->num_kernels = ProgramData->getMetaNumKernels();
     if (Program->num_kernels == 0) {
         POCL_MSG_WARN("No kernels found in program.\n");
         return 1;

@@ -370,6 +370,56 @@ private:
                       const void **SpecValues, size_t *SpecValSizes);
 };
 
+///
+/// \brief Stores a single builds for a GPU Native Binary
+///
+///
+class Level0NativeProgram : public Level0ProgramBase {
+
+public:
+    Level0NativeProgram(ze_context_handle_t Ctx,
+                  ze_device_handle_t Dev,
+                  bool Optimize,
+                  std::vector<uint8_t> &GPUBinary,
+                  const char* CDir,
+                  const std::string &UUID);
+    virtual bool init() override;
+    virtual ~Level0NativeProgram();
+
+    Level0NativeProgram(Level0NativeProgram const &) = delete;
+    Level0NativeProgram& operator=(Level0NativeProgram const &) = delete;
+    Level0NativeProgram(Level0NativeProgram const &&) = delete;
+    Level0NativeProgram& operator=(Level0NativeProgram &&) = delete;
+
+    bool isOptimized() const { return Optimize; }
+
+    /// for cl_kernel creation device->ops callback
+    Level0Kernel *createKernel(const std::string Name);
+    /// for cl_kernel deletion device->ops callback
+    bool releaseKernel(Level0Kernel *Kernel);
+0
+    ///
+    /// \brief returns the best available specialization of a Kernel,
+    ///        for the given set of specialization options (currently just one).
+    /// \param [in] Kernel the Level0Kernel to search for
+    /// \param [in] LargeOffset specialization option
+    /// \param [out] Mod the ze_module_handle_t of the found specialization, or null
+    /// \param [out] Ker the ze_kernel_handle_t of the found specialization, or null
+    /// \returns false if can't find any build specialization
+    ///
+    bool getBestKernel(Level0Kernel *Kernel, bool MustUseLargeOffsets,
+                       bool CanBeSmallWG, ze_module_handle_t &Mod,
+                       ze_kernel_handle_t &Ker);
+
+private:
+    /// full program builds with specializations
+    Level0ProgramBuildUPtr ProgBuild;
+
+    std::list<Level0KernelSPtr> Kernels;
+
+    bool Optimize;
+};
+
 #ifdef ENABLE_NPU
 class Level0BuiltinKernel {
 public:
@@ -487,14 +537,19 @@ protected:
 };
 
 ///
-/// \brief Abstract class for a single build of a program or kernel (to a native
+/// \brief Base class for a single build of a program or kernel (to a native
 /// binary) with a particular set of specializations
 ///
 class Level0Build : public Level0BuildBase {
 
 public:
   Level0Build(BuildSpecialization S, Level0Program *Prog, BuildType T)
-      : Level0BuildBase(false, T), Program(Prog), ModuleH(nullptr), Spec(S) {}
+    : Level0BuildBase(false, T), Program(Prog), ModuleH(nullptr), Spec(S) {}
+  //
+  Level0Build(BuildSpecialization S, Level0Program *Prog, BuildType T, std::vector<uint8_t> &&NativeB)
+    : Level0BuildBase(false, T), Program(Prog), ModuleH(nullptr), Spec(S) {
+    NativeBinary = std::move(NativeB);
+  }
   virtual ~Level0Build();
 
   Level0Build(Level0Build const &) = delete;
