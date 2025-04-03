@@ -31,16 +31,6 @@
 
 namespace pocl {
 
-#define LEVEL0_CHECK_RET(RETVAL, CODE)                                         \
-  do {                                                                         \
-    ze_result_t res = CODE;                                                    \
-    if (res != ZE_RESULT_SUCCESS) {                                            \
-      POCL_MSG_PRINT2(ERROR, __FUNCTION__, __LINE__,                           \
-                      "Error %0x from Level0 Runtime call:\n", (int)res);      \
-      return RETVAL;                                                           \
-    }                                                                          \
-  } while (0)
-
 #ifndef HAVE_UINT32_T_3
 #define HAVE_UINT32_T_3
 typedef struct
@@ -451,7 +441,7 @@ public:
   static void freeSampler(ze_sampler_handle_t SamplerH);
 
   bool supportsBinary(const char *Binary, size_t Length) {
-      return getJobSched().supportsBinary(DeviceHandle, ContextHandle, Binary, Length);
+      return getJobSched().supportsNativeBinary(DeviceHandle, ContextHandle, Binary, Length);
   }
   int createSpirvProgram(cl_program Program, cl_uint DeviceI);
   int createBuiltinProgram(cl_program Program, cl_uint DeviceI);

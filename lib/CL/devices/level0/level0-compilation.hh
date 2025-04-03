@@ -71,6 +71,16 @@ typedef ze_graph_dditable_ext_t graph_dditable_ext_t;
 #include <thread>
 #include <vector>
 
+#define LEVEL0_CHECK_RET(RETVAL, CODE)                                         \
+  do {                                                                         \
+    ze_result_t res = CODE;                                                    \
+    if (res != ZE_RESULT_SUCCESS) {                                            \
+      POCL_MSG_PRINT2(ERROR, __FUNCTION__, __LINE__,                           \
+                      "Error %0x from Level0 Runtime call:\n", (int)res);      \
+      return RETVAL;                                                           \
+    }                                                                          \
+  } while (0)
+
 namespace pocl {
 
 /// specialization flags
@@ -255,8 +265,12 @@ private:
 class Level0NativeKernel : public Level0KernelBase {
 
 public:
-    Level0NativeKernel(const std::string N, ze_kernel_handle_t KH)
-        : Level0KernelBase(N), KernelH(KH) {}
+    Level0NativeKernel(const std::string N, ze_kernel_handle_t KH,
+                       L0KernelGetArgumentSize GASize,
+                       L0KernelGetArgumentType GAType)
+        : Level0KernelBase(N), KernelH(KH),
+        KernelGetArgumentSizeFunc(GASize),
+        KernelGetArgumentTypeFunc(GAType) {}
     virtual ~Level0NativeKernel();
 
     Level0NativeKernel(Level0NativeKernel const &) = delete;
@@ -266,9 +280,15 @@ public:
 
     ze_kernel_handle_t getHandle() { return KernelH; }
 
+    bool getProperties(ze_kernel_properties_t &Props,
+                       ze_kernel_preferred_group_size_properties_t &PrefGroupSize,
+                       std::string &Attribs);
+    bool getKernelArgProperties(unsigned ArgIdx, uint32_t &ArgSize, std::string &ArgType);
+
 private:
-    /// map of program build specializations to Kernel handles
     ze_kernel_handle_t KernelH;
+    L0KernelGetArgumentSize KernelGetArgumentSizeFunc;
+    L0KernelGetArgumentType KernelGetArgumentTypeFunc;
 };
 
 
@@ -434,7 +454,8 @@ class Level0NativeProgram : public Level0ProgramBase {
 public:
     Level0NativeProgram(ze_context_handle_t Ctx,
                         ze_device_handle_t Dev,
-                        // bool Optimize,
+                        L0KernelGetArgumentSize GASize,
+                        L0KernelGetArgumentType GAType,
                         std::vector<uint8_t> &&GPUBinary,
                         const char* CDir,
                         const std::string &UUID);
@@ -446,18 +467,6 @@ public:
     Level0NativeProgram(Level0NativeProgram const &&) = delete;
     Level0NativeProgram& operator=(Level0NativeProgram &&) = delete;
 
-    // bool isOptimized() const { return Optimize; }
-
-    ///
-    /// \brief returns the best available specialization of a Kernel,
-    ///        for the given set of specialization options (currently just one).
-    /// \param [in] Kernel the Level0Kernel to search for
-    /// \param [out] Mod the ze_module_handle_t of the found specialization, or null
-    /// \param [out] Ker the ze_kernel_handle_t of the found specialization, or null
-    /// \returns false if can't find any build specialization
-    ///
-    // ze_kernel_handle_t createKernel(const std::string &Name);
-    // bool freeKernel(ze_kernel_handle_t Ker);
     const std::vector<std::string> &getKernelNames() { return KernelNames; }
 
     /// for cl_kernel creation device->ops callback
@@ -470,8 +479,9 @@ private:
     ze_module_handle_t ModuleH;
     // Level0NativeBuildUPtr NativeBuild;
     std::list<Level0NativeKernelUPtr> Kernels;
-    // bool Optimize;
     std::vector<std::string> KernelNames;
+    L0KernelGetArgumentSize KernelGetArgumentSizeFunc;
+    L0KernelGetArgumentType KernelGetArgumentTypeFunc;
 };
 
 
@@ -1073,27 +1083,28 @@ public:
                      ze_kernel_handle_t &Ker);
   /*********************** native binaries ***********************/
 
-  bool supportsBinary(ze_device_handle_t DeviceH,
-                      ze_context_handle_t ContextH,
-                      const char *Binary, size_t Length);
+  bool supportsNativeBinary(ze_device_handle_t DeviceH,
+                            ze_context_handle_t ContextH,
+                            const char *Binary, size_t Length);
 
-  TODO;
   Level0NativeProgram *createNativeProgram(ze_context_handle_t Ctx, ze_device_handle_t Dev,
                                            std::string &BuildLog, bool Optimize,
                                            std::vector<uint8_t> &GPUBinary,
                                            const char *CDir, const std::string &UUID);
-  TODO;
+
   bool releaseNativeProgram(Level0NativeProgram *Prog);
 
-  Level0NativeKernel *createNativeKernel(Level0NativeProgram *Prog,
-                                           const char *Name);
+  // Level0NativeKernel *createNativeKernel(Level0NativeProgram *Prog,
+  //                                          const char *Name);
 
-  bool releaseNativeKernel(Level0NativeProgram *Prog,
-                            Level0NativeKernel *Kernel);
+  // bool releaseNativeKernel(Level0NativeProgram *Prog,
+  //                           Level0NativeKernel *Kernel);
 
-  bool getBestNativeKernel(Level0NativeProgram *Program,
-                            Level0NativeKernel *Kernel,
-                            ze_graph_handle_t &Graph);
+  // bool getBestNativeKernel(Level0NativeProgram *Program,
+  //                           Level0NativeKernel *Kernel,
+  //                           ze_graph_handle_t &Graph);
+
+  /***************************************************************/
 
 #ifdef ENABLE_NPU
   Level0BuiltinProgram *
@@ -1132,6 +1143,7 @@ private:
   std::unique_ptr<Level0CompilerJobQueue> JobQueue;
   /// list of all programs that were built & not released yet
   std::list<Level0SpecProgramSPtr> Programs;
+  std::list<Level0NativeProgramSPtr> NativePrograms;
 #ifdef ENABLE_NPU
   /// list of all builtin programs
   std::list<Level0BuiltinProgramSPtr> BuiltinPrograms;

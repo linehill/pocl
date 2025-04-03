@@ -1171,44 +1171,83 @@ static int pocl_level0_setup_lz_metadata(cl_device_id Device,
     pocl_kernel_metadata_t *Meta = &Program->kernel_meta[Idx];
     if (K == nullptr)
       return 0;
-    // ZE kernel metadata; TODO with JIT, we don't have the ZE module
-    // to extract the metadata - this needs to be extracted from SPIR-V
-    // required workgroup size, attributes, subgroups, priv/local mem sizes
 
-      ze_kernel_preferred_group_size_properties_t PrefGroupSize = {
-          ZE_STRUCTURE_TYPE_KERNEL_PREFERRED_GROUP_SIZE_PROPERTIES, NULL, 0};
-      ze_kernel_properties_t KernelProps{};
-      KernelProps.stype = ZE_STRUCTURE_TYPE_KERNEL_PROPERTIES;
-      KernelProps.pNext = (void *)&PrefGroupSize;
-      LEVEL0_CHECK_RET(0, zeKernelGetProperties(HKernel, &KernelProps));
+    ze_kernel_properties_t KernelProps;
+    ze_kernel_preferred_group_size_properties_t PrefGroupSize;
+    std::string KernelAttrs;
+    if (!K->getProperties(KernelProps, PrefGroupSize, KernelAttrs))
+      return 0;
 
-      assert(Meta->num_args == KernelProps.numKernelArgs);
-      Meta->reqd_wg_size[0] = KernelProps.requiredGroupSizeX;
-      Meta->reqd_wg_size[1] = KernelProps.requiredGroupSizeY;
-      Meta->reqd_wg_size[2] = KernelProps.requiredGroupSizeZ;
-      // TODO: setup of these attributes is missing
-      // meta->vec_type_hint
-      // meta->wg_size_hint
+    Meta->num_args = KernelProps.numKernelArgs;
+    Meta->reqd_wg_size[0] = KernelProps.requiredGroupSizeX;
+    Meta->reqd_wg_size[1] = KernelProps.requiredGroupSizeY;
+    Meta->reqd_wg_size[2] = KernelProps.requiredGroupSizeZ;
+    // TODO: setup of these attributes is missing
+    // meta->vec_type_hint
+    // meta->wg_size_hint
 
-      uint32_t AttrSize = 0;
-      char *AttrString = nullptr;
-      LEVEL0_CHECK_RET(
-          0, zeKernelGetSourceAttributes(HKernel, &AttrSize, &AttrString));
-      if (AttrSize > 0) {
-        Meta->attributes = strdup(AttrString);
-      }
-
-
-
-      Meta->max_subgroups[ProgramDeviceI] = KernelProps.maxSubgroupSize;
-      Meta->compile_subgroups[ProgramDeviceI] =
-          KernelProps.requiredSubgroupSize;
-      Meta->max_workgroup_size[ProgramDeviceI] = 0; // TODO
-      Meta->preferred_wg_multiple[ProgramDeviceI] =
+    Meta->attributes = strdup(KernelAttrs.c_str());
+    Meta->max_subgroups[ProgramDeviceI] = KernelProps.maxSubgroupSize;
+    Meta->compile_subgroups[ProgramDeviceI] =
+        KernelProps.requiredSubgroupSize;
+    Meta->max_workgroup_size[ProgramDeviceI] = 0; // TODO
+    Meta->preferred_wg_multiple[ProgramDeviceI] =
           PrefGroupSize.preferredMultiple;
       Meta->local_mem_size[ProgramDeviceI] = KernelProps.localMemSize;
       Meta->private_mem_size[ProgramDeviceI] = KernelProps.privateMemSize;
       Meta->spill_mem_size[ProgramDeviceI] = KernelProps.spillMemSize;
+
+    if (Meta->num_args == 0)
+      continue;
+    Meta->arg_info = (pocl_argument_info *)calloc(Meta->num_args,
+                                           sizeof(pocl_argument_info));
+
+    for (unsigned ArgI = 0; ArgI < KernelProps.numKernelArgs; ++ArgI) {
+      pocl_argument_info *Arg = &Meta->arg_info[ArgI];
+      uint32_t ArgSize = 0;
+      std::string ArgType;
+      if (!K->getKernelArgProperties(ArgI, ArgSize, ArgType))
+        return 0;
+      std::string Name = "Arg" + std::to_string(ArgI);
+      Arg->name = strdup(Name.c_str());
+      Arg->type_name = strdup(ArgType.c_str());
+      Arg->type = POCL_ARG_TYPE_NONE;
+
+      // determine type
+      Arg->type_size = ArgSize;
+      if (ArgType.back() == '*') {
+        Arg->type = POCL_ARG_TYPE_POINTER;
+      } else {
+        if (ArgType == "sampler_t")
+          Arg->type = POCL_ARG_TYPE_SAMPLER;
+        if (ArgType == "pipe_t")
+          Arg->type = POCL_ARG_TYPE_PIPE;
+        if (ArgType.size() > 7 &&
+            ArgType.compare(0,5,"image",5) == 0 &&
+            ArgType.compare(ArgType.size()-2,2,"_t",2) == 0)
+          Arg->type = POCL_ARG_TYPE_IMAGE;
+      }
+
+      // const, volatile etc
+      Arg->type_qualifier = CL_KERNEL_ARG_TYPE_NONE;
+
+      // read-only, read-write etc, images only
+      if (Arg->type == POCL_ARG_TYPE_IMAGE)
+        Arg->access_qualifier = CL_KERNEL_ARG_ACCESS_READ_WRITE;
+      else
+        Arg->access_qualifier = CL_KERNEL_ARG_ACCESS_NONE;
+
+      // default private
+      Arg->address_qualifier = CL_KERNEL_ARG_ADDRESS_PRIVATE;
+      if (Arg->type == POCL_ARG_TYPE_IMAGE)
+        Arg->address_qualifier = CL_KERNEL_ARG_ADDRESS_GLOBAL;
+      if (Arg->type == POCL_ARG_TYPE_POINTER) {
+        if (Arg->type_size == 0)
+          Arg->address_qualifier = CL_KERNEL_ARG_ADDRESS_LOCAL;
+        else
+          Arg->address_qualifier = CL_KERNEL_ARG_ADDRESS_GLOBAL;
+      }
+    }
 #if 0 \
     /// TODO: \
     /// required number of subgroups per thread group, \
