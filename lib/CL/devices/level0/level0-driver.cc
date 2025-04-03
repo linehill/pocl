@@ -1769,7 +1769,6 @@ void Level0CmdList::runBuiltinKernel(_cl_command_run *RunCmd, cl_device_id Dev,
 
   graph_dditable_ext_t *Ext = Device->getDriver()->getGraphExt();
   assert(Ext);
-  ze_result_t ZeRes = ZE_RESULT_SUCCESS;
 
   struct pocl_argument *PoclArg = RunCmd->arguments;
 
@@ -1849,7 +1848,6 @@ void Level0CmdList::runNDRangeKernel(_cl_command_run *RunCmd, cl_device_id Dev,
       PoclCtx->local_size[0] * PoclCtx->local_size[1] * PoclCtx->local_size[2];
 
   if (Program->program_il == nullptr) {
-    Level0NativeProgram *L0Program = (Level0NativeProgram *)Program->data[DeviceI];
     Level0NativeKernel *L0Kernel = (Level0NativeKernel *)Kernel->data[DeviceI];
     KernelH = L0Kernel->getHandle();
     assert(KernelH);
@@ -4198,8 +4196,6 @@ int Level0Device::createSpirvProgram(cl_program Program, cl_uint DeviceI) {
 
 int Level0Device::createGPUBinaryProgram(cl_program Program, cl_uint DeviceI) {
 
-  cl_device_id Dev = Program->devices[DeviceI];
-
   unsigned char *BinaryPtr = Program->binaries[DeviceI];
   size_t BinarySize = Program->binary_sizes[DeviceI];
   std::vector<uint8_t> GPUBinary(BinaryPtr, BinaryPtr + BinarySize);
@@ -4214,7 +4210,7 @@ int Level0Device::createGPUBinaryProgram(cl_program Program, cl_uint DeviceI) {
   std::string BuildLog;
   Level0NativeProgram *ProgramData = Driver->getJobSched().createNativeProgram(
         ContextHandle, DeviceHandle, BuildLog, Optimize,
-        GPUBinary, ProgramCacheDir, KernelCacheHash);
+        std::move(GPUBinary), ProgramCacheDir, KernelCacheHash);
 
     if (ProgramData == nullptr) {
         if (!BuildLog.empty()) {

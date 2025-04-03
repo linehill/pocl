@@ -171,8 +171,8 @@ bool Level0NativeKernel::getProperties(ze_kernel_properties_t &Props,
   Props.pNext = (void *)&PrefGroupSize;
   LEVEL0_CHECK_RET(false, zeKernelGetProperties(KernelH, &Props));
   uint32_t AttrSize = 0;
-  char *AttrString = nullptr;
   LEVEL0_CHECK_RET(false, zeKernelGetSourceAttributes(KernelH, &AttrSize, nullptr));
+
   if (AttrSize) {
     auto Buffer = std::unique_ptr<char>(new char[AttrSize]);
     auto Temp = Buffer.get();
@@ -180,13 +180,13 @@ bool Level0NativeKernel::getProperties(ze_kernel_properties_t &Props,
     Attribs.resize(AttrSize);
     Attribs.append(Temp, AttrSize);
   }
+
   return true;
 }
 
 bool Level0NativeKernel::getKernelArgProperties(unsigned ArgIdx,
                                 uint32_t &ArgSize, std::string &ArgType) {
   ArgSize = 0;
-  ze_result_t Res = ZE_RESULT_SUCCESS;
   LEVEL0_CHECK_RET(false, KernelGetArgumentSizeFunc(KernelH, ArgIdx, &ArgSize));
 
   uint32_t argTypeSize = 0;
@@ -195,7 +195,7 @@ bool Level0NativeKernel::getKernelArgProperties(unsigned ArgIdx,
   auto Buffer = std::unique_ptr<char>(new char[argTypeSize]);
   auto Temp = Buffer.get();
   LEVEL0_CHECK_RET(false, KernelGetArgumentTypeFunc(KernelH, ArgIdx,
-                                      &argTypeSize, &Temp));
+                                      &argTypeSize, Temp));
   ArgType.clear();
   ArgType.append(Temp, argTypeSize);
   return true;
@@ -426,7 +426,7 @@ Level0SpecKernel *Level0SpecProgram::createKernel(const std::string Name) {
   std::lock_guard<std::mutex> LockGuard(Mutex);
   Level0SpecKernelUPtr Kernel = std::make_unique<Level0SpecKernel>(Name);
   Level0SpecKernel *RetVal = Kernel.get();
-  Kernels.push_back(Kernel);
+  Kernels.emplace_back(std::move(Kernel));
   return RetVal;
 }
 
@@ -606,8 +606,8 @@ Level0NativeProgram::Level0NativeProgram(ze_context_handle_t Ctx,
                                          std::vector<uint8_t> &&GPUBinary,
                                          const char* CDir,
                                          const std::string &UUID)
-    : Level0ProgramBase(Ctx, Dev, CDir, UUID), ModuleH(nullptr),
-    NativeBinary(GPUBinary), KernelGetArgumentSizeFunc(GASize),
+    : Level0ProgramBase(Ctx, Dev, CDir, UUID), NativeBinary(GPUBinary),
+    ModuleH(nullptr), KernelGetArgumentSizeFunc(GASize),
     KernelGetArgumentTypeFunc(GAType) {}
 
 bool Level0NativeProgram::init() {
@@ -650,7 +650,7 @@ Level0NativeKernel *Level0NativeProgram::createKernel(const std::string &Name) {
   Level0NativeKernelUPtr Kernel = std::make_unique<Level0NativeKernel>(Name,
                KernelH, KernelGetArgumentSizeFunc, KernelGetArgumentTypeFunc);
   Level0NativeKernel *RetVal = Kernel.get();
-  Kernels.push_back(Kernel);
+  Kernels.emplace_back(std::move(Kernel));
   return RetVal;
 }
 
@@ -1865,9 +1865,6 @@ bool Level0BuiltinProgram::getBestKernel(Level0BuiltinKernel *BKernel,
   return true;
 }
 
-Level0BuiltinKernel::Level0BuiltinKernel(const std::string N) : Name(N) {
-  CacheUUID = getStringHash(N);
-}
 
 #endif
 
@@ -2144,13 +2141,17 @@ Level0CompilationJobScheduler::~Level0CompilationJobScheduler() {
 bool Level0CompilationJobScheduler::supportsNativeBinary(ze_device_handle_t DeviceH, ze_context_handle_t ContextH,
                                                    const char *Binary, size_t Length) {
     ze_module_handle_t ModuleH = nullptr;
-    ze_module_desc_t ModuleDesc{ZE_STRUCTURE_TYPE_MODULE_DESC, nullptr};
-    ModuleDesc.format = ZE_MODULE_FORMAT_NATIVE;
-    ModuleDesc.pInputModule = reinterpret_cast<const uint8_t *>(Binary);
-    ModuleDesc.inputSize = Length;
-    ModuleDesc.pBuildFlags = nullptr;
-    ModuleDesc.pConstants = nullptr;
-    ze_result_t Res = zeModuleCreate(ContextH, DeviceH, &ModuleDesc, &ModuleH, nullptr);
+    ze_module_desc_t ModuleDesc{
+      ZE_STRUCTURE_TYPE_MODULE_DESC,
+      nullptr, // pNext
+      ZE_MODULE_FORMAT_NATIVE,
+      Length,
+      reinterpret_cast<const uint8_t *>(Binary),
+      nullptr, // pBuildFlags
+      nullptr // pConstants
+      };
+    ze_result_t Res = zeModuleCreate(ContextH, DeviceH, &ModuleDesc,
+                                     &ModuleH, nullptr);
     if (Res == ZE_RESULT_SUCCESS) {
       zeModuleDestroy(ModuleH);
       return true;
@@ -2160,13 +2161,13 @@ bool Level0CompilationJobScheduler::supportsNativeBinary(ze_device_handle_t Devi
 
 Level0NativeProgram *Level0CompilationJobScheduler::createNativeProgram(
     ze_context_handle_t Ctx, ze_device_handle_t Dev,
-    std::string &BuildLog, bool Optimize, std::vector<uint8_t> &GPUBinary,
+    std::string &BuildLog, bool Optimize, std::vector<uint8_t> &&GPUBinary,
     const char *CDir, const std::string &UUID) {
 
   Level0NativeProgramSPtr Prog = std::make_shared<Level0NativeProgram>(Ctx, Dev,
                                     kernelGetArgumentSizeFunc,
                                     kernelGetArgumentTypeFunc,
-                                    GPUBinary, CDir, UUID);
+                                    std::move(GPUBinary), CDir, UUID);
   if (!Prog->init()) {
     BuildLog.append("failed to initialize Level0NativeProgram\n");
     return nullptr;

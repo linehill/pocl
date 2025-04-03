@@ -142,12 +142,13 @@
 #define UNSET_VALIDITY_MARKERS(__OBJ__) do {} while(0)
 #endif
 
+#ifdef POCL_DEBUG_LOCKS
+
 #if !(POCL_MAX_LOCK_TIME_IN_NS > 0)
 #undef POCL_MAX_LOCK_TIME_IN_NS
 #define POCL_MAX_LOCK_TIME_IN_NS 40000
 #endif
 
-#ifdef POCL_DEBUG_LOCKS
 #define INIT_OBJ_LOCK_DEBUG(X) X->pocl_lock_start = 0; X->pocl_lock_finish = 0; X->pocl_lock_num_locks = 0; X->pocl_lock_total_time = 0; X->pocl_lock_place = NULL
 #define DESTROY_OBJ_LOCK_DEBUG(X) if (X->pocl_lock_num_locks > 0) { \
   size_t pocl_lock_avg_time = X->pocl_lock_total_time / X->pocl_lock_num_locks; \

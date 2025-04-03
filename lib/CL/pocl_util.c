@@ -2086,6 +2086,7 @@ pocl_copy_command_node (_cl_command_node *dst_node, _cl_command_node *src_node)
 
     case CL_COMMAND_COMMAND_BUFFER_KHR:
       POname (clRetainCommandBufferKHR) (dst_node->command.replay.buffer);
+      break;
 
     /* These cases are currently not handled in pocl_copy_event_node,
      * because there is no command buffer equivalent of these nodes. */

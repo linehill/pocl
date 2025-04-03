@@ -60,6 +60,7 @@ typedef ze_graph_dditable_ext_t graph_dditable_ext_t;
 #ifndef POCL_LIB_CL_DEVICES_LEVEL0_LEVEL0_COMPILATION_HH
 #define POCL_LIB_CL_DEVICES_LEVEL0_LEVEL0_COMPILATION_HH
 
+#include <cassert>
 #include <condition_variable>
 #include <list>
 #include <map>
@@ -473,6 +474,11 @@ public:
     Level0NativeKernel *createKernel(const std::string &Name);
     /// for cl_kernel deletion device->ops callback
     bool releaseKernel(Level0NativeKernel *Kernel);
+
+    virtual bool addFinishedBuild(Level0BuildBaseUPtr Build) override {
+      assert(0 && "should not be called");
+      return false;
+    };
 
 private:
     std::vector<uint8_t> NativeBinary;
@@ -1089,7 +1095,7 @@ public:
 
   Level0NativeProgram *createNativeProgram(ze_context_handle_t Ctx, ze_device_handle_t Dev,
                                            std::string &BuildLog, bool Optimize,
-                                           std::vector<uint8_t> &GPUBinary,
+                                           std::vector<uint8_t> &&GPUBinary,
                                            const char *CDir, const std::string &UUID);
 
   bool releaseNativeProgram(Level0NativeProgram *Prog);

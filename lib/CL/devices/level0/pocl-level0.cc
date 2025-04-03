@@ -821,11 +821,13 @@ int pocl_level0_build_source(cl_program Program, cl_uint DeviceI,
 #endif
 }
 
+/*
 static bool isFileELF(const char *Binary, size_t Length) {
     return Length > 4 &&
            Binary[0] == 0x7f && Binary[1] == 0x45
            && Binary[2] == 0x4C && Binary[3] == 0x46;
 }
+*/
 
 int pocl_level0_supports_binary(cl_device_id ClDev, size_t Length,
                                 const char *Binary) {
@@ -1505,7 +1507,6 @@ void pocl_level0_flush(cl_device_id ClDev, cl_command_queue Queue) {
 }
 
 void pocl_level0_submit(_cl_command_node *Node, cl_command_queue Queue) {
-  Level0Device *Device = (Level0Device *)Queue->device->data;
   PoclL0QueueData *QD = (PoclL0QueueData *)Queue->data;
   cl_event Ev = Node->sync.event.event;
 
