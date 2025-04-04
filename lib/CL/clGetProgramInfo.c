@@ -50,14 +50,18 @@ static void get_binary_sizes(cl_program program, size_t *sizes)
           continue;
         }
 
-      if (program->associated_devices[assoc_i]->ops->build_poclbinary)
-        program->associated_devices[assoc_i]->ops->build_poclbinary (program,
-                                                                     dev_i);
+      cl_device_id dev = program->associated_devices[assoc_i];
 
-      if (!program->pocl_binaries[dev_i] && program->binaries[dev_i])
+      if (!program->pocl_binaries_prefer_native[dev_i] &&
+          !program->pocl_binaries[dev_i] && program->binaries[dev_i]) {
+        if (dev->ops->build_poclbinary)
+          dev->ops->build_poclbinary (program, dev_i);
         pocl_binary_sizeof_binary (program, dev_i);
+      }
 
-      if (program->pocl_binaries[dev_i])
+      if (program->pocl_binaries_prefer_native[dev_i])
+        sizes[assoc_i] = program->binary_sizes[dev_i];
+      else if (program->pocl_binaries[dev_i])
         sizes[assoc_i] = program->pocl_binary_sizes[dev_i];
       else
         sizes[assoc_i] = 0;
@@ -84,20 +88,24 @@ static void get_binaries(cl_program program, unsigned char **binaries)
           binaries[assoc_i] = NULL;
           continue;
         }
+      
+      cl_device_id dev = program->associated_devices[assoc_i];
 
-      if (program->associated_devices[assoc_i]->ops->build_poclbinary)
-        program->associated_devices[assoc_i]->ops->build_poclbinary (program,
-                                                                     dev_i);
-
-      if (!program->pocl_binaries[dev_i] && program->binaries[dev_i])
+      if (!program->pocl_binaries_prefer_native[dev_i] &&
+          !program->pocl_binaries[dev_i] && program->binaries[dev_i])
         {
+          if (dev->ops->build_poclbinary)
+              dev->ops->build_poclbinary (program, dev_i);
           pocl_binary_serialize (program, dev_i, &res);
           if (program->pocl_binary_sizes[dev_i])
             assert (program->pocl_binary_sizes[dev_i] == res);
           program->pocl_binary_sizes[dev_i] = res;
         }
 
-      if (program->pocl_binaries[dev_i])
+      if (program->pocl_binaries_prefer_native[dev_i])
+        memcpy (binaries[assoc_i], program->binaries[dev_i],
+                 program->binary_sizes[dev_i]);
+      else if (program->pocl_binaries[dev_i])
         memcpy (binaries[assoc_i], program->pocl_binaries[dev_i],
                 program->pocl_binary_sizes[dev_i]);
       else

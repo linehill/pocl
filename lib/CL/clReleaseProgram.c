@@ -97,7 +97,8 @@ POname(clReleaseProgram)(cl_program program) CL_API_SUFFIX__VERSION_1_0
       if (program->pocl_binaries)
         for (i = 0; i < program->associated_num_devices; ++i)
           POCL_MEM_FREE(program->pocl_binaries[i]);
-      POCL_MEM_FREE(program->pocl_binaries);
+      POCL_MEM_FREE (program->pocl_binaries);
+      POCL_MEM_FREE (program->pocl_binaries_prefer_native);
 
       pocl_cache_cleanup_cachedir(program);
 

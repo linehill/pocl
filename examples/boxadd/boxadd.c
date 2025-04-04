@@ -60,9 +60,13 @@ main (int argc, char **argv)
   err = poclu_get_any_device2 (&context, &device, &queue, &platform);
   CHECK_OPENCL_ERROR_IN ("clCreateContext");
 
+  int spirv = (argc > 1 && argv[1][0] == 'v');
+  int poclbin = (argc > 1 && argv[1][0] == 'b');
+  const char *explicit_binary_path = (argc > 2) ? argv[2] : NULL;
+
   const char *basename = "boxadd";
-  err = poclu_load_program (platform, context, device, basename, 0, 0, NULL,
-                            NULL, &program);
+  err = poclu_load_program (platform, context, device, basename, spirv,
+                           poclbin, explicit_binary_path, NULL, &program);
   if (err != CL_SUCCESS)
     goto FINISH;
 

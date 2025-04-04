@@ -87,20 +87,20 @@ Level0SpecKernel::~Level0SpecKernel() {
 
 bool Level0SpecKernel::createForBuild(BuildSpecialization Spec,
                                   ze_module_handle_t Mod) {
-  ze_kernel_handle_t KernelH = nullptr;
-  ze_module_handle_t ModuleH = Mod;
+  ze_kernel_handle_t NewKernelH = nullptr;
   ze_kernel_desc_t KernelDesc = {ZE_STRUCTURE_TYPE_KERNEL_DESC, nullptr,
                                  0, // flags
                                  Name.c_str()};
   //  POCL_MSG_WARN("Using kernel name: %s, MODULE: %p\n", Name.c_str(), Mod);
-  ze_result_t Res = zeKernelCreate(ModuleH, &KernelDesc, &KernelH);
+  ze_result_t Res = zeKernelCreate(Mod, &KernelDesc, &NewKernelH);
   if (Res != ZE_RESULT_SUCCESS) {
     POCL_MSG_ERR("Failed to create ZE kernel %s: %x\n", Name.c_str(),
                  (unsigned)Res);
     return false;
   }
 
-  KernelHandles[Spec] = KernelH;
+  KernelHandles[Spec] = NewKernelH;
+  KernelH = NewKernelH;
   return true;
 }
 
@@ -118,14 +118,6 @@ ze_kernel_handle_t Level0SpecKernel::getOrCreateForBuild(Level0SpecBuild *Build)
   return KernelHandles[Spec];
 }
 
-ze_kernel_handle_t Level0SpecKernel::getAnyCreated() {
-  std::lock_guard<std::mutex> LockGuard(Mutex);
-  if (KernelHandles.empty()) {
-    return nullptr;
-  } else {
-    return KernelHandles.begin()->second;
-  }
-}
 
 void Level0KernelBase::setIndirectAccess(
     ze_kernel_indirect_access_flag_t AccessFlag, bool Value) {

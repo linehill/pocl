@@ -1849,7 +1849,7 @@ void Level0CmdList::runNDRangeKernel(_cl_command_run *RunCmd, cl_device_id Dev,
 
   if (Program->program_il == nullptr) {
     Level0NativeKernel *L0Kernel = (Level0NativeKernel *)Kernel->data[DeviceI];
-    KernelH = L0Kernel->getHandle();
+    KernelH = L0Kernel->getAnyCreated();
     assert(KernelH);
     L0KernelB = L0Kernel;
   } else {

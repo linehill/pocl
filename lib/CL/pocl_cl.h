@@ -2006,6 +2006,10 @@ struct _cl_program {
   /* per-device poclbinary-format binaries.  */
   size_t *pocl_binary_sizes;
   unsigned char **pocl_binaries;
+  /* bool flag. If set to true by device driver's build callbacks,
+   * clGetProgramInfo(CL_PROGRAM_BINARIES) will return device's own
+   * native binaries (binaries[i]) instead of pocl_binaries[i] */
+  char *pocl_binaries_prefer_native;
   /* device-specific data, per each device */
   void **data;
 

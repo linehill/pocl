@@ -119,6 +119,9 @@ create_program_skeleton (cl_context context, cl_uint num_devices,
       || (program->pocl_binary_sizes
           = (size_t *)calloc (num_devices, sizeof (size_t)))
              == NULL
+      || (program->pocl_binaries_prefer_native
+          = (char *)calloc (num_devices, sizeof (char)))
+             == NULL
       || (program->build_log = (char **)calloc (num_devices, sizeof (char *)))
              == NULL
       || ((program->data = (void **)calloc (num_devices, sizeof (void *)))
@@ -230,6 +233,7 @@ ERROR_CLEAN_PROGRAM_AND_BINARIES:
       POCL_MEM_FREE(program->pocl_binaries[i]);
   POCL_MEM_FREE (program->pocl_binaries);
   POCL_MEM_FREE (program->pocl_binary_sizes);
+  POCL_MEM_FREE (program->pocl_binaries_prefer_native);
   POCL_MEM_FREE (program->data);
   POCL_MEM_FREE (program->global_var_total_size);
   POCL_MEM_FREE (program->llvm_irs);

@@ -88,22 +88,25 @@ static void pocl_level0_local_size_optimizer(cl_device_id Dev, cl_kernel Ker,
     *LocalX = *LocalY = *LocalZ = 1;
     return;
   }
-  assert(Ker->data[DeviceI] != nullptr);
-  Level0SpecKernel *L0Kernel = (Level0SpecKernel *)Ker->data[DeviceI];
-  ze_kernel_handle_t HKernel = L0Kernel->getAnyCreated();
-
   if (GlobalX == 1 && GlobalY == 1 && GlobalZ == 1) {
     *LocalX = *LocalY = *LocalZ = 1;
     return;
   }
 
+  assert(Ker->data[DeviceI] != nullptr);
+  cl_program Prog = Ker->program;
+  assert(Prog->data[DeviceI] != nullptr);
+
+  Level0KernelBase *L0Kernel = (Level0KernelBase *)Ker->data[DeviceI];
+  ze_kernel_handle_t KernelH = L0Kernel->getAnyCreated();
+
   uint32_t SuggestedX = 0;
   uint32_t SuggestedY = 0;
   uint32_t SuggestedZ = 0;
 
-  if (HKernel) {
+  if (KernelH) {
     ze_result_t Res =
-        zeKernelSuggestGroupSize(HKernel, GlobalX, GlobalY, GlobalZ,
+        zeKernelSuggestGroupSize(KernelH, GlobalX, GlobalY, GlobalZ,
                                  &SuggestedX, &SuggestedY, &SuggestedZ);
     if (Res == ZE_RESULT_SUCCESS) {
       *LocalX = SuggestedX;
@@ -119,6 +122,7 @@ static void pocl_level0_local_size_optimizer(cl_device_id Dev, cl_kernel Ker,
         "pocl_level0_local_size_optimizer : HKernel == nullptr\n");
   }
 
+FINISH:
   pocl_default_local_size_optimizer(Dev, Ker, DeviceI, MaxGroupSize, GlobalX,
                                     GlobalY, GlobalZ, LocalX, LocalY, LocalZ);
 }
@@ -952,6 +956,7 @@ int pocl_level0_build_binary(cl_program Program, cl_uint DeviceI,
         POCL_RETURN_ERROR_ON((LinkProgram == 0), CL_BUILD_PROGRAM_FAILURE,
                               "creating multi-part programs via GPU binaries"
                               " is not supported\n");
+        Program->pocl_binaries_prefer_native[DeviceI] = CL_TRUE;
         // don't skip creating cache dir
         pocl_cache_create_program_cachedir(Program, DeviceI, (char *)Program->binaries[DeviceI],
                                            Program->binary_sizes[DeviceI], ProgramBcPath);

@@ -835,7 +835,7 @@ pocl_binary_sizeof_binary(cl_program program, unsigned device_i)
 
   if (pocl_binary_serialize(program, device_i, &res) != CL_SUCCESS)
     {
-      POCL_MEM_FREE(program->pocl_binaries[device_i]);
+      POCL_MEM_FREE (program->pocl_binaries[device_i]);
       program->pocl_binary_sizes[device_i] = 0;
       return 0;
     }
@@ -845,7 +845,6 @@ pocl_binary_sizeof_binary(cl_program program, unsigned device_i)
   memcpy(program->pocl_binaries[device_i], temp_buf, res);
   free(temp_buf);
   return res;
-
 }
 
 /***********************************************************/

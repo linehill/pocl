@@ -209,6 +209,10 @@ public:
         return AccessedPointers;
     }
 
+    ///  returns any existing handle.
+    /// Used only in pocl_level0_local_size_optimizer() for zeKernelSuggestGroupSize().
+    ze_kernel_handle_t getAnyCreated() { return KernelH; }
+
 protected:
     /// for indirect access
     std::map<void *, size_t> AccessedPointers;
@@ -216,6 +220,7 @@ protected:
     std::mutex Mutex;
     std::string Name;
     std::string CacheUUID;
+    ze_kernel_handle_t KernelH = nullptr;
 };
 
 
@@ -237,11 +242,6 @@ public:
   Level0SpecKernel& operator=(Level0SpecKernel const &) = delete;
   Level0SpecKernel(Level0SpecKernel const &&) = delete;
   Level0SpecKernel& operator=(Level0SpecKernel &&) = delete;
-
-  ///  returns any existing handle.
-  /// Used only in pocl_level0_local_size_optimizer() for zeKernelSuggestGroupSize().
-  /// For getting a handle for running a kernel, use Level0Program->getBestKernel() ///
-  ze_kernel_handle_t getAnyCreated();
 
   /// returns (or creates a new) ze_kernel_handle_t + ze_module_handle_t
   /// for a particular program build specialization
@@ -269,9 +269,9 @@ public:
     Level0NativeKernel(const std::string N, ze_kernel_handle_t KH,
                        L0KernelGetArgumentSize GASize,
                        L0KernelGetArgumentType GAType)
-        : Level0KernelBase(N), KernelH(KH),
+        : Level0KernelBase(N),
         KernelGetArgumentSizeFunc(GASize),
-        KernelGetArgumentTypeFunc(GAType) {}
+        KernelGetArgumentTypeFunc(GAType) { KernelH = KH; }
     virtual ~Level0NativeKernel();
 
     Level0NativeKernel(Level0NativeKernel const &) = delete;
@@ -279,15 +279,12 @@ public:
     Level0NativeKernel(Level0NativeKernel const &&) = delete;
     Level0NativeKernel& operator=(Level0NativeKernel &&) = delete;
 
-    ze_kernel_handle_t getHandle() { return KernelH; }
-
     bool getProperties(ze_kernel_properties_t &Props,
                        ze_kernel_preferred_group_size_properties_t &PrefGroupSize,
                        std::string &Attribs);
     bool getKernelArgProperties(unsigned ArgIdx, uint32_t &ArgSize, std::string &ArgType);
 
 private:
-    ze_kernel_handle_t KernelH;
     L0KernelGetArgumentSize KernelGetArgumentSizeFunc;
     L0KernelGetArgumentType KernelGetArgumentTypeFunc;
 };
