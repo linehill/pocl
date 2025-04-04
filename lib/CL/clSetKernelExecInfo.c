@@ -48,8 +48,12 @@ POname(clSetKernelExecInfo)(cl_kernel kernel,
 
   switch (param_name)
     {
-    case CL_KERNEL_EXEC_INFO_SVM_PTRS:
     case CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM:
+      {
+        kernel->can_access_any_pointer_indirectly = 1;
+        /* Intended fall through to the next case here. */
+      }
+    case CL_KERNEL_EXEC_INFO_SVM_PTRS:
       {
         cl_device_id dev = kernel->context->svm_allocdev;
         POCL_RETURN_ERROR_ON ((dev == NULL), CL_INVALID_OPERATION,

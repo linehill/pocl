@@ -987,37 +987,45 @@ pocl_driver_build_poclbinary (cl_program program, cl_uint device_i)
           /* By default don't specialize for a small grid size. */
           cmd.command.run.force_large_grid_wg_func = 1;
 
+          cmd.command.run.automatic_noalias = 0;
+
           /* The format of the specialization follows the format of the
              cache directory. E.g. 128-1-1-goffs0, 13-1-1-goffs0-smallgrid
              or 0-0-0-goffs0. We thus assume the local size is always given
              first. */
 
-          char *param1 = NULL, *param2 = NULL;
-          int params_found
-              = sscanf (token, "%zu-%zu-%zu-%m[^-]-%m[^-]",
-                        &cmd.command.run.pc.local_size[0],
-                        &cmd.command.run.pc.local_size[1],
-                        &cmd.command.run.pc.local_size[2], &param1, &param2);
-          if (param1 != NULL)
-            {
-              if (strncmp (param1, "goffs0", 6) == 0)
-                {
-                  cmd.command.run.pc.global_offset[0]
-                      = cmd.command.run.pc.global_offset[1]
-                      = cmd.command.run.pc.global_offset[2] = 0;
+          char *extras[3];
 
-                  if (param2 != NULL && strncmp (param2, "smallgrid", 8) == 0)
-                    {
-                      cmd.command.run.force_large_grid_wg_func = 0;
-                    }
-                }
-              else if (strncmp (param1, "smallgrid", 8) == 0)
+          int params_found = sscanf (token, "%zu-%zu-%zu-%m[^-]-%m[^-]-%m[^-]",
+                                     &cmd.command.run.pc.local_size[0],
+                                     &cmd.command.run.pc.local_size[1],
+                                     &cmd.command.run.pc.local_size[2],
+                                     &extras[0], &extras[1], &extras[2]);
+
+          for (int i = 0; i < params_found - 3; ++i)
+            {
+              char *param = extras[i];
+              if (strncmp (param, "goffs0", 6) == 0)
+                cmd.command.run.pc.global_offset[0]
+                  = cmd.command.run.pc.global_offset[1]
+                  = cmd.command.run.pc.global_offset[2] = 0;
+              else if (strncmp (param, "smallgrid", 8) == 0)
+                cmd.command.run.force_large_grid_wg_func = 0;
+              else if (strncmp (param, "noalias", 7) == 0)
                 {
-                  cmd.command.run.force_large_grid_wg_func = 0;
+                  /* Force generate a nonaliasing-specialized version.
+                     This is not a dynamic launch, nothing to detect
+                     automagically at this point. */
+                  cmd.command.run.automatic_noalias = 0;
+                  cmd.command.run.nonaliasing_buffer_args = 1;
                 }
+              else
+                {
+                  POCL_MSG_ERR ("Unrecognized specialization option '%s'.\n",
+                                param);
+                }
+              free (param);
             }
-          free (param1);
-          free (param2);
 
           if (device->ops->compile_kernel (&cmd, kernel, device, 1) != 0)
             {

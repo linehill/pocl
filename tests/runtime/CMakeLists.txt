@@ -55,7 +55,7 @@ endif()
 
 set(CXX_PROGRAMS_TO_BUILD test_device_address test_svm test_large_buf
   test_subbuffers test_compile_n_link test_dbk_matmul test_tensor_view
-  test_dbk_convert test_dbk_set_rows)
+  test_dbk_convert test_dbk_set_rows test_automatic_noalias)
 
 add_compile_options(${OPENCL_CFLAGS} -I${CMAKE_SOURCE_DIR}/include)
 
@@ -130,6 +130,42 @@ add_test_pocl(NAME "runtime/test_event_double_wait" COMMAND  "test_event_double_
 add_test_pocl(NAME "runtime/test_enqueue_kernel_from_binary" COMMAND "test_enqueue_kernel_from_binary" WORKITEM_HANDLER "loopvec")
 
 add_test_pocl(NAME "runtime/test_user_event" COMMAND  "test_user_event" WORKITEM_HANDLER "loopvec")
+
+add_test_pocl(NAME "autorestrict/disjoint_buffers"
+  COMMAND "test_automatic_noalias DisjointBuffers"
+  WORKITEM_HANDLER "loops"
+  LLVM_FILECHECK "autorestrict_noalias_set.fc"
+  ONLY_FILECHECK 1)
+
+add_test_pocl(NAME "autorestrict/inplace_buffers"
+  COMMAND "test_automatic_noalias InplaceBuffers"
+  WORKITEM_HANDLER "loops"
+  LLVM_FILECHECK "autorestrict_noalias_not_set.fc"
+  ONLY_FILECHECK 1)
+
+add_test_pocl(NAME "autorestrict/disjoint_coarse_svm"
+  COMMAND "test_automatic_noalias DisjointCoarseSVM"
+  WORKITEM_HANDLER "loops"
+  LLVM_FILECHECK "autorestrict_noalias_set.fc"
+  ONLY_FILECHECK 1)
+
+add_test_pocl(NAME "autorestrict/inplace_coarse_svm"
+  COMMAND "test_automatic_noalias InplaceCoarseSVM"
+  WORKITEM_HANDLER "loops"
+  LLVM_FILECHECK "autorestrict_noalias_not_set.fc"
+  ONLY_FILECHECK 1)
+
+add_test_pocl(NAME "autorestrict/inplace_coarse_svm_with_indirect"
+  COMMAND "test_automatic_noalias DisjointCoarseSVMWithIndirect"
+  WORKITEM_HANDLER "loops"
+  LLVM_FILECHECK "autorestrict_noalias_not_set.fc"
+  ONLY_FILECHECK 1)
+
+add_test_pocl(NAME "autorestrict/inplace_coarse_svm_with_fgsystem"
+  COMMAND "test_automatic_noalias DisjointCoarseSVMWithFGSystem"
+  WORKITEM_HANDLER "loops"
+  LLVM_FILECHECK "autorestrict_noalias_not_set.fc"
+  ONLY_FILECHECK 1)
 
 add_test(NAME "runtime/test_buffer_migration" COMMAND "test_buffer_migration")
 

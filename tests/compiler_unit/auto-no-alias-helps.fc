@@ -1,0 +1,32 @@
+# Originates from this SYCL kernel:
+#
+# q.parallel_for(sycl::nd_range<1>{ngroups * group_size, group_size}, [=](sycl::nd_item<1> it) [[sycl::reqd_sub_group_size(16)]] {
+#
+#        // Load the indirection index.
+#        // Note that every work-item in the same work-group loads the same value.
+#        int index = indirection[it.get_group(0)];
+#
+#        // Load an input value, using the indirection + our offset.
+#        int x = input[index * group_size + it.get_local_linear_id()];
+#
+#        // Store the output.
+#        output[it.get_global_linear_id()] = x;
+#
+#    }).wait();
+#
+# The seemingly simple case didn't vectorize perfectly due to a couple
+# of issues.  The final optimization that allowed to vectorize was the
+# automatic addition of 'noalias'. In this case without it the loopvec
+# doesn't understand the write to output cannot affect the indirection
+# array due to that particular part (LICM) not being aware of the
+# parallel loop semantics.  Marking the buffers 'noalias' fixes the
+# case such that wide loads and stores can be used instead of per-lane
+# indexing.
+
+CHECK:  @_pocl_kernel__ZTSZ4mainEUlN4sycl3_V17nd_itemILi1EEEE__workgroup
+CHECK: noalias.scope.decl
+CHECK: noalias.scope.decl
+CHECK: noalias.scope.decl
+CHECK: vector.body:
+CHECK: load <8 x i32>
+CHECK: store <8 x i32>

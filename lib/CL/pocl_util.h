@@ -159,30 +159,6 @@ int pocl_buffer_boundcheck_3d(const size_t buffer_size, const size_t *origin,
                               const size_t *region, size_t *row_pitch,
                               size_t *slice_pitch, const char* prefix);
 
-/**
- * Finds an SVM/USM allocation where the host pointer is in.
- *
- * Locks the context for mutual exclusion.
- *
- * @return an allocation (info) where it is found, NULL if not found.
- */
-pocl_raw_ptr *pocl_find_raw_ptr_with_vm_ptr (cl_context context,
-                                             const void *host_ptr);
-
-/**
- * Finds a cl_mem allocation where the device pointer is mapped.
- *
- * The cl_mem allocation should be allocated with CL_MEM_BUFFER_DEVICE_ADDRESS.
- *
- * Locks the context for mutual exclusion.
- *
- * @return an allocation where the device pointer is in, NULL if not found.
- */
-POCL_EXPORT
-pocl_raw_ptr *pocl_find_raw_ptr_with_dev_ptr (cl_context context,
-                                              cl_device_id dev,
-                                              const void *dev_ptr);
-
 int
 check_copy_overlap(const size_t src_offset[3],
                    const size_t dst_offset[3],

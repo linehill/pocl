@@ -81,6 +81,13 @@ pocl.
   with very long running kernels, or when using subdevices.
   Defaults to 0 (most people don't need this).
 
+- **POCL_AUTOMATIC_NOALIAS**
+
+  Attempt to infer at runtime if *all* of the kernel command's pointer
+  arguments could be marked as restrict arguments even if the programmer
+  didn't annotate them. This is currently set to all or none of the
+  pointer arguments and only works with the CPU devices. On by default.
+
 - **POCL_BINARY_SPECIALIZE_WG**
 
   By default the PoCL program binaries store generic kernel binaries which

@@ -176,6 +176,7 @@ private:
   unsigned long AddressBits;
   bool WGAssumeZeroGlobalOffset;
   bool WGDynamicLocalSize;
+  bool WGNonAliasingBufferArgs;
   bool DeviceUsingArgBufferLauncher;
   bool DeviceUsingGridLauncher;
   bool DeviceIsSPMD;
@@ -260,6 +261,7 @@ bool WorkgroupImpl::runOnModule(Module &M, llvm::FunctionAnalysisManager &FAM) {
   getModuleIntMetadata(M, "WGLocalSizeY", WGLocalSizeY);
   getModuleIntMetadata(M, "WGLocalSizeZ", WGLocalSizeZ);
   getModuleBoolMetadata(M, "WGDynamicLocalSize", WGDynamicLocalSize);
+  getModuleBoolMetadata(M, "WGNonAliasingBufferArgs", WGNonAliasingBufferArgs);
   getModuleBoolMetadata(M, "WGAssumeZeroGlobalOffset",
                         WGAssumeZeroGlobalOffset);
 
@@ -928,8 +930,9 @@ Function *WorkgroupImpl::createWrapper(Function *F,
   SmallVector<Type *, 8> FuncParams;
   LLVMContext &C = M->getContext();
   for (Function::const_arg_iterator i = F->arg_begin(), e = F->arg_end();
-       i != e; ++i)
+       i != e; ++i) {
     FuncParams.push_back(i->getType());
+  }
 
   if (!DeviceUsingArgBufferLauncher && DeviceIsSPMD) {
     FuncParams.push_back(PointerType::get(PoclContextT, DeviceContextASid));
@@ -966,6 +969,7 @@ Function *WorkgroupImpl::createWrapper(Function *F,
   SmallVector<Value *, 8> FuncArgs;
   Function::arg_iterator ai = L->arg_begin();
   for (unsigned i = 0, e = F->arg_size(); i != e; ++i) {
+
     FuncArgs.push_back(&*ai);
     ++ai;
   }
@@ -1379,11 +1383,15 @@ void WorkgroupImpl::createDefaultWorkgroupLauncher(llvm::Function *F) {
   SmallVector<Value *, 8> Arguments;
   size_t i = 0;
   const DataLayout &DL = M->getDataLayout();
-  for (Function::const_arg_iterator ii = F->arg_begin(), ee = F->arg_end();
-       ii != ee; ++ii) {
+  for (Function::arg_iterator ii = F->arg_begin(), ee = F->arg_end(); ii != ee;
+       ++ii) {
 
     if (i == F->arg_size() - 4)
       break;
+
+    if (WGNonAliasingBufferArgs && ii->getType()->isPointerTy()) {
+      ii->addAttr(Attribute::NoAlias);
+    }
 
     Type *ArgType = ii->getType();
     Type* I32Ty = Type::getInt32Ty(M->getContext());

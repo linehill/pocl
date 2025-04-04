@@ -1,0 +1,6 @@
+# This case is a generic check for the vecadd kernel when restrict was
+# _not_ added automatically by the runtime.
+
+CHECK: vecadd
+
+CHECK-NOT: .noalias.

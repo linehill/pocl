@@ -1,0 +1,9 @@
+# This case is a generic check for the vecadd kernel when restrict was added
+# automatically by the runtime.
+
+CHECK: vecadd
+
+# Noalias experimental metadata added for all 3 args:
+CHECK: .noalias.
+CHECK: .noalias.
+CHECK: .noalias.

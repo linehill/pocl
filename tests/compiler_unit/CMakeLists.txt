@@ -48,7 +48,8 @@ function(add_llvm_check)
         "${CMAKE_CURRENT_SOURCE_DIR}/${POCL_UTEST_SPIRV_NAME}.spirv"
         WORKITEM_HANDLER "${WORKITEM_HANDLER}"
         LLVM_FILECHECK "${POCL_UTEST_SPIRV_NAME}.fc"
-        ONLY_FILECHECK 1)
+        ONLY_FILECHECK 1
+        ENVIRONMENT "${POCL_UTEST_ENVIRONMENT}")
     endif()
   endif()
   if (POCL_UTEST_OPENCLC_NAME)
@@ -63,6 +64,7 @@ function(add_llvm_check)
 
 endfunction()
 
+add_llvm_check(SPIRV_NAME auto-no-alias-helps ENVIRONMENT "POCL_BINARY_SPECIALIZE_WG=64-1-1-goffs0-noalias")
 add_llvm_check(SPIRV_NAME dirty-as-casts)
 add_llvm_check(SPIRV_NAME HeCbench-eigenvalue-hip)
 add_llvm_check(SPIRV_NAME issue-1871-unreachables-remaining)

@@ -752,6 +752,7 @@ pocl_llvm_run_pocl_passes(llvm::Module *Bitcode,
   // If set to true, the next 3 parameters define the local size to specialize
   // for.
   bool WGDynamicLocalSize;
+  bool NonAliasingBufferArgs;
   size_t WGLocalSizeX;
   size_t WGLocalSizeY;
   size_t WGLocalSizeZ;
@@ -765,6 +766,7 @@ pocl_llvm_run_pocl_passes(llvm::Module *Bitcode,
     WGLocalSizeX = RunCommand->pc.local_size[0];
     WGLocalSizeY = RunCommand->pc.local_size[1];
     WGLocalSizeZ = RunCommand->pc.local_size[2];
+    NonAliasingBufferArgs = RunCommand->nonaliasing_buffer_args;
     WGDynamicLocalSize =
         WGLocalSizeX == 0 && WGLocalSizeY == 0 && WGLocalSizeZ == 0;
     WGAssumeZeroGlobalOffset = RunCommand->pc.global_offset[0] == 0 &&
@@ -816,6 +818,8 @@ pocl_llvm_run_pocl_passes(llvm::Module *Bitcode,
   setModuleIntMetadata(Bitcode, "WGLocalSizeY", WGLocalSizeY);
   setModuleIntMetadata(Bitcode, "WGLocalSizeZ", WGLocalSizeZ);
   setModuleBoolMetadata(Bitcode, "WGDynamicLocalSize", WGDynamicLocalSize);
+  setModuleBoolMetadata(Bitcode, "WGNonAliasingBufferArgs",
+                        NonAliasingBufferArgs);
   setModuleBoolMetadata(Bitcode, "WGAssumeZeroGlobalOffset",
                         WGAssumeZeroGlobalOffset);
 

@@ -25,23 +25,22 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include <uthash.h>
 
 #include "config.h"
 #include "common.h"
-#include "pocl_build_timestamp.h"
-#include "pocl_version.h"
-
 #ifdef ENABLE_LLVM
 #include "kernellib_hash.h"
 #endif
-
-#include "pocl_hash.h"
+#include "pocl_build_timestamp.h"
 #include "pocl_cache.h"
-#include "pocl_file_util.h"
-#include "pocl_llvm.h"
-
 #include "pocl_cl.h"
+#include "pocl_file_util.h"
+#include "pocl_hash.h"
+#include "pocl_llvm.h"
+#include "pocl_mem_management.h"
 #include "pocl_runtime_config.h"
+#include "pocl_version.h"
 
 #define POCL_LAST_ACCESSED_FILENAME "/last_accessed"
 /* The filename in which the program's build log is stored */
@@ -158,15 +157,128 @@ pocl_hash_clipped_name (const char *str, char *new_str)
     }
 }
 
+static int
+buffer_args_are_disjoint (_cl_command_node *command)
+{
+
+  _cl_command_run *run_cmd = &command->command.run;
+  pocl_kernel_metadata_t *meta = run_cmd->kernel->meta;
+  cl_kernel k = run_cmd->kernel;
+  cl_context context = k->context;
+  int all_disjoint = 1;
+
+  typedef struct
+  {
+    void *key;
+    UT_hash_handle hh;
+  } el_t;
+  /* Hash table for keeping book of the pointed-to objects. */
+  el_t *hash = NULL;
+
+  for (cl_uint i = 0; i < meta->num_args; ++i)
+    {
+      if (meta->arg_info[i].type != POCL_ARG_TYPE_POINTER)
+        continue;
+
+      /* TODO: Should this be dyn_kernel_args? */
+      struct pocl_argument *al = &(k->dyn_arguments[i]);
+      if (al->value == NULL)
+        continue;
+
+      /* Find the buffer the pointers point to. */
+      void *obj_base = NULL;
+      if (al->is_raw_ptr)
+        {
+          obj_base = *(void **)al->value;
+          /* For SVM/USM, the host and the device pointers equal. Find the
+             pointed object in case the pointer is not pointing to its
+             beginning. */
+          pocl_raw_ptr *raw_ptr_allocation
+            = pocl_find_raw_ptr_with_vm_ptr (context, obj_base);
+
+          /* It's OK to pass in pointer values not allocated by PoCL. They
+             can be garbage, as long as the kernel doesn't deref or they could
+             be system allocated pointers. */
+          if (raw_ptr_allocation == NULL)
+            {
+              all_disjoint = 0;
+              break;
+            }
+          obj_base = raw_ptr_allocation->vm_ptr;
+        }
+      else
+        {
+          cl_mem m = (*(cl_mem *)(al->value));
+          obj_base = m->device_ptrs[command->device->global_mem_id].mem_ptr;
+        }
+
+#define CHECK_FOR_OBJ_REF(OBJ_BASE)                                           \
+  do                                                                          \
+    {                                                                         \
+      el_t *d;                                                                \
+      HASH_FIND_PTR (hash, &OBJ_BASE, d);                                     \
+      if (d != NULL)                                                          \
+        {                                                                     \
+          all_disjoint = 0;                                                   \
+          break;                                                              \
+        }                                                                     \
+      d = (el_t *)malloc (sizeof *d);                                         \
+      d->key = OBJ_BASE;                                                      \
+      HASH_ADD_PTR (hash, key, d);                                            \
+    }                                                                         \
+  while (0)
+
+      CHECK_FOR_OBJ_REF (obj_base);
+    }
+
+  /* Check the explicitly set indirect raw pointers. */
+  if (all_disjoint && k->indirect_raw_ptrs != NULL)
+    {
+      pocl_ptr_list *p;
+      DL_FOREACH (k->indirect_raw_ptrs, p)
+        {
+          /* Find the SVM object for the pointer. */
+          pocl_raw_ptr *raw_obj
+            = pocl_find_raw_ptr_with_vm_ptr (context, p->ptr);
+
+          /* It's OK to pass in pointer values not allocated by PoCL. They
+             can be garbage, as long as the kernel doesn't deref or they could
+             be system allocated pointers. */
+          if (raw_obj == NULL)
+            {
+              all_disjoint = 0;
+              break;
+            }
+          if (raw_obj->vm_ptr == 0)
+            CHECK_FOR_OBJ_REF (raw_obj->dev_ptr);
+          else
+            CHECK_FOR_OBJ_REF (raw_obj->vm_ptr);
+        }
+    }
+
+  el_t *c;
+  el_t *tmp;
+  /* Free the hash table. */
+  HASH_ITER (hh, hash, c, tmp)
+  {
+    HASH_DEL (hash, c);
+    free (c);
+  }
+  return all_disjoint;
+#undef CHECK_FOR_OBJ_REF
+}
+
 /* Return the cache directory for the given work-group function.
    If specialized = 1, specialization parameters are derived from run_cmd,
    otherwise a generic directory name is returned.
 
    The current specialization parameters are:
    - local size
-   - if the global offset is zero (in all dimensions) or not
-   - if the grid size in any dimension is smaller than a device
-   specified limit ("smallgrid" specialization)
+   - goffs0: when the global offset is zero (in all dimensions)
+   - noalias: if all pointer arguments are known to point to separate
+     objects and no raw pointers are passed to the kernel indirectly
+   - smallgrid: if the grid size in any dimension is smaller than a device
+     specified limit ("smallgrid" specialization)
 */
 void
 pocl_cache_kernel_cachedir_path (char *kernel_cachedir_path,
@@ -179,25 +291,38 @@ pocl_cache_kernel_cachedir_path (char *kernel_cachedir_path,
   char tempstring[POCL_MAX_PATHNAME_LENGTH];
   cl_device_id dev = command->device;
   size_t max_grid_width = pocl_cmd_max_grid_dim_width (run_cmd);
+  cl_kernel k = run_cmd->kernel;
+
+  int noalias = specialized
+                && (run_cmd->nonaliasing_buffer_args
+                    || (run_cmd->automatic_noalias
+                        && !k->can_access_any_pointer_indirectly
+                        && buffer_args_are_disjoint (command)));
+
+  /* Cache the noalias value so we don't have to recompute it later
+     in pocl_llvm_wg.cc. */
+  run_cmd->nonaliasing_buffer_args = noalias;
+  if (!noalias)
+    run_cmd->automatic_noalias = 0;
 
   char kernel_dir_name[POCL_MAX_DIRNAME_LENGTH + 1];
   pocl_hash_clipped_name (kernel->name, &kernel_dir_name[0]);
 
   bytes_written = snprintf (
-      tempstring, POCL_MAX_PATHNAME_LENGTH, "/%s/%zu-%zu-%zu%s%s%s",
-      kernel_dir_name, !specialized ? 0 : run_cmd->pc.local_size[0],
-      !specialized ? 0 : run_cmd->pc.local_size[1],
-      !specialized ? 0 : run_cmd->pc.local_size[2],
-      (specialized && run_cmd->pc.global_offset[0] == 0
-       && run_cmd->pc.global_offset[1] == 0
-       && run_cmd->pc.global_offset[2] == 0)
-          ? "-goffs0"
-          : "",
-      specialized && !run_cmd->force_large_grid_wg_func
-              && max_grid_width < dev->grid_width_specialization_limit
-          ? "-smallgrid"
-          : "",
-      append_str);
+    tempstring, POCL_MAX_PATHNAME_LENGTH, "/%s/%zu-%zu-%zu%s%s%s%s",
+    kernel_dir_name, !specialized ? 0 : run_cmd->pc.local_size[0],
+    !specialized ? 0 : run_cmd->pc.local_size[1],
+    !specialized ? 0 : run_cmd->pc.local_size[2],
+    (specialized && run_cmd->pc.global_offset[0] == 0
+     && run_cmd->pc.global_offset[1] == 0 && run_cmd->pc.global_offset[2] == 0)
+      ? "-goffs0"
+      : "",
+    (specialized && noalias) ? "-noalias" : "",
+    specialized && !run_cmd->force_large_grid_wg_func
+        && max_grid_width < dev->grid_width_specialization_limit
+      ? "-smallgrid"
+      : "",
+    append_str);
   assert (bytes_written > 0 && bytes_written < POCL_MAX_PATHNAME_LENGTH);
 
   program_device_dir (kernel_cachedir_path, program, program_device_i,

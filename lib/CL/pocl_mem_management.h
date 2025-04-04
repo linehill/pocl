@@ -114,6 +114,31 @@ pocl_convert_to_subbuffer_migrations (pocl_buffer_migration_info *buffer_usage,
 void
 pocl_reset_indirect_ptrs (cl_kernel kernel, void **ptrs, size_t n);
 
+/**
+ * Finds an SVM/USM allocation where the host pointer is in.
+ *
+ * Locks the context for mutual exclusion.
+ *
+ * @return an allocation (info) where it is found, NULL if not found.
+ */
+pocl_raw_ptr *pocl_find_raw_ptr_with_vm_ptr (cl_context context,
+                                             const void *host_ptr);
+
+/**
+ * Finds a cl_mem allocation where the device pointer is mapped.
+ *
+ * The cl_mem allocation should be allocated with CL_MEM_BUFFER_DEVICE_ADDRESS.
+ *
+ * Locks the context for mutual exclusion.
+ *
+ * @return an allocation where the device pointer is in, NULL if not found.
+ */
+POCL_EXPORT
+pocl_raw_ptr *pocl_find_raw_ptr_with_dev_ptr (cl_context context,
+                                              cl_device_id dev,
+                                              const void *dev_ptr);
+
+
 /* Increments a buffer's reference counter. */
 #define POCL_RETAIN_BUFFER_UNLOCKED(__OBJ__)                                  \
   do                                                                          \

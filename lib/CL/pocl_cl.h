@@ -2046,6 +2046,10 @@ struct _cl_kernel {
      will be synchronized to the device. */
   char can_access_all_raw_buffers_indirectly;
 
+  /* If the kernel is marked with CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM,
+     this is set to non-zero. */
+  char can_access_any_pointer_indirectly;
+
   /* for program's linked list of kernels */
   struct _cl_kernel *next;
 };

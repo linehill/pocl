@@ -213,6 +213,16 @@ typedef struct
   int force_generic_wg_func;
   /* If set to 1, disallow "small grid" WG function specialization. */
   int force_large_grid_wg_func;
+
+  /* If set to 1, attempt to analyze and specialize for non-aliasing
+     buffer usage at runtime. */
+  int automatic_noalias;
+
+  /* If set to 1, we have analyzed the buffer arguments of the kernel and
+     determined that it's safe to add 'noalias' to all of the kernel pointer
+     arguments, even if was not set by the programmer. Or the offline compiler
+     has requested to build a nonalias-specialized kernel. */
+  int nonaliasing_buffer_args;
 } _cl_command_run;
 
 /* For clEnqueueCommandBufferKHR(). */
