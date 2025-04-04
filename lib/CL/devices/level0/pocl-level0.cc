@@ -956,6 +956,7 @@ int pocl_level0_build_binary(cl_program Program, cl_uint DeviceI,
         pocl_cache_create_program_cachedir(Program, DeviceI, (char *)Program->binaries[DeviceI],
                                            Program->binary_sizes[DeviceI], ProgramBcPath);
         convertProgramBcPathToSpv(ProgramBcPath, ProgramSpvPath);
+        assert(Program->build_hash[DeviceI][0] != 0);
 
         return Device->createGPUBinaryProgram(Program, DeviceI);
       }
@@ -1156,6 +1157,8 @@ static int pocl_level0_setup_lz_metadata(cl_device_id Device,
   assert(Program->data[ProgramDeviceI] != nullptr);
   Level0NativeProgram *L0Prog = (Level0NativeProgram *)Program->data[ProgramDeviceI];
 
+  POCL_MSG_ERR("pocl_level0_setup_lz_metadata : START\n");
+
   const std::vector<std::string> &KernelNames = L0Prog->getKernelNames();
   Program->num_kernels = KernelNames.size();
 
@@ -1167,12 +1170,17 @@ static int pocl_level0_setup_lz_metadata(cl_device_id Device,
   Program->kernel_meta = (pocl_kernel_metadata_t *)calloc(
     Program->num_kernels, sizeof(pocl_kernel_metadata_t));
 
+  auto releaseK = [=](Level0NativeKernel *K) {
+    L0Prog->releaseKernel(K);
+  };
+
   for (uint32_t Idx = 0; Idx < Program->num_kernels; ++Idx) {
 
-    Level0NativeKernel *K = L0Prog->createKernel(KernelNames[Idx]);
-    pocl_kernel_metadata_t *Meta = &Program->kernel_meta[Idx];
-    if (K == nullptr)
+    std::unique_ptr<Level0NativeKernel, decltype(releaseK)>
+          K{L0Prog->createKernel(KernelNames[Idx]), releaseK};
+    if (!K)
       return 0;
+    pocl_kernel_metadata_t *Meta = &Program->kernel_meta[Idx];
 
     ze_kernel_properties_t KernelProps;
     ze_kernel_preferred_group_size_properties_t PrefGroupSize;
@@ -1180,7 +1188,16 @@ static int pocl_level0_setup_lz_metadata(cl_device_id Device,
     if (!K->getProperties(KernelProps, PrefGroupSize, KernelAttrs))
       return 0;
 
+    Meta->name = strdup(KernelNames[Idx].c_str());
     Meta->num_args = KernelProps.numKernelArgs;
+    //Meta->num_locals = 0;
+    //Meta->local_sizes = nullptr;
+    if (!KernelAttrs.empty())
+        Meta->attributes = strdup(KernelAttrs.c_str());
+    Meta->has_arg_metadata = POCL_HAS_KERNEL_ARG_TYPE_NAME |
+                             POCL_HAS_KERNEL_ARG_NAME |
+                             POCL_HAS_KERNEL_ARG_ADDRESS_QUALIFIER |
+                             POCL_HAS_KERNEL_ARG_ACCESS_QUALIFIER;
     Meta->reqd_wg_size[0] = KernelProps.requiredGroupSizeX;
     Meta->reqd_wg_size[1] = KernelProps.requiredGroupSizeY;
     Meta->reqd_wg_size[2] = KernelProps.requiredGroupSizeZ;
@@ -1188,16 +1205,18 @@ static int pocl_level0_setup_lz_metadata(cl_device_id Device,
     // meta->vec_type_hint
     // meta->wg_size_hint
 
-    Meta->attributes = strdup(KernelAttrs.c_str());
+
+    if (0) {
     Meta->max_subgroups[ProgramDeviceI] = KernelProps.maxSubgroupSize;
     Meta->compile_subgroups[ProgramDeviceI] =
         KernelProps.requiredSubgroupSize;
     Meta->max_workgroup_size[ProgramDeviceI] = 0; // TODO
     Meta->preferred_wg_multiple[ProgramDeviceI] =
           PrefGroupSize.preferredMultiple;
-      Meta->local_mem_size[ProgramDeviceI] = KernelProps.localMemSize;
-      Meta->private_mem_size[ProgramDeviceI] = KernelProps.privateMemSize;
-      Meta->spill_mem_size[ProgramDeviceI] = KernelProps.spillMemSize;
+    Meta->local_mem_size[ProgramDeviceI] = KernelProps.localMemSize;
+    Meta->private_mem_size[ProgramDeviceI] = KernelProps.privateMemSize;
+    Meta->spill_mem_size[ProgramDeviceI] = KernelProps.spillMemSize;
+    }
 
     if (Meta->num_args == 0)
       continue;
@@ -1210,6 +1229,12 @@ static int pocl_level0_setup_lz_metadata(cl_device_id Device,
       std::string ArgType;
       if (!K->getKernelArgProperties(ArgI, ArgSize, ArgType))
         return 0;
+      assert(!ArgType.empty());
+      if (ArgType.back() == 0)
+        ArgType.pop_back();
+      while (isspace(ArgType.back()))
+        ArgType.pop_back();
+
       std::string Name = "Arg" + std::to_string(ArgI);
       Arg->name = strdup(Name.c_str());
       Arg->type_name = strdup(ArgType.c_str());
@@ -1219,6 +1244,7 @@ static int pocl_level0_setup_lz_metadata(cl_device_id Device,
       Arg->type_size = ArgSize;
       if (ArgType.back() == '*') {
         Arg->type = POCL_ARG_TYPE_POINTER;
+        assert(ArgSize == 0 || ArgSize == sizeof(cl_mem));
       } else {
         if (ArgType == "sampler_t")
           Arg->type = POCL_ARG_TYPE_SAMPLER;
@@ -1249,6 +1275,12 @@ static int pocl_level0_setup_lz_metadata(cl_device_id Device,
         else
           Arg->address_qualifier = CL_KERNEL_ARG_ADDRESS_GLOBAL;
       }
+
+      POCL_MSG_WARN("Arg %u: NAME %s TYPE_NAME %s TYPE %u "
+                    "TYPE_SIZE %u ADDR_Q: %x\n", ArgI,
+                    Arg->name, Arg->type_name,
+                    (unsigned)Arg->type, Arg->type_size,
+                    (unsigned)Arg->address_qualifier);
     }
 #if 0 \
     /// TODO: \
@@ -1262,6 +1294,7 @@ static int pocl_level0_setup_lz_metadata(cl_device_id Device,
 #endif
   }
 
+  POCL_MSG_ERR("pocl_level0_setup_lz_metadata : SUCCESS\n");
   return 1;
 }
 

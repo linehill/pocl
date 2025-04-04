@@ -73,6 +73,8 @@ Level0KernelBase::Level0KernelBase(const std::string N) : Name(N) {
   CacheUUID = getStringHash(N);
 }
 
+Level0KernelBase::~Level0KernelBase() {}
+
 Level0SpecKernel::~Level0SpecKernel() {
   for (auto &Pair : KernelHandles) {
     ze_kernel_handle_t Kern = Pair.second;
@@ -164,6 +166,9 @@ Level0NativeKernel::~Level0NativeKernel() {
 bool Level0NativeKernel::getProperties(ze_kernel_properties_t &Props,
                                        ze_kernel_preferred_group_size_properties_t &PrefGroupSize,
                                        std::string &Attribs) {
+  if (KernelGetArgumentSizeFunc == nullptr ||
+      KernelGetArgumentTypeFunc == nullptr)
+      return false;
   PrefGroupSize.stype = ZE_STRUCTURE_TYPE_KERNEL_PREFERRED_GROUP_SIZE_PROPERTIES;
   PrefGroupSize.pNext = nullptr;
   PrefGroupSize.preferredMultiple = 0;
@@ -186,6 +191,9 @@ bool Level0NativeKernel::getProperties(ze_kernel_properties_t &Props,
 
 bool Level0NativeKernel::getKernelArgProperties(unsigned ArgIdx,
                                 uint32_t &ArgSize, std::string &ArgType) {
+  if (KernelGetArgumentSizeFunc == nullptr ||
+      KernelGetArgumentTypeFunc == nullptr)
+    return false;
   ArgSize = 0;
   LEVEL0_CHECK_RET(false, KernelGetArgumentSizeFunc(KernelH, ArgIdx, &ArgSize));
 
@@ -2107,6 +2115,12 @@ bool Level0CompilationJobScheduler::init(ze_driver_handle_t H, std::vector<ze_de
                                       reinterpret_cast<void **>(&kernelGetArgumentSizeFunc));
   zeDriverGetExtensionFunctionAddress(DriverH, "zexKernelGetArgumentType",
                                       reinterpret_cast<void **>(&kernelGetArgumentTypeFunc));
+  if (kernelGetArgumentSizeFunc == nullptr ||
+      kernelGetArgumentTypeFunc == nullptr) {
+      POCL_MSG_WARN ("jobscheduler: no getArg functions -> GPU binary support disabled \n");
+  } else {
+      POCL_MSG_WARN ("jobscheduler: got both getArg functions -> GPU binary support enabled \n");
+  }
 
   JobQueue = std::make_unique<Level0CompilerJobQueue>();
   unsigned NumDevices = DevicesH.size();
@@ -2140,6 +2154,11 @@ Level0CompilationJobScheduler::~Level0CompilationJobScheduler() {
 
 bool Level0CompilationJobScheduler::supportsNativeBinary(ze_device_handle_t DeviceH, ze_context_handle_t ContextH,
                                                    const char *Binary, size_t Length) {
+    if (kernelGetArgumentSizeFunc == nullptr ||
+        kernelGetArgumentTypeFunc == nullptr) {
+        POCL_MSG_WARN ("jobscheduler: no getArg functions -> GPU binary support disabled \n");
+        return false;
+    }
     ze_module_handle_t ModuleH = nullptr;
     ze_module_desc_t ModuleDesc{
       ZE_STRUCTURE_TYPE_MODULE_DESC,
