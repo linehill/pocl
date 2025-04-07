@@ -1957,6 +1957,19 @@ static const cl_name_version OPENCL_EXTENSIONS[]
       { CL_MAKE_VERSION (1, 0, 0), "cl_khr_pci_bus_info" },
       { CL_MAKE_VERSION (1, 0, 0), "cl_khr_device_uuid" },
 
+      { CL_MAKE_VERSION (1, 0, 0), "cl_intel_bfloat16_conversions" },
+      { CL_MAKE_VERSION (1, 0, 0), "cl_intel_subgroup_local_block_io" },
+      { CL_MAKE_VERSION (1, 0, 0), "cl_intel_subgroup_matrix_multiply_accumulate" },
+      { CL_MAKE_VERSION (1, 0, 0), "cl_intel_subgroup_matrix_multiply_accumulate_tf32" },
+      { CL_MAKE_VERSION (1, 0, 0), "cl_khr_subgroup_named_barrier" },
+      { CL_MAKE_VERSION (1, 0, 0), "cl_intel_subgroup_extended_block_read" },
+      { CL_MAKE_VERSION (1, 0, 0), "cl_intel_subgroup_2d_block_io" },
+      { CL_MAKE_VERSION (1, 0, 0), "cl_intel_subgroup_buffer_prefetch" },
+      { CL_MAKE_VERSION (1, 0, 0), "cl_khr_expect_assume" },
+      { CL_MAKE_VERSION (1, 0, 0), "cl_khr_extended_bit_ops" },
+      { CL_MAKE_VERSION (1, 0, 0), "cl_khr_suggested_local_work_size" },
+
+
       { CL_MAKE_VERSION (0, 9, 6), "cl_khr_command_buffer" },
       { CL_MAKE_VERSION (0, 9, 1), "cl_khr_command_buffer_multi_device" },
       { CL_MAKE_VERSION (0, 9, 3), "cl_khr_command_buffer_mutable_dispatch" },

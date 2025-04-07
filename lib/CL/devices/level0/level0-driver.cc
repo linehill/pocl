@@ -2646,7 +2646,7 @@ bool Level0Device::setupModuleProperties(bool &SupportsInt64Atomics,
   KernelUUID = ModuleProperties.nativeKernelSupported;
   SupportsDP4A = (ModuleProperties.flags & ZE_DEVICE_MODULE_FLAG_DP4A) > 0;
   // TODO this seems not reported
-  // SupportsDPAS = (ModuleProperties.flags & ZE_DEVICE_MODULE_FLAG_DPAS) > 0;
+  SupportsDPAS = SupportsDP4A; // (ModuleProperties.flags & ZE_DEVICE_MODULE_FLAG_DPAS) > 0;
   if (SupportsDP4A || SupportsDPAS) {
     // TODO how to get these properties from L0
     ClDev->dot_product_caps =
@@ -3243,6 +3243,25 @@ Level0Device::Level0Device(Level0Driver *Drv, ze_device_handle_t DeviceH,
                            " cl_intel_required_subgroup_size"
 #endif
                       );
+
+#ifdef ENABLE_LEVEL0_EXTRA_FEATURES
+  if (DeviceIPVersion >= 0x5004000) {
+    Extensions.append(
+                           " cl_intel_bfloat16_conversions"
+                           " cl_intel_subgroup_local_block_io"
+                           " cl_intel_subgroup_matrix_multiply_accumulate"
+                           " cl_intel_subgroup_matrix_multiply_accumulate_tf32"
+                           " cl_khr_subgroup_named_barrier"
+                           " cl_intel_subgroup_extended_block_read"
+                           " cl_intel_subgroup_2d_block_io"
+                           " cl_intel_subgroup_buffer_prefetch"
+                           " cl_khr_expect_assume"
+                           " cl_khr_extended_bit_ops"
+                           " cl_khr_suggested_local_work_size"
+                           );
+    }
+#endif
+
     OpenCL30Features.append(" __opencl_c_subgroups");
     SPVExtensions.append(",+SPV_INTEL_subgroups");
 #if LLVM_MAJOR > 18
