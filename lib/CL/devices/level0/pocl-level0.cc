@@ -684,6 +684,8 @@ int pocl_level0_build_source(cl_program Program, cl_uint DeviceI,
     if (Program->compiler_options) {
         Args[10] = "-options";
         Args[11] = Program->compiler_options;
+        POCL_MSG_ERR ("OCLOC: compiling with options: %s \n",
+                      Program->compiler_options);
         numArgs = 12;
     }
 
