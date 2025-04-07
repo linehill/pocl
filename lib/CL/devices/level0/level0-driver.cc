@@ -2615,6 +2615,7 @@ bool Level0Device::setupModuleProperties(bool &SupportsInt64Atomics,
   }
 
   ClDev->single_fp_config = convertZeFPFlags(ModuleProperties.fp32flags);
+  ClDev->single_fp_config |= CL_FP_CORRECTLY_ROUNDED_DIVIDE_SQRT;
 #ifdef ENABLE_FP64
   // TODO we should check & rely on ZE_DEVICE_FP_FLAG_SOFT_FLOAT,
   // but it's not set by the LevelZero driver

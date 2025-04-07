@@ -116,6 +116,9 @@ POname(clCreateProgramWithSource)(cl_context context,
       || (program->pocl_binary_sizes = (size_t *)calloc (
               program->associated_num_devices, sizeof (size_t)))
              == NULL
+      || (program->pocl_binaries_prefer_native = (char *)calloc (
+              program->associated_num_devices, sizeof (char)))
+             == NULL
       || (program->build_log
           = (char **)calloc (program->associated_num_devices, sizeof (char *)))
              == NULL
