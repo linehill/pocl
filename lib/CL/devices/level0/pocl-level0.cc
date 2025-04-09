@@ -720,11 +720,13 @@ int pocl_level0_build_source(cl_program Program, cl_uint DeviceI,
 
     if (logLen > 0) {
         strncpy(Program->main_build_log, log, MAIN_PROGRAM_LOG_SIZE);
+        POCL_MSG_ERR("OCLOC build log:\n**************\n%s\n**********\n", log);
     }
     if (Errcode != 0) {
+        POCL_MSG_ERR("OCLOC compilation failed\n");
         if (logLen == 0) {
             std::string Log = "Ocloc compilation failed: " + std::to_string(Errcode) + "\n";
-            strncpy(Program->main_build_log, Log.c_str(), MAIN_PROGRAM_LOG_SIZE);
+            strncat(Program->main_build_log, Log.c_str(), MAIN_PROGRAM_LOG_SIZE);
         }
         return CL_BUILD_PROGRAM_FAILURE;
     }
