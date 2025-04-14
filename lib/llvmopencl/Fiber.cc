@@ -50,6 +50,9 @@ protected:
   llvm::Instruction *getLocalIdInRegion(llvm::Instruction *Instr,
                                         size_t Dim) override;
 
+  llvm::Instruction *getGlobalIdInRegion(llvm::Instruction *Instr,
+                                         size_t Dim) override;
+
 private:
   WorkitemHandlerType WIH;
 
@@ -160,6 +163,12 @@ llvm::Instruction *FiberImpl::getLocalIdInRegion(llvm::Instruction *Instr,
                                                  size_t Dim) {
   llvm::IRBuilder<> Builder(Instr);
   return Builder.CreateLoad(ST, LocalIdGlobals[Dim]);
+}
+
+llvm::Instruction *FiberImpl::getGlobalIdInRegion(llvm::Instruction *Instr,
+                                                  size_t Dim) {
+  llvm::IRBuilder<> Builder(Instr);
+  return Builder.CreateLoad(ST, GlobalIdGlobals[Dim]);
 }
 
 /// Sets the global variable iterators and generates LLVM IR for the

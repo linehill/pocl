@@ -1,4 +1,3 @@
-
 // Header for fiber work-group method.
 //
 // Copyright (c) 2025 Tapio Nevalainen / Tampere University

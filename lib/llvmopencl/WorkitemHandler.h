@@ -75,6 +75,11 @@ protected:
     return nullptr;
   };
 
+  virtual llvm::Instruction *getGlobalIdInRegion(llvm::Instruction *Instr,
+                                                 size_t Dim) {
+    return nullptr;
+  };
+
   bool shouldNotBeContextSaved(llvm::Instruction *Instr,
                                VariableUniformityAnalysisResult &VUA,
                                WorkitemHandlerType WIH);

@@ -99,6 +99,8 @@ protected:
   llvm::Value *getLinearWIIndexInRegion(llvm::Instruction *Instr) override;
   llvm::Instruction *getLocalIdInRegion(llvm::Instruction *Instr,
                                         size_t Dim) override;
+  llvm::Instruction *getGlobalIdInRegion(llvm::Instruction *Instr,
+                                         size_t Dim) override;
 
 private:
   using BasicBlockVector = std::vector<llvm::BasicBlock *>;
@@ -706,40 +708,14 @@ WorkitemLoopsImpl::getLocalIdInRegion(llvm::Instruction *Instr, size_t Dim) {
   return Builder.CreateLoad(ST, LocalIdGlobals[Dim]);
 }
 
-/// Returns the context array (alloca) for the given \param Inst, creates it if
-/// not found.
-///
-/// \param PaddingAdded will be set to true in case a wrapper struct was
-/// added for padding in order to enforce proper alignment to the elements of
-/// the array. Such padding might be needed to ensure aligned accessed from
-/// single work-items accessing aggregates in the context data.
-llvm::AllocaInst *WorkitemLoopsImpl::getContextArray(llvm::Instruction *Inst,
-                                                     bool &PaddingAdded) {
-  PaddingAdded = false;
-
-  std::ostringstream Var;
-  Var << ".";
-
-  if (std::string(Inst->getName().str()) != "") {
-    Var << Inst->getName().str();
-  } else if (TempInstructionIds.find(Inst) != TempInstructionIds.end()) {
-    Var << TempInstructionIds[Inst];
-  } else {
-    // Unnamed temp instructions need a name generated for the context array.
-    // Create one using a running integer.
-    TempInstructionIds[Inst] = TempInstructionIndex++;
-    Var << TempInstructionIds[Inst];
+llvm::Instruction *
+WorkitemLoopsImpl::getGlobalIdInRegion(llvm::Instruction *Instr, size_t Dim) {
+  ParallelRegion *ParRegion = regionOfBlock(Instr->getParent());
+  if (ParRegion != nullptr) {
+    return ParRegion->getOrCreateIDLoad(GID_G_NAME(Dim));
   }
-
-  Var << ".wi_context";
-  std::string CArrayName = Var.str();
-
-  if (ContextArrays.find(CArrayName) != ContextArrays.end())
-    return ContextArrays[CArrayName];
-
-  BasicBlock &Entry = K->getEntryBlock();
-  return ContextArrays[CArrayName] = createAlignedAndPaddedContextAlloca(
-             Inst, &*(Entry.getFirstInsertionPt()), CArrayName, PaddingAdded);
+  IRBuilder<> Builder(Instr);
+  return Builder.CreateLoad(ST, GlobalIdGlobals[Dim]);
 }
 
 /// Appends a local id loop incrementing basic block.

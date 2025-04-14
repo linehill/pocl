@@ -1259,7 +1259,7 @@ bool WorkitemHandler::handleWorkitemFunctions() {
             else
               Replacement = ConstantInt::get(Call->getType(), 1);
           } else if (Callee->getName() == GID_BUILTIN_NAME)
-            Replacement = Builder.CreateLoad(ST, GlobalIdGlobals[Dim]);
+            Replacement = getGlobalIdInRegion(InsertBefore, Dim);
           else if (Callee->getName() == GROUP_ID_BUILTIN_NAME)
             Replacement = Builder.CreateLoad(ST, GroupIdGlobals[Dim]);
           else if (Callee->getName() == NGROUPS_BUILTIN_NAME)
