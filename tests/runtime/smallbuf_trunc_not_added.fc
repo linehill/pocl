@@ -1,0 +1,13 @@
+# This case is a generic check for the vecadd kernel when truncates were
+# _not_ added automatically by the runtime.
+
+
+CHECK-NOT: -smallbuf
+
+CHECK: vecadd
+
+CHECK-NOT: trunc
+CHECK: getelementptr
+
+
+

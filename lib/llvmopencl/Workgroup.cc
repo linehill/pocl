@@ -177,6 +177,7 @@ private:
   bool WGAssumeZeroGlobalOffset;
   bool WGDynamicLocalSize;
   bool WGNonAliasingBufferArgs;
+  bool WGMax4GBuffers;
   bool DeviceUsingArgBufferLauncher;
   bool DeviceUsingGridLauncher;
   bool DeviceIsSPMD;
@@ -243,6 +244,42 @@ static bool cleanupAddressSpaceCasts(Function &F) {
   return Changed;
 }
 
+/// Adds a truncate to 32b for all GEPs that address buffer arguments.
+///
+/// This helps the vectorizer to compute sc/ga addresses in the vector
+/// datapath among other optimizations. This should be called only if
+/// buffers are known to be less than 4 GiB in size.
+static void truncateBufferArgGEPIndices(Function &F) {
+  std::vector<llvm::GetElementPtrInst *> GEPs;
+  for (auto &BB : F) {
+    for (auto &I : BB) {
+      if (llvm::GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(&I)) {
+        llvm::Value *Ptr = GEP->getPointerOperand();
+        Ptr->dump();
+        if (isa<Argument>(Ptr))
+          GEPs.push_back(GEP);
+      }
+    }
+  }
+
+  IRBuilder<> Builder(F.getContext());
+  for (llvm::GetElementPtrInst *GEP : GEPs) {
+    Builder.SetInsertPoint(GEP);
+
+    std::vector<Value *> NewIdxList;
+    for (unsigned Opr = 0; Opr < GEP->getNumOperands(); ++Opr) {
+      if (Opr == GEP->getPointerOperandIndex())
+        continue;
+      Value *OldIdx = GEP->getOperand(Opr);
+      if (isa<Constant>(OldIdx))
+        continue;
+      Value *NewIdx = Builder.CreateTruncOrBitCast(
+          OldIdx, Type::getInt32Ty(F.getContext()));
+      GEP->setOperand(Opr, NewIdx);
+    }
+  }
+}
+
 bool WorkgroupImpl::runOnModule(Module &M, llvm::FunctionAnalysisManager &FAM) {
 
   this->M = &M;
@@ -264,6 +301,8 @@ bool WorkgroupImpl::runOnModule(Module &M, llvm::FunctionAnalysisManager &FAM) {
   getModuleBoolMetadata(M, "WGNonAliasingBufferArgs", WGNonAliasingBufferArgs);
   getModuleBoolMetadata(M, "WGAssumeZeroGlobalOffset",
                         WGAssumeZeroGlobalOffset);
+  getModuleBoolMetadata(M, "WGMax4GBuffers", WGMax4GBuffers);
+
 
   getModuleIntMetadata(M, "device_global_as_id", DeviceGlobalASid);
   getModuleIntMetadata(M, "device_local_as_id", DeviceLocalASid);
@@ -340,6 +379,10 @@ bool WorkgroupImpl::runOnModule(Module &M, llvm::FunctionAnalysisManager &FAM) {
     if (!isKernelToProcess(OrigKernel)) continue;
     if (OrigKernel.hasMetadata("dbg"))
       IsDebugEnabled = true;
+
+    if (WGMax4GBuffers)
+      truncateBufferArgGEPIndices(OrigKernel);
+
     Function *L = createWrapper(&OrigKernel, PrintfCache);
     KernelsMap[&OrigKernel] = L;
 

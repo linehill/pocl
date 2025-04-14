@@ -1,0 +1,41 @@
+# Originates from this SYCL kernel:
+#
+#    q.parallel_for(sycl::nd_range<1>{ngroups * group_size, group_size}, [=](sycl::nd_item<1> it) [[sycl::reqd_sub_group_size(16)]] {
+#
+#        // Load the work-item indices and potentially force them to be integers.
+#        auto gid = it.get_global_id(0);
+#        auto lid = it.get_local_id(0);
+#
+#        // Load the indirection index.
+#        // Every work-item loads a different value, so use of this index must always result in a gather.
+#        int index = indirection[gid];
+#
+#        // Load an input value, using the indirection + our offset.
+#        // Use of the offset is really just to force the indexing to go wonky.
+#        int x = input[index * lid];
+#
+#        // Store the output.
+#        output[gid] = x;
+#
+#    }).wait();
+#
+# In this case, index*lid is generated to a 64b x 64b to 64b multiplication,
+# meaning the SPIR-V instruction's semantic requires the upper 32b half of
+# the multiplication even though the SYCL compilation annotates lid to be
+# less than INT32_MAX and index is an int as well. The only way I came up
+# to strength reduce the mul legally was to specialize according to the
+# buffer size (the 'smallbuf' specialization option). With that, the input
+# array indexing is capped to a 32b index, allowing LLVM to strength
+# reduce the mul to a 32b one, leading to nicer vectorization results.
+
+# The specialized one:
+CHECK: 8-1-1-smallbuf/parallel.bc
+CHECK: define void @_pocl_kernel__ZTSZ4mainEUlN4sycl3_V17nd_itemILi1EEEE__workgroup
+CHECK: mul i32
+CHECK-NOT: mul i64
+
+# The generic one still suffers from the 64b mul.
+CHECK: 0-0-0/parallel.bc
+CHECK: define void @_pocl_kernel__ZTSZ4mainEUlN4sycl3_V17nd_itemILi1EEEE__workgroup
+CHECK: mul i64
+CHECK-NOT: mul i32

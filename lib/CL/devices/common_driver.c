@@ -1019,6 +1019,14 @@ pocl_driver_build_poclbinary (cl_program program, cl_uint device_i)
                   cmd.command.run.automatic_noalias = 0;
                   cmd.command.run.nonaliasing_buffer_args = 1;
                 }
+              else if (strncmp (param, "smallbuf", 8) == 0)
+                {
+                  /* Force generate a version which assumes all buffers are
+                     less than 4GiB of size. This is not a dynamic launch,
+                     nothing to detect automagically at this point. */
+                  cmd.command.run.buffer_size_specialize = 0;
+                  cmd.command.run.max_4gig_buffers = 1;
+                }
               else
                 {
                   POCL_MSG_ERR ("Unrecognized specialization option '%s'.\n",

@@ -70,5 +70,9 @@ add_llvm_check(SPIRV_NAME HeCbench-eigenvalue-hip)
 add_llvm_check(SPIRV_NAME issue-1871-unreachables-remaining)
 add_llvm_check(SPIRV_NAME issue-1872-switch-to-a-bb-with-unreachable)
 add_llvm_check(SPIRV_NAME switch-to-unreachable-with-a-phi-in-dest)
+add_llvm_check(SPIRV_NAME smallbuf-strength-reduces-64b-mul
+  ENVIRONMENT "POCL_BINARY_SPECIALIZE_WG=8-1-1-smallbuf"
+  WORKITEM_HANDLER "loops")
+
 add_llvm_check(OPENCLC_NAME force-vector-width ENVIRONMENT "POCL_VECTORIZER_FORCE_VECTOR_WIDTH=4")
 add_llvm_check(OPENCLC_NAME prefer-vector-width ENVIRONMENT "POCL_VECTORIZER_PREFER_VECTOR_WIDTH=512")

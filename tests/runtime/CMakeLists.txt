@@ -55,7 +55,8 @@ endif()
 
 set(CXX_PROGRAMS_TO_BUILD test_device_address test_svm test_large_buf
   test_subbuffers test_compile_n_link test_dbk_matmul test_tensor_view
-  test_dbk_convert test_dbk_set_rows test_automatic_noalias)
+  test_dbk_convert test_dbk_set_rows test_automatic_noalias
+  test_buffer_size_specialization)
 
 add_compile_options(${OPENCL_CFLAGS} -I${CMAKE_SOURCE_DIR}/include)
 
@@ -166,6 +167,43 @@ add_test_pocl(NAME "autorestrict/inplace_coarse_svm_with_fgsystem"
   WORKITEM_HANDLER "loops"
   LLVM_FILECHECK "autorestrict_noalias_not_set.fc"
   ONLY_FILECHECK 1)
+
+add_test_pocl(NAME "smallbuf/large_buffers"
+  COMMAND "test_buffer_size_specialization LargeBuffers"
+  WORKITEM_HANDLER "loops"
+  LLVM_FILECHECK "smallbuf_trunc_not_added.fc"
+  ONLY_FILECHECK 1)
+
+add_test_pocl(NAME "smallbuf/small_buffers"
+  COMMAND "test_buffer_size_specialization SmallBuffers"
+  WORKITEM_HANDLER "loops"
+  LLVM_FILECHECK "smallbuf_trunc_added.fc"
+  ONLY_FILECHECK 1)
+
+add_test_pocl(NAME "smallbuf/mixed_buffers"
+  COMMAND "test_buffer_size_specialization MixedBuffers"
+  WORKITEM_HANDLER "loops"
+  LLVM_FILECHECK "smallbuf_trunc_not_added.fc"
+  ONLY_FILECHECK 1)
+
+add_test_pocl(NAME "smallbuf/large_svm_buffers"
+  COMMAND "test_buffer_size_specialization LargeSVMBuffers"
+  WORKITEM_HANDLER "loops"
+  LLVM_FILECHECK "smallbuf_trunc_not_added.fc"
+  ONLY_FILECHECK 1)
+
+add_test_pocl(NAME "smallbuf/small_svm_buffers"
+  COMMAND "test_buffer_size_specialization SmallSVMBuffers"
+  WORKITEM_HANDLER "loops"
+  LLVM_FILECHECK "smallbuf_trunc_added.fc"
+  ONLY_FILECHECK 1)
+
+add_test_pocl(NAME "smallbuf/mixed_svm_buffers"
+  COMMAND "test_buffer_size_specialization MixedSVMBuffers"
+  WORKITEM_HANDLER "loops"
+  LLVM_FILECHECK "smallbuf_trunc_not_added.fc"
+  ONLY_FILECHECK 1)
+
 
 add_test(NAME "runtime/test_buffer_migration" COMMAND "test_buffer_migration")
 

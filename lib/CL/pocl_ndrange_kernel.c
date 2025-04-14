@@ -652,6 +652,8 @@ pocl_ndrange_kernel_common (cl_command_buffer_khr command_buffer,
   c->command.run.pc.global_offset[2] = offset[2];
   c->command.run.automatic_noalias
     = pocl_get_bool_option ("POCL_AUTOMATIC_NOALIAS", 1);
+  c->command.run.buffer_size_specialize
+    = pocl_get_bool_option ("POCL_BUFFER_SIZE_SPECIALIZE", 1);
 
   errcode = POname (clRetainKernel) (kernel);
   if (errcode != CL_SUCCESS)

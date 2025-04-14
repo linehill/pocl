@@ -268,6 +268,59 @@ buffer_args_are_disjoint (_cl_command_node *command)
 #undef CHECK_FOR_OBJ_REF
 }
 
+/**
+ * Compute the maximum size of the buffers passed to the command
+ * as buffer arguments.
+ *
+ * Return UINT64_T max, if not known for a reason or another.
+ **/
+static uint64_t
+buffer_args_max_size (_cl_command_node *command)
+{
+  uint64_t max_so_far = 0;
+  _cl_command_run *run_cmd = &command->command.run;
+  pocl_kernel_metadata_t *meta = run_cmd->kernel->meta;
+  cl_kernel k = run_cmd->kernel;
+  cl_context context = k->context;
+  fprintf (stderr, "MAX OF BUF ARGS\n");
+
+  for (cl_uint i = 0; i < meta->num_args; ++i)
+    {
+      if (meta->arg_info[i].type != POCL_ARG_TYPE_POINTER)
+        continue;
+
+      struct pocl_argument *al = &(k->dyn_arguments[i]);
+      if (al->value == NULL)
+        continue;
+
+      /* Find the buffer the pointers point to. */
+      void *obj_base = NULL;
+      if (al->is_raw_ptr)
+        {
+          obj_base = *(void **)al->value;
+          pocl_raw_ptr *raw_ptr_allocation
+            = pocl_find_raw_ptr_with_vm_ptr (context, obj_base);
+
+          /* It's OK to pass in pointer values not allocated by PoCL. They
+             can be garbage, as long as the kernel doesn't deref or they could
+             be system allocated pointers. In principle we could just skip it
+             in this analysis (as we know a deref would be undef anyhow),
+             but let's play it safe for now.  */
+          if (raw_ptr_allocation == NULL)
+            return UINT64_MAX;
+
+          max_so_far = max (max_so_far, raw_ptr_allocation->size);
+        }
+      else
+        {
+          cl_mem m = (*(cl_mem *)(al->value));
+          max_so_far = max (max_so_far, m->size);
+        }
+    }
+  fprintf (stderr, "MAX OF BUG ARGS IS %zu\n", max_so_far);
+  return max_so_far;
+}
+
 /* Return the cache directory for the given work-group function.
    If specialized = 1, specialization parameters are derived from run_cmd,
    otherwise a generic directory name is returned.
@@ -305,11 +358,22 @@ pocl_cache_kernel_cachedir_path (char *kernel_cachedir_path,
   if (!noalias)
     run_cmd->automatic_noalias = 0;
 
+  int small_buffers
+    = specialized
+      && (run_cmd->max_4gig_buffers
+          || (run_cmd->buffer_size_specialize
+              && !k->can_access_any_pointer_indirectly
+              && buffer_args_max_size (command) <= UINT32_MAX));
+
+  run_cmd->max_4gig_buffers = small_buffers;
+  if (!small_buffers)
+    run_cmd->buffer_size_specialize = 0;
+
   char kernel_dir_name[POCL_MAX_DIRNAME_LENGTH + 1];
   pocl_hash_clipped_name (kernel->name, &kernel_dir_name[0]);
 
   bytes_written = snprintf (
-    tempstring, POCL_MAX_PATHNAME_LENGTH, "/%s/%zu-%zu-%zu%s%s%s%s",
+    tempstring, POCL_MAX_PATHNAME_LENGTH, "/%s/%zu-%zu-%zu%s%s%s%s%s",
     kernel_dir_name, !specialized ? 0 : run_cmd->pc.local_size[0],
     !specialized ? 0 : run_cmd->pc.local_size[1],
     !specialized ? 0 : run_cmd->pc.local_size[2],
@@ -322,7 +386,7 @@ pocl_cache_kernel_cachedir_path (char *kernel_cachedir_path,
         && max_grid_width < dev->grid_width_specialization_limit
       ? "-smallgrid"
       : "",
-    append_str);
+    (specialized && small_buffers) ? "-smallbuf" : "", append_str);
   assert (bytes_written > 0 && bytes_written < POCL_MAX_PATHNAME_LENGTH);
 
   program_device_dir (kernel_cachedir_path, program, program_device_i,

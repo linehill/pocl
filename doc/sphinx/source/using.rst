@@ -132,9 +132,16 @@ pocl.
 
 - **POCL_BUILDING**
 
- If  set, the pocl helper scripts, kernel library and headers are
+ If set, the pocl helper scripts, kernel library and headers are
  searched first from the pocl build directory. Only has effect if
  ENABLE_POCL_BUILDING was enabled at build (by default it is).
+
+- **POCL_BUFFER_SIZE_SPECIALIZE**
+
+  Attempt to infer at runtime if *all* of the kernel command's buffer
+  arguments are less than 4GiB of size and use this information to help
+  the just-in-time compilation. This currently only works with the
+  CPU devices. On by default.
 
 - **POCL_CACHE_DIR**
 

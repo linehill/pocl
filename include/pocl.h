@@ -223,6 +223,16 @@ typedef struct
      arguments, even if was not set by the programmer. Or the offline compiler
      has requested to build a nonalias-specialized kernel. */
   int nonaliasing_buffer_args;
+
+  /* If set to 1, analyze the buffer sizes and specialize for less than 4G
+     buffers passed as arguments. */
+  int buffer_size_specialize;
+
+  /* If set to 1, we have determined that all buffers passed to the kernel
+     are less than 4G of size and the kernel's address computation
+     could be specialized to compute using 32b indices. */
+  int max_4gig_buffers;
+
 } _cl_command_run;
 
 /* For clEnqueueCommandBufferKHR(). */
