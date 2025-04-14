@@ -1603,7 +1603,10 @@ pocl_init_default_device_infos (cl_device_id dev,
     }
 #endif
 
-  dev->grid_width_specialization_limit = USHRT_MAX;
+  /* UINT32_MAX should be a good default for typical modern 64b CPU targets
+     which could vectorize address computation and sc/ga better when the
+     array indices fit to 32b vector lanes. */
+  dev->grid_width_specialization_limit = UINT32_MAX;
   dev->address_bits = HOST_DEVICE_ADDRESS_BITS;
   dev->image_support = CL_TRUE;
   /* Use the minimum values until we get a more sensible upper limit from
