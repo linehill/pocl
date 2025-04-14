@@ -137,6 +137,8 @@ private:
   void addGEPs(llvm::IRBuilder<> &Builder, int StructFieldIndex,
                const char *FormatStr);
 
+  size_t getMaxPossibleLocalSize(unsigned Dimension);
+
   void addRangeMetadataForPCField(llvm::Instruction *Instr,
                                   int StructFieldIndex, int FieldIndex = -1);
 
@@ -628,6 +630,21 @@ static void addRangeMetadata(llvm::Instruction *Instr, size_t Min, size_t Max) {
   Instr->setMetadata(LLVMContext::MD_range, Range);
 }
 
+// Gets the best-known maximum for the local size in the given
+// \p Dimension.
+size_t WorkgroupImpl::getMaxPossibleLocalSize(unsigned Dimension) {
+  if (WGDynamicLocalSize) {
+    return WGMaxGridDimWidth > 0
+               ? std::min(DeviceMaxWItemSizes[Dimension], WGMaxGridDimWidth)
+               : DeviceMaxWItemSizes[Dimension];
+  } else {
+    // Specialized local size. The local size is converted to a constant with
+    // static WGs, so this is likely derived by the optimizers anyhow.
+    uint64_t LocalSizes[] = {WGLocalSizeX, WGLocalSizeY, WGLocalSizeZ};
+    return LocalSizes[Dimension];
+  }
+}
+
 void WorkgroupImpl::addRangeMetadataForPCField(llvm::Instruction *Instr,
                                                int StructFieldIndex,
                                                int FieldIndex) {
@@ -672,23 +689,7 @@ void WorkgroupImpl::addRangeMetadataForPCField(llvm::Instruction *Instr,
     break;
   case PC_LOCAL_SIZE:
     Min = 1;
-    switch (FieldIndex) {
-    case 0:
-    case 1:
-    case 2:
-      if (WGDynamicLocalSize) {
-        Max = (WGMaxGridDimWidth > 0 ? WGMaxGridDimWidth
-                                     : std::min(DeviceMaxWItemSizes[FieldIndex],
-                                                WGMaxGridDimWidth));
-      } else {
-        // The local size is converted to constant with static WGs, so this is
-        // actually useless.
-        Max = LocalSizes[FieldIndex];
-      }
-      break;
-    default:
-      llvm_unreachable("More than 3 grid dimensions unsupported.");
-    }
+    Max = getMaxPossibleLocalSize(FieldIndex);
     break;
   default:
     break;
