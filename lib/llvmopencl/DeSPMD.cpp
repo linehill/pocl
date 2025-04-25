@@ -117,21 +117,33 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
   if (WIH != WorkitemHandlerType::FIBER) {
     Changed = enforceOuterLoopParIfBeneficial(F, LI, VUA) || Changed;
     Changed = canonicalizeBarriers(F) || Changed;
+    REFRESH_LOOP_INFO();
 
-    REFRESH_LOOP_INFO();
     Changed = addLoopConstructIsolationBarriers(F, LI, VUA, DT) || Changed;
+    Changed = canonicalizeBarriers(F) || Changed;
     REFRESH_LOOP_INFO();
+
+    DT.recalculate(F);
+    PDT.recalculate(F);
 
     Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
     Changed = canonicalizeBarriers(F) || Changed;
     REFRESH_LOOP_INFO();
 
+    DT.recalculate(F);
+    PDT.recalculate(F);
+
     Changed = replicateBarrierPathTails(F, LI, DT, PDT, VUA) || Changed;
+    Changed = canonicalizeBarriers(F) || Changed;
     REFRESH_LOOP_INFO();
+
+    DT.recalculate(F);
+    PDT.recalculate(F);
 
     // Run implicit conditional barriers again since BTR might have added new
     // conditional barrier cases that must be handled.
     Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
+    Changed = canonicalizeBarriers(F) || Changed;
     REFRESH_LOOP_INFO();
 
     Changed = removeLifetimeMarkers(F);

@@ -447,12 +447,6 @@ bool replicateBarrierPathTails(Function &F, llvm::LoopInfo &LI,
   dumpCFG(F, F.getName().str() + "_before_btr.dot", nullptr, nullptr);
 #endif
 
-  PreservedAnalyses PAChanged = PreservedAnalyses::none();
-  PAChanged.preserve<VariableUniformityAnalysis>();
-  PAChanged.preserve<WorkitemHandlerChooser>();
-  PAChanged.preserve<LoopAnalysis>();
-  PAChanged.preserve<DominatorTreeAnalysis>();
-
   // The created tails might contain PHI nodes with operands
   // referring to the non-predecessor (split point) BB.
   // These must be cleaned to avoid breakage later on.

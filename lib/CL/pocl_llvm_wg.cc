@@ -490,7 +490,14 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
   // NOTE: if you add a new PoCL pass here,
   // don't forget to register it in registerPassBuilderPasses
   if (!Dev->spmd) {
-    addPass(Passes, "simplifycfg");
+    // Simplifycfg seems counter-productive to loop structure analysis,
+    // as it can sink code from the body to the latch, making that
+    // basic block contain divergent instructions even though it originally
+    // didn't. We should improve the loop structure analysis to tackle
+    // such cases, isolating the loop structures cleanly. loop-simplify
+    // should do it, but it seems not being able to handle even basic
+    // cases for now.
+    // addPass(Passes, "simplifycfg");
     addPass(Passes, "loop-simplify");
 
     // ...we have to call UTR again here because some optimizations in LLVM

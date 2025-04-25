@@ -56,6 +56,23 @@ POP_COMPILER_DIAGS
 
 POP_COMPILER_DIAGS
 
+// #define DEBUG_WORK_ITEM_HANDLERS
+// #define POCL_KERNEL_COMPILER_DUMP_CFGS
+#define DEBUG_TYPE "WIH"
+
+// Use the LLVM_DEBUG-style macros to gradually convert to LLVM-upstreamable
+// code.
+#ifdef LLVM_DEBUG
+#undef LLVM_DEBUG
+#endif
+
+#ifdef DEBUG_WORK_ITEM_HANDLERS
+#define LLVM_DEBUG(X) X
+#define dbgs() std::cerr << DEBUG_TYPE << ": "
+#else
+#define LLVM_DEBUG(X)
+#endif
+
 namespace pocl {
 
 using namespace llvm;
@@ -244,7 +261,6 @@ llvm::AllocaInst *WorkitemHandler::getContextArray(llvm::Instruction *Inst,
 ///
 /// \param Def The instruction that defines the original value.
 /// \param AllocaI The alloca created for for the context array.
-/// \TODO synch by hand from WorkitemLoops.cc upstream.
 llvm::Instruction *WorkitemHandler::addContextSave(llvm::Instruction *Def,
                                                    llvm::AllocaInst *AllocaI,
                                                    ParallelRegion *Region) {
@@ -343,8 +359,6 @@ ParallelRegion *WorkitemHandler::regionOfBlock(llvm::BasicBlock *BB) {
 /// cloning is not actually done, but only its possibility is investigated.
 /// \param Depth the recursion depth. Used to limit rematerialization size.
 /// \return The rematerialized instruction if possible and beneficial.
-/// \TODO synch this by hand from upstream since it's in WorkitemLoops.cc
-/// there.
 llvm::Value *WorkitemHandler::tryToRematerialize(llvm::Instruction *Before,
   llvm::Value *Def,
   std::string NamePrefix,
@@ -447,14 +461,15 @@ llvm::Value *WorkitemHandler::tryToRematerialize(llvm::Instruction *Before,
 /// instruction.
 ///
 /// First attemps to rematerialize the value instead of storing it to memory.
-/// \todo SYNCH by hand from upstream WorkitemHandler::addContextSaveRestore
 void WorkitemHandler::addContextSaveRestore(llvm::Instruction *Def, llvm::LoopInfo &LI) {
 
   InstructionVec Uses;
   // Restore the produced variable before each use to ensure the correct
   // context copy is used.
 
-  bool RematCandidate = true;
+  bool RematCandidate =
+      pocl_get_bool_option("POCL_PREGION_VALUE_REMAT", true) &&
+      WIH != WorkitemHandlerType::FIBER;
 
   // In case of a rematerialized alloca with only a single store, this will have
   // the store that initializes it.
@@ -477,38 +492,45 @@ void WorkitemHandler::addContextSaveRestore(llvm::Instruction *Def, llvm::LoopIn
       continue;
 
     ParallelRegion *PRegion = regionOfBlock(User->getParent());
-
     if (StoreInst *ST = dyn_cast<StoreInst>(User)) {
-      if (!isa<UndefValue>(ST->getValueOperand())) {
-        Stores++;
+      // Stores of undefined values need not to be counted as actual stores
+      // since what we read from that location after that is undefined,
+      // thus could be as well the defined value of the another store.
+      if (isa<UndefValue>(ST->getValueOperand()))
+        continue;
 
-        if (Stores == 1) {
-          InitializerStore = ST;
-        } else {
-          InitializerStore = nullptr;
-          RematCandidate = false;
-#ifdef DEBUG_WORK_ITEM_LOOPS
-          std::cerr << "#### Multiple stores\n";
-          User->dump();
-#endif
-        }
-        if (PrevStoreRegion == nullptr) {
-          PrevStoreRegion = PRegion;
-        } else if (PrevStoreRegion != PRegion) {
-          RematCandidate = false;
-#ifdef DEBUG_WORK_ITEM_LOOPS
-          std::cerr << "#### Stores from multiple regions\n";
-          User->dump();
-#endif
-        }
+      Stores++;
 
-        if (LI.getLoopFor(ST->getParent()) != nullptr) {
-          RematCandidate = false;
-#ifdef DEBUG_WORK_ITEM_LOOPS
-          std::cerr << "#### Stores from inside a loop\n";
-          User->dump();
-#endif
-        }
+      // Another corner case to consider here is the case when an alloca
+      // is written inside a conditional block which could be even inside
+      // a diverging BB. The first intuition in that case would be to not
+      // allow rematerialization since we generally don't know at compile
+      // time if the branch is taken or not. However, when it comes to
+      // undefined behavior, reading from an uninitialized alloca is undefined,
+      // meaning that it should be fine to recompute the value unconditionally
+      // at its use location, as long as the rematerialized instructions are
+      // safe to execute speculatively: The value in the conditional is just
+      // one possible value in the set of possible values case the branch was
+      // not taken.
+      if (Stores == 1) {
+        InitializerStore = ST;
+      } else {
+        InitializerStore = nullptr;
+        RematCandidate = false;
+        LLVM_DEBUG(dbgs() << "Multiple stores\n");
+        LLVM_DEBUG(User->dump());
+      }
+      if (PrevStoreRegion == nullptr) {
+        PrevStoreRegion = PRegion;
+      } else if (PrevStoreRegion != PRegion) {
+        RematCandidate = false;
+        LLVM_DEBUG(dbgs() << "Stores from multiple regions\n");
+        LLVM_DEBUG(User->dump());
+      }
+      if (LI.getLoopFor(ST->getParent()) != nullptr) {
+        RematCandidate = false;
+        LLVM_DEBUG(dbgs() << "Stores inside a loop\n");
+        LLVM_DEBUG(User->dump());
       }
     }
 
@@ -517,28 +539,22 @@ void WorkitemHandler::addContextSaveRestore(llvm::Instruction *Def, llvm::LoopIn
     // work item. Most likely an iteration variable of a for loop with a
     // barrier.
     if (PRegion == nullptr) {
-#ifdef DEBUG_WORK_ITEM_LOOPS
-      std::cerr << "#### user in a pure uniform block?\n";
-      User->dump();
-#endif
+      LLVM_DEBUG(dbgs() << "User in a pure uniform block?\n");
+      LLVM_DEBUG(User->dump());
       continue;
     }
 
     if (isa<CallInst>(User)) {
       if (!User->isLifetimeStartOrEnd()) {
         RematCandidate = false;
-#ifdef DEBUG_WORK_ITEM_LOOPS
-        std::cerr << "#### using in an unknown call\n";
-        User->dump();
-#endif
+        LLVM_DEBUG(dbgs() << "Using in an unknown call\n");
+        LLVM_DEBUG(User->dump());
       }
     } else if (llvm::AllocaInst *Alloca = dyn_cast_or_null<AllocaInst>(Def)) {
       if (!isa<StoreInst>(User) && !isa<LoadInst>(User)) {
         RematCandidate = false;
-#ifdef DEBUG_WORK_ITEM_LOOPS
-        std::cerr << "#### taking address of the alloca?\n";
-        User->dump();
-#endif
+        LLVM_DEBUG(dbgs() << "Taking address of the alloca?\n");
+        LLVM_DEBUG(User->dump());
       } else {
         // If we perform reinterpret casts, let's not rematerialize as it might
         // require to store the value temporarily to stack.
@@ -546,17 +562,44 @@ void WorkitemHandler::addContextSaveRestore(llvm::Instruction *Def, llvm::LoopIn
              User->getType() != Alloca->getAllocatedType()) ||
             (isa<StoreInst>(User) &&
              User->getOperand(0)->getType() != Alloca->getAllocatedType())) {
-#ifdef DEBUG_WORK_ITEM_LOOPS
-          std::cerr << "#### Found a user with a different pointee type\n";
-          User->dump();
-          Def->dump();
-#endif
+          LLVM_DEBUG(dbgs() << "Found a user with a different pointee type\n");
+          LLVM_DEBUG(User->dump());
+          LLVM_DEBUG(Def->dump());
           RematCandidate = false;
         }
       }
     }
-
     Uses.push_back(User);
+  }
+
+  // Used for tracking the alloca load the instruction refers to.
+  std::map<Instruction *, Instruction *> OrigAllocaLoads;
+  if (RematCandidate && isa<AllocaInst>(Def)) {
+    // When rematerializing an Alloca, rematerialize the users of all loads
+    // from the alloca to ensure the values will be resurrected in correct PRs.
+    InstructionVec AllocaContentUses;
+
+    for (Instruction *User : Uses) {
+      LoadInst *Load = dyn_cast<LoadInst>(User);
+      if (Load == nullptr) {
+        continue;
+      }
+      for (Instruction::use_iterator LUI = Load->use_begin(),
+                                     LUE = Load->use_end();
+           LUI != LUE; ++LUI) {
+
+        llvm::Instruction *LoadResUser = cast<Instruction>(LUI->getUser());
+        if (LoadResUser == NULL)
+          continue;
+
+        LLVM_DEBUG(dbgs() << "Remat at the load result usage.\n");
+        LLVM_DEBUG(LoadResUser->dump());
+        AllocaContentUses.push_back(LoadResUser);
+        OrigAllocaLoads[LoadResUser] = Load;
+      }
+      continue;
+    }
+    Uses = AllocaContentUses;
   }
 
   llvm::AllocaInst *ContextArrayAlloca = nullptr;
@@ -603,68 +646,57 @@ void WorkitemHandler::addContextSaveRestore(llvm::Instruction *Def, llvm::LoopIn
       ContextRestoreLocation = IncomingBB->getTerminator();
     }
 
-    if(WIH == WorkitemHandlerType::FIBER)
-      RematCandidate = false;
-
     llvm::Value *RematerializedValue = nullptr;
     if (RematCandidate) {
-      if (isa<AllocaInst>(Def))
+      if (isa<AllocaInst>(Def)) {
+        LLVM_DEBUG(dbgs() << "Rematerializing an alloca use which has a single "
+                             "initializer store.\n");
+        LLVM_DEBUG(dbgs() << "     Alloca:"; Def->dump());
+        LLVM_DEBUG(dbgs() << "Initializer:"; InitializerStore->dump());
+        LLVM_DEBUG(dbgs() << "        Use:"; UserI->dump());
         RematerializedValue = tryToRematerialize(
             ContextRestoreLocation, InitializerStore->getValueOperand(),
             Def->getName().str());
-      else
+      } else {
         RematerializedValue = tryToRematerialize(ContextRestoreLocation, Def,
                                                  Def->getName().str());
+      }
     }
-
     if (RematerializedValue != nullptr) {
-#ifdef DEBUG_WORK_ITEM_LOOPS
-      std::cerr << "#### successful rematerialization:\n";
-      RematerializedValue->dump();
-#endif
+      LLVM_DEBUG(dbgs() << "Successful rematerialization:\n");
+      LLVM_DEBUG(RematerializedValue->dump());
+
       if (isa<AllocaInst>(Def)) {
         if (StoreInst *Store = dyn_cast<StoreInst>(UserI)) {
           // The original store could be left intact, but then we'd need to
           // figure out the materialization-ability beforehand.
           Store->setOperand(0, RematerializedValue);
-        } else if (LoadInst *Load = dyn_cast<LoadInst>(UserI)) {
-          // We can get rid of the alloca load altogether and use the
-          // rematerialized value directly.
-          UserI->replaceAllUsesWith(RematerializedValue);
-#ifdef DEBUG_WORK_ITEM_LOOPS
-          std::cerr << "#### alloca load was converted to a remat value:"
-                    << std::endl;
-          UserI->dump();
-          RematerializedValue->dump();
-#endif
         } else if (UserI->isLifetimeStartOrEnd()) {
           // We can leave the original lifetime marker for the alloca as is.
         } else {
-          llvm_unreachable("Unexpected alloca usage.");
+          // We can get rid of the alloca load altogether and use the
+          // rematerialized value directly.
+          UserI->replaceUsesOfWith(OrigAllocaLoads[UserI], RematerializedValue);
+          /// Kuten ongelmatapauksessa, allocan loadin tulosta käytetään
+          /// toisessa parallel regionissa. Tässä oletetaan, että loadin
+          /// tulokset myös samassa PR:ssä.
+          LLVM_DEBUG(dbgs()
+                     << "Alloca load's use was converted to a remat value:\n");
+          LLVM_DEBUG(UserI->dump());
+          LLVM_DEBUG(RematerializedValue->dump());
         }
       } else {
         UserI->replaceUsesOfWith(Def, RematerializedValue);
-#ifdef DEBUG_WORK_ITEM_LOOPS
-        std::cerr << "#### the user was converted to a remat value:"
-                  << std::endl;
-        UserI->dump();
-#endif
+        LLVM_DEBUG(dbgs() << "The user was converted to a remat value:\n");
+        LLVM_DEBUG(UserI->dump());
       }
     } else {
       // Unable to rematerialize the value.
       // Allocate a context data array for the variable.
       if (ContextArrayAlloca == nullptr) {
         ContextArrayAlloca = getContextArray(Def, PaddingAdded);
-
-        if (WIH != WorkitemHandlerType::FIBER) {
-          ParallelRegion *Region = regionOfBlock(Def->getParent());
-          assert(
-              "Adding context save outside any region produces illegal code." &&
-              Region != NULL);
-          addContextSave(Def, ContextArrayAlloca, Region);
-        } else {
-          addContextSave(Def, ContextArrayAlloca, nullptr);
-        }
+        addContextSave(Def, ContextArrayAlloca,
+                       regionOfBlock(Def->getParent()));
       }
 
       llvm::Value *ContextArrayLoad = addContextRestore(
@@ -673,11 +705,8 @@ void WorkitemHandler::addContextSaveRestore(llvm::Instruction *Def, llvm::LoopIn
 
       UserI->replaceUsesOfWith(Def, ContextArrayLoad);
 
-#ifdef DEBUG_WORK_ITEM_LOOPS
-      std::cerr << "#### the user was converted to a context load:"
-                << std::endl;
-      UserI->dump();
-#endif
+      LLVM_DEBUG(dbgs() << "the user was converted to a context load:\n");
+      LLVM_DEBUG(UserI->dump());
     }
   }
 }

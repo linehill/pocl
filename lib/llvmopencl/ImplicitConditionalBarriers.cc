@@ -84,11 +84,11 @@ bool addImplicitBranchBarriers(llvm::Function &F, llvm::LoopInfo &LI,
   typedef std::vector<BasicBlock*> BarrierBlockIndex;
   BarrierBlockIndex ConditionalBarriers;
 
-  bool Changed = pocl::canonicalizeBarriers(F);
+  bool Changed = false;
 
-  for (Function::iterator FI = F.begin(), FE = F.end(); FI != FE; ++FI) {
-    BasicBlock *BB = &*FI;
-    if (!Barrier::hasBarrier(BB)) continue;
+  for (BasicBlock &BB : F) {
+    if (!Barrier::hasBarrier(&BB))
+      continue;
 
     // Unconditional barrier postdominates the entry node.
     if (PDT.dominates(&BB, &F.getEntryBlock())) {
