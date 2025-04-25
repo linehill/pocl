@@ -1,6 +1,6 @@
 /* OpenCL runtime library: caching functions
 
-   Copyright (c) 2015-2023 pocl developers
+   Copyright (c) 2015-2025 pocl developers
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to
@@ -282,7 +282,6 @@ buffer_args_max_size (_cl_command_node *command)
   pocl_kernel_metadata_t *meta = run_cmd->kernel->meta;
   cl_kernel k = run_cmd->kernel;
   cl_context context = k->context;
-  fprintf (stderr, "MAX OF BUF ARGS\n");
 
   for (cl_uint i = 0; i < meta->num_args; ++i)
     {
@@ -317,7 +316,6 @@ buffer_args_max_size (_cl_command_node *command)
           max_so_far = max (max_so_far, m->size);
         }
     }
-  fprintf (stderr, "MAX OF BUG ARGS IS %zu\n", max_so_far);
   return max_so_far;
 }
 

@@ -257,7 +257,6 @@ static void truncateBufferArgGEPIndices(Function &F) {
     for (auto &I : BB) {
       if (llvm::GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(&I)) {
         llvm::Value *Ptr = GEP->getPointerOperand();
-        Ptr->dump();
         if (isa<Argument>(Ptr))
           GEPs.push_back(GEP);
       }
