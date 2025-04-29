@@ -140,22 +140,6 @@ foreach(VARIANT ${VARIANTS})
       DEPENDS "pocl_version_check")
 endforeach()
 
-# Disable subgroup tests in conformance build.
-if(ENABLE_CONFORMANCE)
-  set_tests_properties(
-    "workgroup/basic_subgroup_barrier_fiber"
-    "workgroup/basic_subgroup_barrier_loopvec"
-    "workgroup/basic_diverging_sg_barrier_fiber"
-    "workgroup/diverging_sg_barriers_fiber"
-    "workgroup/mixing_barriers_fiber"
-    "workgroup/sg_barrier_in_for_in_if_fiber"
-    PROPERTIES
-      COST 2.0
-      PROCESSORS 1
-      DEPENDS "pocl_version_check"
-      LABELS "cpu_fail")
-endif()
-
 add_test_pocl(NAME "workgroup/unconditional_barriers"
               EXPECTED_OUTPUT "basic_barriers_2_2_2_2.stdout"
               COMMAND "run_kernel" "basic_barriers.cl" 2 2 2 2)
@@ -265,16 +249,25 @@ add_test_pocl(NAME "workgroup/range_md_large_grid"
               EXPECTED_OUTPUT ""
               COMMAND "run_kernel" "range_md.cl" "1000" "128" "1" "1")
 
-if(ENABLE_CONFORMANCE)
-  set(BALLOT_LABELS "cpu_fail")
-else()
-  set(BALLOT_LABELS "cpu")
-endif()
-
 add_test_pocl(NAME "workgroup/ballot"
               EXPECTED_OUTPUT "ballot_1_32_1_1.stdout"
-              COMMAND "run_kernel" "ballot.cl" "1" "32" "1" "1"
-              LABELS ${BALLOT_LABELS})
+              COMMAND "run_kernel" "ballot.cl" "1" "32" "1" "1")
+
+# Disable subgroup & ballot tests in conformance build.
+if(ENABLE_CONFORMANCE)
+  set_tests_properties(
+    "workgroup/basic_subgroup_barrier_fiber"
+    "workgroup/basic_subgroup_barrier_loopvec"
+    "workgroup/basic_diverging_sg_barrier_fiber"
+    "workgroup/diverging_sg_barriers_fiber"
+    "workgroup/mixing_barriers_fiber"
+    "workgroup/sg_barrier_in_for_in_if_fiber"
+    "workgroup/ballot_loopvec"
+    "workgroup/ballot_fiber"
+    PROPERTIES
+      LABELS "cpu_fail")
+endif()
+
 
 # These tests are now always ran with the basic device with a predefined
 # work-group execution order. Their printout verification depends
@@ -292,6 +285,7 @@ foreach(VARIANT ${VARIANTS})
   "workgroup/range_md_small_grid_${VARIANT}"
   "workgroup/range_md_large_grid_${VARIANT}"
   "workgroup/issue_1747_wg_divergent_barrier_${VARIANT}"
+  "workgroup/ballot_${VARIANT}"
 #  "workgroup/outerloop_intelligence_${VARIANT}"
   )
   set_tests_properties(

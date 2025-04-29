@@ -103,13 +103,27 @@ add_test_pocl(NAME "regression/test_issue_1826" COMMAND "test_issue_1826")
 add_test_pocl(NAME "regression/test_builtin_regression"
   COMMAND "test_builtin_regression")
 
-
 add_test_pocl(NAME "regression/test_mem_host_ptr_issue"
   COMMAND "test_mem_host_ptr_issue")
 
 add_test_pocl(NAME "regression/test_issue_1962" COMMAND "test_issue_1962")
 
 add_test_pocl(NAME "regression/test_issue_2005" COMMAND "test_issue_2005")
+
+if(ENABLE_CONFORMANCE)
+  set(VARIANTS "loopvec;fiber;")
+  foreach(VARIANT ${VARIANTS})
+  set_tests_properties(
+    "regression/test_builtin_regression_${VARIANT}"
+    PROPERTIES
+    COST 1.5
+    PROCESSORS 1
+    DEPENDS "pocl_version_check"
+    SKIP_RETURN_CODE 77
+    SKIP_REGULAR_EXPRESSION "SKIP"
+    LABELS "cpu_fail")
+  endforeach()
+endif()
 
 add_test_pocl(NAME "regression/test_workitem_func_outside_kernel" COMMAND "test_workitem_func_outside_kernel")
 
@@ -201,7 +215,6 @@ set_tests_properties(
   "regression/test_issue_1794a_${VARIANT}"
   "regression/test_issue_1794b_${VARIANT}"
   "regression/test_issue_1826_${VARIANT}"
-  "regression/test_builtin_regression_${VARIANT}"
   "regression/test_mem_host_ptr_issue_${VARIANT}"
   "regression/test_issue_1962_${VARIANT}"
   "regression/test_issue_2005_${VARIANT}"
