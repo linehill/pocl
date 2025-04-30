@@ -51,11 +51,26 @@ POP_COMPILER_DIAGS
 
 #include <iostream>
 
+#define DEBUG_TYPE "LBAR"
+
 #define PASS_NAME "loop-barriers"
 #define PASS_CLASS pocl::LoopBarriers
 #define PASS_DESC "Add needed barriers to loops"
 
 // #define DEBUG_LOOP_BARRIERS
+
+// Use the LLVM_DEBUG-style macros to gradually convert to LLVM-upstreamable
+// code.
+#ifdef LLVM_DEBUG
+#undef LLVM_DEBUG
+#endif
+
+#ifdef DEBUG_LOOP_BARRIERS
+#define LLVM_DEBUG(X) X
+#define dbgs() std::cerr << DEBUG_TYPE << ": "
+#else
+#define LLVM_DEBUG(X)
+#endif
 
 namespace pocl {
 
@@ -124,8 +139,29 @@ isSuitableForBLoopStructureSharing(Loop &L,
 
   if (CondComp == Latch || CondComp == nullptr || Latch == nullptr ||
       VUA.hasDivergingInstructions(*CondComp) ||
-      VUA.hasDivergingInstructions(*Latch))
+      VUA.hasDivergingInstructions(*Latch)) {
+    LLVM_DEBUG(dbgs() << "Not suitable for loop structure sharing:\n");
+    LLVM_DEBUG(
+        dbgs() << "CondComp: "
+               << (CondComp != nullptr ? CondComp->getName().str() : "null")
+               << "\n");
+    LLVM_DEBUG(dbgs() << "Latch: "
+                      << (Latch != nullptr ? Latch->getName().str() : "null")
+                      << "\n");
+    LLVM_DEBUG(dbgs() << "Header: "
+                      << (Header != nullptr ? Header->getName().str() : "null")
+                      << "\n");
+    LLVM_DEBUG(
+        if (CondComp != nullptr && VUA.hasDivergingInstructions(*CondComp)) {
+          dbgs() << "CondComp has diverging instructions:\n";
+          CondComp->dump();
+        });
+    LLVM_DEBUG(if (Latch != nullptr && VUA.hasDivergingInstructions(*Latch)) {
+      dbgs() << "Latch has diverging instructions:\n";
+      Latch->dump();
+    });
     return false;
+  }
 
   if (CondCmpI == nullptr)
     return false;
@@ -192,9 +228,7 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
   dumpCFG(*K, K->getName().str() + "_before_loopbbarriers_on_bloop_" +
                   L.getName().str() + ".dot");
 
-#ifdef DEBUG_LOOP_BARRIERS
-  std::cerr << "Loop: " << L.getName().str() << "\n";
-#endif
+  LLVM_DEBUG(dbgs() << "Loop: " << L.getName().str() << "\n");
 
   // TO clean: The loop construct is not necessary here anymore,
   // as the b-loop property is detected earlier.
@@ -212,12 +246,12 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
         // executed.
         BasicBlock *Preheader = L.getLoopPreheader();
         assert((Preheader != NULL) && "Non-canonicalized loop found!\n");
-#ifdef DEBUG_LOOP_BARRIERS
-        std::cerr << "### adding to preheader BB" << std::endl;
-        Preheader->dump();
-        std::cerr << "### before instr" << std::endl;
-        Preheader->getTerminator()->dump();
-#endif
+
+        LLVM_DEBUG(dbgs() << "adding to preheader BB\n");
+        LLVM_DEBUG(Preheader->dump());
+        LLVM_DEBUG("before instr\n");
+        LLVM_DEBUG(Preheader->getTerminator()->dump());
+
         WorkgroupBarrier::createAtEnd(Preheader);
         Preheader->setName(Preheader->getName() + ".loopbarrier");
         Highlights.insert(Preheader);
@@ -256,23 +290,6 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
         // context, it helps the loop vectorizer a lot when analyzing the
         // memory access patterns.
         bool UniformLoopConstruct = isSuitableForBLoopStructureSharing(L, VUA);
-
-#ifdef DEBUG_LOOP_BARRIERS
-        std::cerr << "CondBlock:\n";
-        if (CondBlock != nullptr)
-          CondBlock->dump();
-        std::cerr << "Header:\n";
-        if (Header != nullptr)
-          Header->dump();
-        std::cerr << "Latch:\n";
-        if (Latch != NULL)
-          Latch->dump();
-        std::cerr << "BrExit:\n";
-        if (BrExit != NULL)
-          BrExit->dump();
-        if (UniformLoopConstruct)
-          std::cerr << "Uniform loop construct detected\n";
-#endif
 
         if (Latch != NULL && BrExit != Latch) {
 #if LLVM_MAJOR < 20
@@ -394,10 +411,8 @@ bool addLoopConstructIsolationBarriers(llvm::Function &F, llvm::LoopInfo &LI,
   if (!hasWorkgroupBarriers(F))
     return false;
 
-#ifdef DEBUG_LOOP_BARRIERS
-  std::cerr << "### Before LoopBarriers\n";
-  F.dump();
-#endif
+  LLVM_DEBUG(dbgs() << "Before LoopBarriers\n");
+  LLVM_DEBUG(F.dump());
 
   bool Changed = false;
   for (llvm::Loop *OuterLoop : LI) {
@@ -405,10 +420,9 @@ bool addLoopConstructIsolationBarriers(llvm::Function &F, llvm::LoopInfo &LI,
     for (llvm::Loop *L : Loops)
       Changed = processLoop(*L, DT, VUA) || Changed;
   }
-#ifdef DEBUG_LOOP_BARRIERS
-  std::cerr << "After LoopBarriers:\n";
-  F.dump();
-#endif
+
+  LLVM_DEBUG(dbgs() << "After LoopBarriers:\n");
+  LLVM_DEBUG(F.dump());
   return Changed;
 }
 
