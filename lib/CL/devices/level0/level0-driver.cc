@@ -2646,7 +2646,15 @@ bool Level0Device::setupModuleProperties(bool &SupportsInt64Atomics,
   KernelUUID = ModuleProperties.nativeKernelSupported;
   SupportsDP4A = (ModuleProperties.flags & ZE_DEVICE_MODULE_FLAG_DP4A) > 0;
   // TODO this seems not reported
-  SupportsDPAS = SupportsDP4A; // (ModuleProperties.flags & ZE_DEVICE_MODULE_FLAG_DPAS) > 0;
+  //SupportsDPAS = SupportsDP4A; // (ModuleProperties.flags & ZE_DEVICE_MODULE_FLAG_DPAS) > 0;
+
+  // XXX: Hack for Arrow Lake. Enabling DPAS without knowledge about
+  // its support leads to trouble. For the context, Intel OpenCL does
+  // not report support for this. Enabling this causes OpenVINO to use
+  // native binaries which PoCL and level0 driver accepts but later
+  // causes hang up when executing them.
+  SupportsDPAS = false;
+  
   if (SupportsDP4A || SupportsDPAS) {
     // TODO how to get these properties from L0
     ClDev->dot_product_caps =
