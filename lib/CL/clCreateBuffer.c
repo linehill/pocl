@@ -221,7 +221,10 @@ pocl_create_memobject (cl_context context,
               item->dev_ptr = ptr;
               item->size = size;
               item->shadow_cl_mem = mem;
-              DL_APPEND (context->raw_ptrs, item);
+              int inserted = pocl_raw_ptr_set_insert (context->raw_ptrs, item);
+              assert (inserted);
+              (void)inserted;
+
               POCL_UNLOCK_OBJ (context);
 
               POCL_MSG_PRINT_MEMORY (

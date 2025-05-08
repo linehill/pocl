@@ -205,10 +205,15 @@ set(POCL_LIB_SOURCES  "clCreateContextFromType.c"
                    # platform dep
                    "pocl_timing.h" "pocl_threads.h" "pocl_file_util.h"
                    # dbks
-                   "dbk/pocl_dbk_khr_jpeg_shared.c" "dbk/pocl_dbk_khr_jpeg_shared.h"
-                   "dbk/pocl_dbk_khr_onnxrt_shared.c" "dbk/pocl_dbk_khr_onnxrt_shared.h"
-                   "dbk/pocl_dbk_khr_img_shared.c" "dbk/pocl_dbk_khr_img_shared.h"
-                   "dbk/pocl_dbk_khr_dnn_utils_shared.c" "dbk/pocl_dbk_khr_dnn_utils_shared.h"
+                   "dbk/pocl_dbk_khr_jpeg_shared.c"
+                   "dbk/pocl_dbk_khr_jpeg_shared.h"
+                   "dbk/pocl_dbk_khr_onnxrt_shared.c"
+                   "dbk/pocl_dbk_khr_onnxrt_shared.h"
+                   "dbk/pocl_dbk_khr_img_shared.c"
+                   "dbk/pocl_dbk_khr_img_shared.h"
+                   "dbk/pocl_dbk_khr_dnn_utils_shared.c"
+                   "dbk/pocl_dbk_khr_dnn_utils_shared.h"
+                   "pocl_raw_ptr_set.cc"
 )
 
 unset(EXTRA_LLVM_SOURCES)

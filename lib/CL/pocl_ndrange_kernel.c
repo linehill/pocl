@@ -341,12 +341,12 @@ pocl_kernel_collect_mem_objs (
      their data gets synchronized to the device. */
   if (kernel->can_access_all_raw_buffers_indirectly)
     {
-      struct _pocl_raw_ptr *ptr;
-      DL_FOREACH (kernel->context->raw_ptrs, ptr)
-      {
-        migr_infos = pocl_append_unique_migration_info (migr_infos,
-                                                        ptr->shadow_cl_mem, 0);
-      }
+      pocl_raw_ptr *ptr = pocl_raw_ptr_set_begin (kernel->context->raw_ptrs);
+      DL_FOREACH (ptr, ptr)
+        {
+          migr_infos = pocl_append_unique_migration_info (
+            migr_infos, ptr->shadow_cl_mem, 0);
+        }
     }
   else
     {
