@@ -120,7 +120,7 @@ ze_event_handle_t Level0CmdList::appendSignalEvent() {
 }
 
 void Level0CmdList::eventsCanBeReused(std::queue<ze_event_handle_t> &Events) {
-    std::lock_guard<std::mutex> LockGuard(CmdListLock);
+  // XXX std::lock_guard<std::mutex> LockGuard(CmdListLock);
     while (!Events.empty()) {
         auto E = Events.front();
         Events.pop();
@@ -3389,7 +3389,7 @@ Level0Device::Level0Device(Level0Driver *Drv, ze_device_handle_t DeviceH,
   POCL_MSG_PRINT_LEVEL0("Device %s initialized & available\n", ClDev->short_name);
   this->Available = CL_TRUE;
 #ifndef LEVEL0_PER_QUEUE_THREAD
-  EventProcessingThread = std::thread(&Level0Device::eventProcessingLoop, this);
+  // XXX EventProcessingThread = std::thread(&Level0Device::eventProcessingLoop, this);
 #endif
 }
 
@@ -3582,14 +3582,29 @@ void Level0Device::appendCmdListToWaitOn(ze_event_handle_t WaitEvt,
                                          Level0CmdList *CmdList,
                                          std::vector<ClEvLzEvMsg> &&EnqueuedEvents,
                                          std::queue<ze_event_handle_t> &&DeviceEventsToReset) {
-  std::lock_guard<std::mutex> LockGuard(EventProcessingLock);
-  assert(!EnqueuedEvents.empty());
-  Events2Process.emplace(WaitEvt, std::move(EnqueuedEvents));
-  Events2Reset.emplace(WaitEvt, std::move(DeviceEventsToReset));
-  CmdLists.emplace(WaitEvt, CmdList);
-  EventProcessingCond.notify_one();
+  LEVEL0_CHECK_ABORT_NO_EXIT(zeEventHostSynchronize(WaitEvt, UINT64_MAX));
+  for (auto [ClEv, ZeEv, Msg] : EnqueuedEvents) {
+    if (ClEv->wait_list)
+      abort();
+
+    POCL_MSG_WARN("ClEvent %zu READY, marking COMPLETE\n", ClEv->id);
+    POCL_UPDATE_EVENT_COMPLETE_MSG(ClEv, Msg);
+  }
+       
+  CmdList->eventsCanBeReused(DeviceEventsToReset);
+
+  EnqueuedEvents.clear();
+  
+  // std::lock_guard<std::mutex> LockGuard(EventProcessingLock);
+
+  // assert(!EnqueuedEvents.empty());
+  // Events2Process.emplace(WaitEvt, std::move(EnqueuedEvents));
+  // Events2Reset.emplace(WaitEvt, std::move(DeviceEventsToReset));
+  // CmdLists.emplace(WaitEvt, CmdList);
+  // EventProcessingCond.notify_one();
 }
 
+#if 0 // XXX
 void Level0Device::eventProcessingLoop() {
     const auto PauseDuration = std::chrono::microseconds(200);
     bool ShouldExit = EventProcessingExit;
@@ -3682,6 +3697,7 @@ void Level0Device::eventProcessingLoop() {
         }
     } while (!ShouldExit);
 }
+#endif // XXX
 #endif
 
 void *Level0Device::allocUSMSharedMem(uint64_t Size, bool EnableCompression,
