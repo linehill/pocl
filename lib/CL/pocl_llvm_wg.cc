@@ -758,9 +758,9 @@ pocl_llvm_run_pocl_passes(llvm::Module *Bitcode,
   bool WGAssumeZeroGlobalOffset;
   // If set to true, the next 3 parameters define the local size to specialize
   // for.
-  bool WGDynamicLocalSize;
-  bool NonAliasingBufferArgs;
-  bool Max4GBuffers;
+  bool WGDynamicLocalSize = false;
+  bool NonAliasingBufferArgs = false;
+  bool Max4GBuffers = false;
   size_t WGLocalSizeX;
   size_t WGLocalSizeY;
   size_t WGLocalSizeZ;
