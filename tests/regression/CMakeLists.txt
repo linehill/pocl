@@ -1,7 +1,7 @@
 #=============================================================================
 #   CMake build system files
 #
-#   Copyright (c) 2014-2017 pocl developers
+#   Copyright (c) 2014-2025 pocl developers
 #
 #   Permission is hereby granted, free of charge, to any person obtaining a copy
 #   of this software and associated documentation files (the "Software"), to deal
@@ -52,6 +52,7 @@ set(PROGRAMS_TO_BUILD test_barrier_between_for_loops test_early_return
   test_workitem_func_outside_kernel test_program_scope_vars test_issue_1548
   test_issue_1525 test_issue_1608 test_issue_1826 test_builtin_regression
   test_mem_host_ptr_issue test_issue_1962 test_issue_2005
+  test_cts_test_convert_double16_rtz_ulong16
 )
 
 if (MSVC)
@@ -75,7 +76,6 @@ else()
   set(SPIRV_LABELS "cpu_fail")
 endif()
 
-
 ######################################################################
 
 add_test_pocl(NAME "regression/test_issue_231" COMMAND "test_issue_231")
@@ -89,12 +89,6 @@ add_test_pocl(NAME "regression/test_issue_577" COMMAND "test_issue_577")
 add_test_pocl(NAME "regression/test_issue_757" COMMAND "test_issue_757")
 
 add_test_pocl(NAME "regression/test_issue_1435" COMMAND "test_issue_1435")
-
-# fails on windows/MinGW with "access violation"
-add_test_pocl(NAME "regression/test_issue_1525" LABELS "mingw_fail;win_fail"
-  COMMAND "test_issue_1525"
-  LLVM_FILECHECK "test_issue_1525.fc"
-  WORKITEM_HANDLER "loopvec")
 
 add_test_pocl(NAME "regression/test_issue_1608" COMMAND "test_issue_1608")
 
@@ -187,11 +181,6 @@ add_test_pocl(NAME "regression/assigning_a_loop_iterator_variable_to_a_private_m
 add_test_pocl(NAME "regression/test_program_from_binary_with_local_1_1_1" WORKITEM_HANDLER "loopvec;fiber;"
   COMMAND "test_program_from_binary_with_local_1_1_1")
 
-add_test_pocl(NAME "regression/test_rematerialized_alloca_load_with_outside_pr_users"
-  WORKITEM_HANDLER "loopvec"
-  COMMAND "test_rematerialized_alloca_load_with_outside_pr_users"
-  EXPECTED_OUTPUT "test_rematerialized_alloca_load_with_outside_pr_users.output"
-  LABELS "${SPIRV_LABELS}")
 
 set(VARIANTS "loopvec;fiber;")
 
@@ -253,6 +242,7 @@ add_test_pocl(NAME "regression/test_alignment_with_dynamic_wg2" COMMAND "test_al
 
 add_test_pocl(NAME "regression/test_alignment_with_dynamic_wg3" COMMAND "test_alignment_with_dynamic_wg3")
 
+
 set(VARIANTS "loopvec;fiber")
 foreach(VARIANT ${VARIANTS})
 set_tests_properties(
@@ -289,6 +279,23 @@ add_test_pocl(NAME "regression/struct_kernel_arguments" COMMAND "test_structs_as
 
 add_test_pocl(NAME "regression/vector_kernel_arguments" COMMAND "test_vectors_as_args")
 
+# Tests that need to be run only ona specific WG generation variant.
+add_test_pocl(NAME "regression/test_rematerialized_alloca_load_with_outside_pr_users"
+  COMMAND "test_rematerialized_alloca_load_with_outside_pr_users"
+  EXPECTED_OUTPUT "test_rematerialized_alloca_load_with_outside_pr_users.output"
+  WORKITEM_HANDLER "loopvec"
+  LABELS "${SPIRV_LABELS}")
+
+add_test_pocl(NAME "regression/test_cts_test_convert_double16_rtz_ulong16"
+  COMMAND "test_cts_test_convert_double16_rtz_ulong16"
+  WORKITEM_HANDLER "loopvec")
+
+# fails on windows/MinGW with "access violation"
+add_test_pocl(NAME "regression/test_issue_1525" LABELS "mingw_fail;win_fail"
+  COMMAND "test_issue_1525"
+  LLVM_FILECHECK "test_issue_1525.fc"
+  WORKITEM_HANDLER "loopvec")
+
 # Label tests that also work with TCE
 set(TCE_TESTS "regression/barrier_between_two_for_loops_loopvec"
   "regression/for-loop_with_computation_after_the_brexit_loopvec"
@@ -299,12 +306,6 @@ set(TCE_TESTS "regression/barrier_between_two_for_loops_loopvec"
 list(REMOVE_ITEM TCE_TESTS "regression/barrier_between_two_for_loops_loopvec" )
 
 set_property(TEST ${TCE_TESTS} APPEND PROPERTY LABELS "tce")
-
-# TODO fails on windows with "access violation"
-unset(ADDITIONAL_CPU_TESTS)
-if(NOT WIN32)
-  set(ADDITIONAL_CPU_TESTS "regression/test_issue_1525")
-endif()
 
 set(VARIANTS "loopvec;fiber")
 foreach(VARIANT ${VARIANTS})
@@ -442,7 +443,6 @@ set_property(TEST
   "regression/test_alignment_with_dynamic_wg_323_loopvec"
   "regression/test_alignment_with_dynamic_wg2_loopvec"
   "regression/test_alignment_with_dynamic_wg3_loopvec"
-
 
   "regression/test_issue_231_loopvec"
   "regression/test_issue_445_loopvec"
