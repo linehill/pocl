@@ -27,6 +27,7 @@
    intel_reqd_sub_group_size metadata.
  */
 
+#include "pocl_hostdevice_defs.h"
 #include "templates.h"
 #include "work_group_alloca.h"
 
@@ -38,18 +39,6 @@ size_t _CL_OVERLOADABLE get_local_linear_id (void);
 size_t _CL_OVERLOADABLE get_local_size (unsigned int dimindx);
 
 void _CL_OVERLOADABLE _CL_CONVERGENT work_group_barrier(cl_mem_fence_flags);
-/* void _CL_OVERLOADABLE
-sub_group_barrier (cl_mem_fence_flags flags)
-{
-  work_group_barrier (flags);
-}
-
-void _CL_OVERLOADABLE
-sub_group_barrier (cl_mem_fence_flags flags, memory_scope scope)
-    __attribute__ ((noduplicate))
-{
-  work_group_barrier (flags);
-} */
 
 uint _CL_OVERLOADABLE _CL_CONVERGENT sub_group_reduce_max(uint );
 int _CL_OVERLOADABLE
@@ -138,14 +127,17 @@ sub_group_ballot (int predicate)
   return votes[get_sub_group_id ()];
 }
 
+/* The shuffle implementation assumes only one shuffle is actually alive at
+   the same time and can share the temporary storage. @todo: implement
+   __pocl_sub_group_alloca() to save stack space. */
 #define SUB_GROUP_SHUFFLE_PT(PREFIX, TYPE)                                    \
   TYPE _CL_OVERLOADABLE PREFIX##sub_group_shuffle (TYPE val, uint index)      \
   {                                                                           \
-    TYPE *temp_storage                                                        \
-      = __pocl_work_group_alloca (sizeof (TYPE), sizeof (TYPE), 0);           \
-    temp_storage[get_local_linear_id ()] = val;                               \
+    TYPE *__temp_storage = __pocl_work_group_alloca (                         \
+      sizeof (TYPE), POCL_CPU_DEVICES_MAX_SUBGROUP_SIZE * sizeof (TYPE), 0);  \
+    __temp_storage[get_sub_group_local_id ()] = val;                          \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
-    return temp_storage[get_first_llid () + index % get_sub_group_size ()];   \
+    return __temp_storage[index];                                             \
   }
 
 /* Define both the non-prefixed (khr) and Intel-prefixed shuffles. */

@@ -119,10 +119,12 @@ function(compile_cl_to_bc FILENAME SUBDIR BC_FILE_LIST EXTRA_CONFIG)
 
     add_custom_command( OUTPUT "${BC_FILE}"
         DEPENDS "${FULL_F_PATH}"
+         "${CMAKE_SOURCE_DIR}/include/pocl_hostdevice_defs.h"
           ${DEPENDLIST}
         COMMAND "${HOST_CLANG}" ${CLANG_FLAGS}
         ${KERNEL_CL_FLAGS} ${DEVICE_CL_FLAGS}
         "-o" "${BC_FILE}" "-O0" "-c" "${FULL_F_PATH}"
+        "-I${CMAKE_SOURCE_DIR}/include"
         ${INCLUDELIST}
         COMMENT "Building CL to LLVM bitcode ${BC_FILE}"
         VERBATIM)

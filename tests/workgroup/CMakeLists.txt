@@ -32,6 +32,13 @@ add_compile_options(${OPENCL_CFLAGS})
 add_executable("run_kernel" "run_kernel.c")
 target_link_libraries("run_kernel" ${POCLU_LINK_OPTIONS})
 
+# This is expected to generate shufflevector instructions.
+add_test_pocl(NAME "subgroup/shuffle_small"
+              EXPECTED_OUTPUT "sg_shuffle_small_1_8_1_1.stdout"
+              COMMAND "run_kernel" "sg_shuffle.cl" 1 8 1 1
+              LLVM_FILECHECK "sg_shuffle_small.fc"
+              WORKITEM_HANDLER "loopvec")
+
 add_test_pocl(NAME "workgroup/different_implicit_barrier_injection_scenarios"
               EXPECTED_OUTPUT "implicit_barriers_1_2_1_1.stdout"
               COMMAND "run_kernel" "implicit_barriers.cl" 1 2 1 1
