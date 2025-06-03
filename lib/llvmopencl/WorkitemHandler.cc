@@ -1243,8 +1243,10 @@ bool WorkitemHandler::handleWorkitemFunctions() {
 
       if (isCompilerExpandableWIFunctionCall(*Call)) {
         auto Callee = Call->getCalledFunction();
-        int Dim =
-            cast<llvm::ConstantInt>(Call->getArgOperand(0))->getZExtValue();
+        int Dim = Call->arg_size() == 0
+                      ? 0
+                      : cast<llvm::ConstantInt>(Call->getArgOperand(0))
+                            ->getZExtValue();
 
         for (Instruction::use_iterator UI = Call->use_begin(),
                                        UE = Call->use_end();
@@ -1279,6 +1281,9 @@ bool WorkitemHandler::handleWorkitemFunctions() {
             Replacement = getGlobalSize(Dim);
           else if (Callee->getName() == GOFF_BUILTIN_NAME)
             Replacement = Builder.CreateLoad(ST, GlobalOffsetGlobals[Dim]);
+          else if (Callee->getName() == LLID_BUILTIN_NAME)
+            Replacement = getLinearWIIndexInRegion(InsertBefore);
+
           User->replaceUsesOfWith(Call, Replacement);
           UI = Call->use_begin();
           UE = Call->use_end();

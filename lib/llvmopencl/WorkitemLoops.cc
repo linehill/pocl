@@ -414,6 +414,11 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
       llvm::BasicBlock *BB = *I;
       BB->getTerminator()->replaceUsesOfWith(PRegion->entryBB(), WILoop.first);
     }
+
+    // Initialize the local linear id counter before the WILoop constructs.
+    IRBuilder<> Builder(WILoop.first->getTerminator());
+    if (GlobalVariable *LLID = M->getGlobalVariable(LLID_G_NAME))
+      Builder.CreateStore(ConstantInt::get(SizeT(M), 0), LLID);
   }
 
   if (!WGDynamicLocalSize)
@@ -694,8 +699,7 @@ llvm::Value *
 WorkitemLoopsImpl::getLinearWIIndexInRegion(llvm::Instruction *Instr) {
   ParallelRegion *ParRegion = regionOfBlock(Instr->getParent());
   assert(ParRegion != nullptr);
-  IRBuilder<> Builder(Instr);
-  return getLinearWiIndex(Builder, M, ParRegion, WIH);
+  return ParRegion->getOrCreateIDLoad(LLID_G_NAME);
 }
 
 llvm::Instruction *
@@ -718,7 +722,9 @@ WorkitemLoopsImpl::getGlobalIdInRegion(llvm::Instruction *Instr, size_t Dim) {
   return Builder.CreateLoad(ST, GlobalIdGlobals[Dim]);
 }
 
-/// Appends a local id loop incrementing basic block.
+/// Appends an id incrementing basic block.
+///
+/// Increments the local id, global id and the local linear id.
 ///
 /// \param After the basic block which flows to the increment block.
 /// \param Dim the local id dimension to increment.
@@ -753,6 +759,14 @@ llvm::BasicBlock *WorkitemLoopsImpl::appendIncBlock(llvm::BasicBlock *After,
   Builder.CreateStore(Builder.CreateAdd(Builder.CreateLoad(ST, GlobalIdVar),
                                         ConstantInt::get(ST, 1)),
                       GlobalIdVar);
+
+  if (Dim == 0) {
+    // Increment the linear ID counter in the innermost loop.
+    if (GlobalVariable *LLID = M->getGlobalVariable(LLID_G_NAME))
+      Builder.CreateStore(Builder.CreateAdd(Builder.CreateLoad(ST, LLID),
+                                            ConstantInt::get(ST, 1)),
+                          LLID);
+  }
 
   Builder.CreateBr(OldExit);
 

@@ -655,6 +655,7 @@ const char *WorkgroupVariablesArray[NumWorkgroupVariables+1] = {"_local_id_x",
                                     "_global_id_y",
                                     "_global_id_z",
                                     "_pocl_sub_group_size",
+                                    "_local_linear_id",
                                     PoclGVarBufferName,
                                     NULL};
 
@@ -663,10 +664,11 @@ const std::vector<std::string>
                              WorkgroupVariablesArray+NumWorkgroupVariables);
 
 const char *WIFuncNameArray[] = {
-    GID_BUILTIN_NAME,        GOFF_BUILTIN_NAME,    GS_BUILTIN_NAME,
-    GROUP_ID_BUILTIN_NAME,   LID_BUILTIN_NAME,     LS_BUILTIN_NAME,
-    ENQUEUE_LS_BUILTIN_NAME, NGROUPS_BUILTIN_NAME, GLID_BUILTIN_NAME,
-    LLID_BUILTIN_NAME,       WDIM_BUILTIN_NAME,    "__pocl_work_group_alloca"};
+    GID_BUILTIN_NAME,          GOFF_BUILTIN_NAME,    GS_BUILTIN_NAME,
+    GROUP_ID_BUILTIN_NAME,     LID_BUILTIN_NAME,     LS_BUILTIN_NAME,
+    ENQUEUE_LS_BUILTIN_NAME,   NGROUPS_BUILTIN_NAME, GLID_BUILTIN_NAME,
+    LLID_BUILTIN_NAME,         WDIM_BUILTIN_NAME,    LLID_BUILTIN_NAME,
+    "__pocl_work_group_alloca"};
 
 constexpr unsigned NumWIFuncNames =
     sizeof(WIFuncNameArray) / sizeof(const char *);
@@ -722,10 +724,10 @@ llvm::Type *SizeT(llvm::Module *M) {
   return IntegerType::get(M->getContext(), AddressBits);
 }
 
-const std::array<std::string, 7> CompilerExpandableBuiltinNames = {
-    GID_BUILTIN_NAME, GS_BUILTIN_NAME, GROUP_ID_BUILTIN_NAME,
-    LID_BUILTIN_NAME, LS_BUILTIN_NAME, NGROUPS_BUILTIN_NAME,
-    GOFF_BUILTIN_NAME};
+const std::array<std::string, 8> CompilerExpandableBuiltinNames = {
+    GID_BUILTIN_NAME,  GS_BUILTIN_NAME,  GROUP_ID_BUILTIN_NAME,
+    LID_BUILTIN_NAME,  LS_BUILTIN_NAME,  NGROUPS_BUILTIN_NAME,
+    GOFF_BUILTIN_NAME, LLID_BUILTIN_NAME};
 
 bool isWorkitemFunctionWithOnlyCompilerExpandableCalls(
     const llvm::Function &F) {
@@ -754,7 +756,9 @@ bool isCompilerExpandableWIFunctionCall(const llvm::CallInst &Call) {
                 CompilerExpandableBuiltinNames.end(),
                 Callee->getName()) == CompilerExpandableBuiltinNames.end())
     return false;
-  return isa<llvm::ConstantInt>(Call.getArgOperand(0));
+  // Can expand only if the builtin doesn't take any arguments
+  // (get_local_linear_id) or the argument (dimension) is known at compile time.
+  return Call.arg_size() == 0 || isa<llvm::ConstantInt>(Call.getArgOperand(0));
 }
 
 bool removeClangGeneratedKernelStubs(llvm::Module *Program) {

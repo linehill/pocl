@@ -27,6 +27,8 @@
 
 // Generates the name for the global magic variable for the local id.
 #define LID_G_NAME(DIM) (std::string("_local_id_") + (char)('x' + DIM))
+// The name for the global magic variable for the local linear id.
+#define LLID_G_NAME "_local_linear_id"
 // Generates the name for the global magic variable for the global id iterator.
 #define GID_G_NAME(DIM) (std::string("_global_id_") + (char)('x' + DIM))
 // Generates the name for the global magic variable for the group id.

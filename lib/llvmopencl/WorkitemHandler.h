@@ -67,7 +67,8 @@ protected:
   // work-item index in the parallel region with the given \param Instr.
   // The Value should be reachable by the given \param Instr.
   virtual llvm::Value *getLinearWIIndexInRegion(llvm::Instruction *Instr) {
-    assert(false && "Derived class should not call getLinearWIIndexInRegion!");
+    assert(false &&
+           "getLinearWIIndexInRegion() not implemented for the handler");
     return nullptr;
   };
   virtual llvm::Instruction *getLocalIdInRegion(llvm::Instruction *Instr,

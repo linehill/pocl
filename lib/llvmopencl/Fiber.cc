@@ -53,6 +53,8 @@ protected:
   llvm::Instruction *getGlobalIdInRegion(llvm::Instruction *Instr,
                                          size_t Dim) override;
 
+  llvm::Value *getLinearWIIndexInRegion(llvm::Instruction *Instr) override;
+
 private:
   WorkitemHandlerType WIH;
 
@@ -171,6 +173,27 @@ llvm::Instruction *FiberImpl::getGlobalIdInRegion(llvm::Instruction *Instr,
   return Builder.CreateLoad(ST, GlobalIdGlobals[Dim]);
 }
 
+/// Computes the linear ID using local ids.
+llvm::Value *FiberImpl::getLinearWIIndexInRegion(llvm::Instruction *Instr) {
+  llvm::IRBuilder<> Builder(Instr);
+
+  llvm::Value *LocalIdX = Builder.CreateLoad(ST, LocalIdGlobals[0]);
+  llvm::Value *LocalIdY = Builder.CreateLoad(ST, LocalIdGlobals[1]);
+  llvm::Value *LocalIdZ = Builder.CreateLoad(ST, LocalIdGlobals[2]);
+
+  return Builder.CreateBinOp(
+      llvm::Instruction::Add,
+      Builder.CreateBinOp(
+          llvm::Instruction::Add,
+          Builder.CreateBinOp(llvm::Instruction::Mul,
+                              Builder.CreateBinOp(llvm::Instruction::Mul,
+                                                  LocalIdZ, LocalSizeValues[1]),
+                              LocalSizeValues[0]),
+          Builder.CreateBinOp(llvm::Instruction::Mul, LocalIdY,
+                              LocalSizeValues[0])),
+      LocalIdX);
+}
+
 /// Sets the global variable iterators and generates LLVM IR for the
 /// initialisation of local IDs.
 /// Todo: Refactor to WorkitemHandler.
@@ -224,12 +247,9 @@ llvm::Value *FiberImpl::getNumberOfWIs(llvm::IRBuilder<> &Builder) {
     Nwi = Xyz;
 
   } else {
-    LocalSizeValues[0] = llvm::ConstantInt::get(
-        llvm::Type::getInt64Ty(F->getContext()), WGLocalSizeX, false);
-    LocalSizeValues[1] = llvm::ConstantInt::get(
-        llvm::Type::getInt64Ty(F->getContext()), WGLocalSizeY, false);
-    LocalSizeValues[2] = llvm::ConstantInt::get(
-        llvm::Type::getInt64Ty(F->getContext()), WGLocalSizeZ, false);
+    LocalSizeValues[0] = llvm::ConstantInt::get(ST, WGLocalSizeX, false);
+    LocalSizeValues[1] = llvm::ConstantInt::get(ST, WGLocalSizeY, false);
+    LocalSizeValues[2] = llvm::ConstantInt::get(ST, WGLocalSizeZ, false);
 
     Nwi =
         llvm::ConstantInt::get(ST, WGLocalSizeX * WGLocalSizeY * WGLocalSizeZ);
@@ -607,11 +627,11 @@ bool FiberImpl::processFunction(llvm::Function &F) {
 
   handleWIContextVariables();
 
-  handleWorkitemFunctions();
-
   llvm::Instruction *WGSize = getWorkGroupSizeInstr();
 
   llvm::Value *Nwi = getNumberOfWIs(EntryBlockBuilder);
+
+  handleWorkitemFunctions();
 
   NextJumpIndices = allocateStorage(EntryBlockBuilder, "jump_indices", WGSize);
 

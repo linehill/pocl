@@ -43,6 +43,8 @@ constant extern const size_t _num_groups_x;
 constant extern const size_t _num_groups_y;
 constant extern const size_t _num_groups_z;
 
+constant extern const size_t _local_linear_id;
+
 /* attribute optnone disables all optimizations.
  * This was necessary, because running opt on kernel library
  * introduced global "switch tables" (@switch.table.XX)

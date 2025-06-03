@@ -1201,6 +1201,18 @@ void WorkgroupImpl::privatizeContext(Function *F) {
 
   CreateBuilder(Builder, F->getEntryBlock());
 
+  // Localize the local linear ID.
+  if (GlobalVariable *LocalLinearID = M->getGlobalVariable(LLID_G_NAME)) {
+    Value *LocalLLID = Builder.CreateAlloca(SizeT, 0, LLID_G_NAME);
+
+    for (Function::iterator i = F->begin(), e = F->end(); i != e; ++i) {
+      for (BasicBlock::iterator ii = i->begin(), ee = i->end(); ii != ee;
+           ++ii) {
+        ii->replaceUsesOfWith(LocalLinearID, LocalLLID);
+      }
+    }
+  }
+
   // For replace the global_ids with local allocas for easier
   // data flow analysis.
   std::vector<Value *> GlobalIdAllocas(3);
