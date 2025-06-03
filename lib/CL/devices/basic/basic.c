@@ -2,7 +2,7 @@
 
    Copyright (c) 2011-2013 Universidad Rey Juan Carlos and
                  2011-2021 Pekka Jääskeläinen
-                 2023-2024 Pekka Jääskeläinen / Intel Finland Oy
+                 2023-2025 Pekka Jääskeläinen / Intel Finland Oy
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to
@@ -30,6 +30,7 @@
 #include "cpuinfo.h"
 #include "devices.h"
 #include "pocl_builtin_kernels.h"
+#include "pocl_hostdevice_defs.h"
 #include "pocl_local_size.h"
 #include "pocl_util.h"
 #include "topology/pocl_topology.h"
@@ -894,12 +895,17 @@ pocl_basic_get_device_info_ext (cl_device_id device, cl_device_info param_name,
     case CL_DEVICE_SUB_GROUP_SIZES_INTEL:
       {
         /* We can basically support fixing any WG size with the CPU devices,
-           but let's report something semi-sensible here for vectorization aid.
+           but let's report only 2's power values here to cover the usual SIMD
+           sizes.
          */
-        size_t *sizes = alloca (sizeof (size_t) * device->max_work_group_size);
-        for (unsigned i = 0; i < device->max_work_group_size; ++i)
-          sizes[i] = i;
-        POCL_RETURN_GETINFO_ARRAY (size_t, device->max_work_group_size, sizes);
+        size_t max_size = min (device->max_work_group_size,
+                               POCL_CPU_DEVICES_MAX_SUBGROUP_SIZE);
+        size_t actual_n_sizes = 0;
+        size_t *sizes = alloca (sizeof (size_t) * max_size);
+        /* Only add 2's exponent sizes. */
+        for (size_t i = 2; i <= max_size; i = i << 1)
+          sizes[actual_n_sizes++] = i;
+        POCL_RETURN_GETINFO_ARRAY (size_t, actual_n_sizes, sizes);
       }
     default:
       POCL_MSG_ERR ("Unknown param_name for get_device_info_ext: %u\n",
@@ -924,7 +930,8 @@ pocl_basic_get_subgroup_info_ext (cl_device_id device,
     case CL_KERNEL_MAX_SUB_GROUP_SIZE_FOR_NDRANGE:
       {
         /* For now assume SG == WG_x. */
-        POCL_RETURN_GETINFO (size_t, ((size_t *)input_value)[0]);
+        POCL_RETURN_GETINFO (size_t, min (((size_t *)input_value)[0],
+                                          POCL_CPU_DEVICES_MAX_SUBGROUP_SIZE));
       }
     case CL_KERNEL_SUB_GROUP_COUNT_FOR_NDRANGE:
       {
@@ -957,7 +964,7 @@ pocl_basic_get_subgroup_info_ext (cl_device_id device,
           }
         else
           {
-            nd[0] = device->max_work_group_size / n_wish;
+            nd[0] = POCL_CPU_DEVICES_MAX_SUBGROUP_SIZE;
             nd[1] = n_wish;
             nd[2] = 1;
             POCL_RETURN_GETINFO_ARRAY (size_t,
