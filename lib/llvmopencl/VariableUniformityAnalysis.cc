@@ -470,7 +470,8 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
                                   V == M->getGlobalVariable(LID_G_NAME(2)) ||
                                   V == M->getGlobalVariable(GID_G_NAME(0)) ||
                                   V == M->getGlobalVariable(GID_G_NAME(1)) ||
-                                  V == M->getGlobalVariable(GID_G_NAME(2)))) {
+                                  V == M->getGlobalVariable(GID_G_NAME(2)) ||
+                                  V == M->getGlobalVariable(LLID_G_NAME))) {
     setUniform(F, V, true);
     return true;
   }

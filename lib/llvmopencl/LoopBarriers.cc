@@ -51,11 +51,7 @@ POP_COMPILER_DIAGS
 
 #include <iostream>
 
-#define DEBUG_TYPE "LBAR"
-
-#define PASS_NAME "loop-barriers"
-#define PASS_CLASS pocl::LoopBarriers
-#define PASS_DESC "Add needed barriers to loops"
+#define DEBUG_TYPE "DeSPMD-LBAR"
 
 // #define DEBUG_LOOP_BARRIERS
 
@@ -105,6 +101,12 @@ static BasicBlock *getConditionCheckBlock(Loop &L,
       CondCmpI = &Temp;
 
     auto *Instr = CondComp->getTerminator()->getPrevNonDebugInstruction();
+
+    if (Instr == nullptr) {
+      // A basic block with only a branch in the end.
+      return nullptr;
+    }
+
     *CondCmpI = dyn_cast_or_null<ICmpInst>(Instr);
     if (*CondCmpI != nullptr)
       return CondComp;
@@ -119,6 +121,31 @@ static BasicBlock *getConditionCheckBlock(Loop &L,
     }
   }
   return nullptr;
+}
+
+/// Splits uniform loop count instructions after possible diverging instructions
+/// in the given \p Latch. \return True in case the Latch was modified.
+static bool isolateUniformLatch(BasicBlock *Latch,
+                                VariableUniformityAnalysisResult &VUA) {
+
+  // The first instruction in the new Latch basic block.
+  auto *SplitPoint = Latch->getTerminator();
+  do {
+    Instruction *Prev = SplitPoint->getPrevNonDebugInstruction(true);
+    if (Prev == nullptr || !VUA.isUniform(Latch->getParent(), Prev))
+      break;
+    SplitPoint = Prev;
+  } while (true);
+
+  // Do not create basic blocks with only the branch.
+  if (SplitPoint == Latch->getTerminator() ||
+      SplitPoint->getNextNonDebugInstruction(true) == Latch->getTerminator())
+    return false;
+
+  BasicBlock *NewLatch = SplitBlock(Latch, SplitPoint);
+  NewLatch->setName(Latch->getName() + ".uniform");
+
+  return true;
 }
 
 /// Returns true in case \p L is an ideal/canonical loop that only contains
@@ -174,47 +201,55 @@ isSuitableForBLoopStructureSharing(Loop &L,
   if (LoadInst *Load = dyn_cast_or_null<LoadInst>(CCRight))
     CCRight = Load->getPointerOperand();
 
-  Value *Iterator = nullptr, *LoopBound = nullptr;
+  Value *Iterator = nullptr;
   if (CCLeft->isUsedInBasicBlock(Latch)) {
     // The latch should only increment the iterator in our case.
     Iterator = CCLeft;
-    LoopBound = CCRight;
   } else {
     Iterator = CCRight;
-    LoopBound = CCLeft;
   }
 
   // The for-loop case with only the iteration variable increment in the
   // latch and a condition check in another.
   if (CondComp != nullptr && Latch != nullptr) {
-    size_t InstructionsInLatch = std::distance(Latch->begin(), Latch->end());
-    if (InstructionsInLatch == 4) {
-      auto I = Latch->begin();
-      // Non-SSA form with the iteration variable in allocas:
-      LoadInst *Load = nullptr;
-      if ((Load = dyn_cast_or_null<LoadInst>(I++))) {
-        if (Load->getPointerOperand() != Iterator)
-          return false;
-      } else
-        return false;
+    size_t InstructionsToAnalyze = std::distance(Latch->begin(), Latch->end());
+    LLVM_DEBUG(dbgs() << "Analyzing latch for loop construct sharing:\n");
+    LLVM_DEBUG(Latch->dump());
 
-      BinaryOperator *Modify = nullptr;
-      if ((Modify = dyn_cast_or_null<BinaryOperator>(I++))) {
-        if (Modify->getOperand(0) != Load ||
-            !isa<Constant>(Modify->getOperand(1)))
-          return false;
-      } else
-        return false;
+    auto I = Latch->begin();
+    LoadInst *IteratorLoad = nullptr;
 
-      StoreInst *Store = nullptr;
-      if ((Store = dyn_cast_or_null<StoreInst>(I++))) {
-        if (Store->getOperand(0) != Modify || Store->getOperand(1) != Iterator)
-          return false;
-      } else
+    if (InstructionsToAnalyze == 4) {
+      // Iterator load in the increment block?
+      if (!(IteratorLoad = dyn_cast<LoadInst>(I++)))
         return false;
-
-      return isa<BranchInst>(I);
+      InstructionsToAnalyze--;
     }
+
+    if (InstructionsToAnalyze != 3)
+      return false;
+
+    BinaryOperator *Modify = nullptr;
+    if ((Modify = dyn_cast_or_null<BinaryOperator>(I++))) {
+
+      if (IteratorLoad == nullptr)
+        IteratorLoad = dyn_cast<LoadInst>(Modify->getOperand(0));
+
+      if (IteratorLoad == nullptr || Modify->getOperand(0) != IteratorLoad ||
+          !isa<Constant>(Modify->getOperand(1)) ||
+          IteratorLoad->getPointerOperand() != Iterator)
+        return false;
+    } else
+      return false;
+
+    StoreInst *Store = nullptr;
+    if ((Store = dyn_cast_or_null<StoreInst>(I++))) {
+      if (Store->getOperand(0) != Modify || Store->getOperand(1) != Iterator)
+        return false;
+    } else
+      return false;
+
+    return isa<BranchInst>(I);
   }
   return false;
 }
@@ -222,15 +257,13 @@ isSuitableForBLoopStructureSharing(Loop &L,
 static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
                                     VariableUniformityAnalysisResult &VUA) {
 
-  Function *K = L.getHeader()->getParent();
-
   std::set<llvm::BasicBlock *> Highlights;
   dumpCFG(*K, K->getName().str() + "_before_loopbbarriers_on_bloop_" +
                   L.getName().str() + ".dot");
 
   LLVM_DEBUG(dbgs() << "Loop: " << L.getName().str() << "\n");
 
-  // TO clean: The loop construct is not necessary here anymore,
+  // TO clean: This loop construct is not necessary here anymore,
   // as the b-loop property is detected earlier.
   for (Loop::block_iterator I = L.block_begin(), E = L.block_end(); I != E;
        ++I) {
@@ -249,7 +282,7 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
 
         LLVM_DEBUG(dbgs() << "adding to preheader BB\n");
         LLVM_DEBUG(Preheader->dump());
-        LLVM_DEBUG("before instr\n");
+        LLVM_DEBUG(dbgs() << "before instr\n");
         LLVM_DEBUG(Preheader->getTerminator()->dump());
 
         WorkgroupBarrier::createAtEnd(Preheader);
@@ -282,7 +315,6 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
         }
 
         BasicBlock *Latch = L.getLoopLatch();
-
         // Check if we can share the loop construct (the iteration
         // variable and the code that manages it) across the work-items,
         // like is usually the case with loops containing barrier calls.
@@ -414,7 +446,25 @@ bool addLoopConstructIsolationBarriers(llvm::Function &F, llvm::LoopInfo &LI,
   LLVM_DEBUG(dbgs() << "Before LoopBarriers\n");
   LLVM_DEBUG(F.dump());
 
+  // Prettify the loop structure blocks to make them suitable for loop
+  // construct sharing etc.
   bool Changed = false;
+  for (llvm::Loop *OuterLoop : LI) {
+    auto Loops = OuterLoop->getLoopsInPreorder();
+    for (llvm::Loop *L : Loops) {
+      BasicBlock *Latch = L->getLoopLatch();
+      if (Latch != nullptr)
+        Changed = isolateUniformLatch(Latch, VUA) || Changed;
+    }
+  }
+
+  if (Changed) {
+    DT.recalculate(F);
+    LI.releaseMemory();
+    LI.analyze(DT);
+    LI.verify(DT);
+  }
+
   for (llvm::Loop *OuterLoop : LI) {
     auto Loops = OuterLoop->getLoopsInPreorder();
     for (llvm::Loop *L : Loops)

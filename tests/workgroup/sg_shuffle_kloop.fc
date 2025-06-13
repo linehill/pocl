@@ -1,0 +1,5 @@
+# Thanks (only) to the loop prettification in LoopBarriers and the load
+# sinkining in PhisToAlloca, the b-loop structure of this case should
+# get shared with and without pre-optimizations and we should not see
+# per-WI i-variables.
+CHECK-NOT: %.i.0.ex_phi.wi_context.i.i

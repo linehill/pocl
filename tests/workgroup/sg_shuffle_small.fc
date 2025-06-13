@@ -1,1 +1,3 @@
-CHECK: shufflevector
+CHECK: load <8 x
+CHECK: shufflevector <8 x
+CHECK: store <8 x

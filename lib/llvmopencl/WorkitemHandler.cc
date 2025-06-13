@@ -403,11 +403,12 @@ llvm::Value *WorkitemHandler::tryToRematerialize(llvm::Instruction *Before,
   if (llvm::CallInst *Call = dyn_cast<CallInst>(Def)) {
     auto *Callee = Call->getCalledFunction();
     if (Callee == nullptr || (Callee->getName() != GID_BUILTIN_NAME &&
-                              Callee->getName() != GS_BUILTIN_NAME &&
                               Callee->getName() != GROUP_ID_BUILTIN_NAME &&
+                              Callee->getName() != GS_BUILTIN_NAME &&
                               Callee->getName() != LID_BUILTIN_NAME &&
+                              Callee->getName() != LLID_BUILTIN_NAME &&
                               Callee->getName() != LS_BUILTIN_NAME)) {
-    UNABLE_TO_REMAT("called an unsupported function");
+      UNABLE_TO_REMAT("called an unsupported function");
     }
   } else if (isa<Constant>(Def) || isa<Argument>(Def)) {
     ABLE_TO_REMAT();

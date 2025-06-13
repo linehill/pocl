@@ -508,11 +508,6 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     // phistoallocas did) in case of SPIR-V inputs which can be optimized
     // to some extent and produce PHIs.
 
-    // Even though we assume unoptimized LLVM IR input from Clang, run reg2mem
-    // just in case of SPIR-V inputs which might be optimized and contain PHIs.
-    // DeSPMD's CFG transformations work on non-SSA input.
-    // addPass(Passes, "reg2mem");
-
     // Run loop-simplify to make more of the loops manageable by WILoops.
     addAnalysis(Passes, "scalar-evolution");
     addPass(Passes, "loop-simplify");

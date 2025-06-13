@@ -39,6 +39,12 @@ add_test_pocl(NAME "subgroup/shuffle_small"
               LLVM_FILECHECK "sg_shuffle_small.fc"
               WORKITEM_HANDLER "loopvec")
 
+add_test_pocl(NAME "subgroup/shuffle_inside_kloop"
+              EXPECTED_OUTPUT "sg_shuffle_kloop_1_16_1_1.stdout"
+              COMMAND "run_kernel" "sg_shuffle_kloop.cl" 1 16 1 1
+              LLVM_FILECHECK "sg_shuffle_kloop.fc"
+              WORKITEM_HANDLER "loopvec")
+
 add_test_pocl(NAME "workgroup/different_implicit_barrier_injection_scenarios"
               EXPECTED_OUTPUT "implicit_barriers_1_2_1_1.stdout"
               COMMAND "run_kernel" "implicit_barriers.cl" 1 2 1 1
@@ -90,32 +96,32 @@ add_test_pocl(NAME "workgroup/outerlooppar_multiple_exits"
 
 # Test cases for subgroup barriers (Not supported in conformance build).
 if(NOT ENABLE_CONFORMANCE)
-  add_test_pocl(NAME "workgroup/basic_subgroup_barrier_fiber"
+  add_test_pocl(NAME "subgroup/basic_subgroup_barrier_fiber"
                 EXPECTED_OUTPUT "basic_sg_barrier_1_4_1_1_fiber.stdout"
                 COMMAND "run_kernel" "basic_sg_barrier.cl" 1 4 1 1
                 WORKITEM_HANDLER "fiber")
 
-  add_test_pocl(NAME "workgroup/basic_subgroup_barrier_loopvec"
+  add_test_pocl(NAME "subgroup/basic_subgroup_barrier_loopvec"
                 EXPECTED_OUTPUT "basic_sg_barrier_1_4_1_1_loopvec.stdout"
                 COMMAND "run_kernel" "basic_sg_barrier.cl" 1 4 1 1
                 WORKITEM_HANDLER "loopvec")
 
-  add_test_pocl(NAME "workgroup/basic_diverging_sg_barrier_fiber"
+  add_test_pocl(NAME "subgroup/basic_diverging_sg_barrier_fiber"
                 EXPECTED_OUTPUT "basic_diverging_sg_barrier_1_4_1_1.stdout"
                 COMMAND "run_kernel" "basic_diverging_sg_barrier.cl" 1 4 1 1
                 WORKITEM_HANDLER "fiber")
 
-  add_test_pocl(NAME "workgroup/diverging_sg_barriers_fiber"
+  add_test_pocl(NAME "subgroup/diverging_sg_barriers_fiber"
                 EXPECTED_OUTPUT "diverging_sg_barriers_1_128_1_1.stdout"
                 COMMAND "run_kernel" "diverging_sg_barriers.cl" 1 128 1 1
                 WORKITEM_HANDLER "fiber")
 
-  add_test_pocl(NAME "workgroup/mixing_barriers_fiber"
+  add_test_pocl(NAME "subgroup/mixing_barriers_fiber"
                 EXPECTED_OUTPUT "mixing_barriers_1_8_1_1.stdout"
                 COMMAND "run_kernel" "mixing_barriers.cl" 1 8 1 1
                 WORKITEM_HANDLER "fiber")
 
-  add_test_pocl(NAME "workgroup/sg_barrier_in_for_in_if_fiber"
+  add_test_pocl(NAME "subgroup/sg_barrier_in_for_in_if_fiber"
                 EXPECTED_OUTPUT "sg_barrier_in_for_in_if_1_4_1_1_fiber.stdout"
                 COMMAND "run_kernel" "sg_barrier_in_for_in_if.cl" 1 4 1 1
                 WORKITEM_HANDLER "fiber")
@@ -136,11 +142,11 @@ foreach(VARIANT ${VARIANTS})
     "workgroup/cond_barriers_in_for_${VARIANT}"
     "workgroup/different_implicit_barrier_injection_scenarios"
 #    "workgroup/cond_barrier_in_var_for_cbs"
-    "workgroup/basic_subgroup_barrier_${VARIANT}"
-    "workgroup/basic_diverging_sg_barrier_fiber"
-    "workgroup/diverging_sg_barriers_fiber"
-    "workgroup/mixing_barriers_fiber"
-    "workgroup/sg_barrier_in_for_in_if_fiber"
+    "subgroup/basic_subgroup_barrier_${VARIANT}"
+    "subgroup/basic_diverging_sg_barrier_fiber"
+    "subgroup/diverging_sg_barriers_fiber"
+    "subgroup/mixing_barriers_fiber"
+    "subgroup/sg_barrier_in_for_in_if_fiber"
     PROPERTIES
       COST 2.0
       PROCESSORS 1
@@ -263,12 +269,12 @@ add_test_pocl(NAME "workgroup/ballot"
 # Disable subgroup & ballot tests in conformance build.
 if(ENABLE_CONFORMANCE)
   set_tests_properties(
-    "workgroup/basic_subgroup_barrier_fiber"
-    "workgroup/basic_subgroup_barrier_loopvec"
-    "workgroup/basic_diverging_sg_barrier_fiber"
-    "workgroup/diverging_sg_barriers_fiber"
-    "workgroup/mixing_barriers_fiber"
-    "workgroup/sg_barrier_in_for_in_if_fiber"
+    "subgroup/basic_subgroup_barrier_fiber"
+    "subgroup/basic_subgroup_barrier_loopvec"
+    "subgroup/basic_diverging_sg_barrier_fiber"
+    "subgroup/diverging_sg_barriers_fiber"
+    "subgroup/mixing_barriers_fiber"
+    "subgroup/sg_barrier_in_for_in_if_fiber"
     "workgroup/ballot_loopvec"
     "workgroup/ballot_fiber"
     PROPERTIES

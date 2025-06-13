@@ -35,10 +35,10 @@ class VariableUniformityAnalysisResult;
 /// Converts PHIs to an alloca and the sources to writes.
 ///
 /// The control flow transformations DeSPMD performs do not handle PHI nodes.
-/// When we compile from sources, the input is unoptimized and not in SSA form,
-/// thus there should not be PHI nodes either, but when the input originates
-/// from SPIR-V there could be PHI nodes we should get rid of.
-bool convertPHIsToAllocaAccesses(llvm::Function &F);
+/// When we compile from sources, the input is almost unoptimized and not in
+/// SSA form, thus there should not be PHI nodes either, but when the input
+/// originates from SPIR-V there could be PHI nodes we should get rid of.
+bool convertPHIsToAllocaAccesses(llvm::Function &F, llvm::DominatorTree &DT);
 
 } // namespace pocl
 

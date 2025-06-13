@@ -99,13 +99,13 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
 
   auto &LI = AM.getResult<LoopAnalysis>(F);
   auto &PDT = AM.getResult<PostDominatorTreeAnalysis>(F);
-  auto &DT = AM.getResult<llvm::DominatorTreeAnalysis>(F);
+  auto &DT = AM.getResult<DominatorTreeAnalysis>(F);
 
   bool Changed = false;
 
   WorkitemHandlerType WIH = getWorkitemHandler();
 
-  Changed = convertPHIsToAllocaAccesses(F) || Changed;
+  Changed = convertPHIsToAllocaAccesses(F, DT) || Changed;
   REFRESH_LOOP_INFO();
 
   pocl::VariableUniformityAnalysisResult VUA;
