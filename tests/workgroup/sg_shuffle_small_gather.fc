@@ -1,0 +1,3 @@
+# A version that uses a gather load to implement the shuffle.
+CHECK: call <8 x i32> @llvm.masked.gather.v8i32.
+

@@ -32,11 +32,17 @@ add_compile_options(${OPENCL_CFLAGS})
 add_executable("run_kernel" "run_kernel.c")
 target_link_libraries("run_kernel" ${POCLU_LINK_OPTIONS})
 
+if(TESTED_CPU_UARCH MATCHES "meteorlake")
+  set(SG_SHUFFLE_SMALL_FC "sg_shuffle_small_gather.fc")
+else()
+  set(SG_SHUFFLE_SMALL_FC "sg_shuffle_small.fc")
+endif()
+
 # This is expected to generate shufflevector instructions.
 add_test_pocl(NAME "subgroup/shuffle_small"
               EXPECTED_OUTPUT "sg_shuffle_small_1_8_1_1.stdout"
               COMMAND "run_kernel" "sg_shuffle.cl" 1 8 1 1
-              LLVM_FILECHECK "sg_shuffle_small.fc"
+              LLVM_FILECHECK "${SG_SHUFFLE_SMALL_FC}"
               WORKITEM_HANDLER "loopvec")
 
 add_test_pocl(NAME "subgroup/shuffle_inside_kloop"
