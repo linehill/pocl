@@ -1,23 +1,5 @@
 // UnreachablesToReturns is an LLVM pass to convert unreachable inst
-// to defined behavior. The behavior depends on WI handler (CBS / LOOPVEC)
-//
-// for CBS handler, we convert the unreachable to store of flag (1) into an
-// external variable, and a Terminator instruction (either branch or ret void).
-// The store to global variable (__pocl_context_unreachable) is then converted
-// to store into the pocl_context argument of the kernel in Workgroup pass.
-// The new terminator (ret/branch) changes the CFG and has the potential
-// to create illegal code (barriers are only partially taken), however the CBS
-// is able to handle these.
-//
-// for LOOPVEC handler, we find all basicblocks which have an unreachable inst,
-// and "disconnect" them from their predecessor basicblocks. If the predecessor
-// has an unconditional jump, it is also deleted. If it has a conditional jump,
-// it's made unconditional (to the other branch). This matches the behavior
-// of prior versions of PoCL (6.0) where the optimization similarly deleted
-// these blocks.
-//
-// Note that neither handling is recursive. Therefore all non-kernel functions
-// that have an unreachable inst, must be inlined before this Pass is run.
+// to defined behavior. The behavior depends on WI handler (FIBER / LOOPVEC)
 //
 // Copyright (c) 2025 Michal Babej / Intel Finland Oy
 //                    Pekka Jääskeläinen / Intel Finland Oy
@@ -39,6 +21,27 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
+//
+// For the 'Fiber' WI-handler, the pass converts the unreachables to stores of
+// a status flag (1) in an external variable, and a Terminator instruction
+// (either a branch or a ret void). The store to the global variable
+// (__pocl_context_unreachable) is then converted to a store into the
+// pocl_context argument of the kernel in Workgroup.cc.
+//
+// The new terminator (ret/branch) changes the CFG and has the potential
+// to create illegal OpenCL code (barriers are not reached by all WIs),
+// however Fiber is not affected by this as it executes all WIs one-by-one.
+//
+// For the Loopvec handler, the pass finds all basic blocks which have an
+// unreachable instruction and "disconnects" them from their predecessor
+// BB. If the predecessor has an unconditional jump, it is also deleted. If
+// it has a conditional jump, it's made unconditional (to the other branch).
+// This matches the behavior of prior versions of PoCL (6.0) where the
+// optimization similarly deleted these blocks.
+//
+// Note that neither of the options is function call recursive. Therefore, all
+// non-kernel functions that have an unreachable inst must be inlined before
+// this pass is run in order to cover unreachables in subfunctions.
 
 #include "CompilerWarnings.h"
 IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
