@@ -52,6 +52,7 @@ set(PROGRAMS_TO_BUILD test_barrier_between_for_loops test_early_return
   test_workitem_func_outside_kernel test_program_scope_vars test_issue_1548
   test_issue_1525 test_issue_1608 test_issue_1826 test_builtin_regression
   test_mem_host_ptr_issue test_issue_1962 test_issue_2005
+  test_cond_wg_reduce_add_in_loop
   test_cts_test_convert_double16_rtz_ulong16
 )
 
@@ -93,6 +94,8 @@ add_test_pocl(NAME "regression/test_issue_1435" COMMAND "test_issue_1435")
 add_test_pocl(NAME "regression/test_issue_1608" COMMAND "test_issue_1608")
 
 add_test_pocl(NAME "regression/test_issue_1826" COMMAND "test_issue_1826")
+
+add_test_pocl(NAME "regression/test_cond_wg_reduce_add_in_loop" COMMAND "test_cond_wg_reduce_add_in_loop")
 
 add_test_pocl(NAME "regression/test_builtin_regression"
   COMMAND "test_builtin_regression")
