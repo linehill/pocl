@@ -28,6 +28,7 @@ IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
 POP_COMPILER_DIAGS
 IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/Analysis/LoopInfo.h>
+#include <llvm/Analysis/PostDominators.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Dominators.h>
 #include <llvm/IR/Instructions.h>
@@ -42,6 +43,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "KernelCompilerUtils.h"
 #include "LLVMUtils.h"
 #include "LoopBarriers.h"
+#include "SubgroupBarrier.h"
 #include "VariableUniformityAnalysis.h"
 #include "VariableUniformityAnalysisResult.hh"
 #include "Workgroup.h"
@@ -53,7 +55,6 @@ POP_COMPILER_DIAGS
 
 #define DEBUG_TYPE "DeSPMD-LBAR"
 
-// #define DEBUG_LOOP_BARRIERS
 
 // Use the LLVM_DEBUG-style macros to gradually convert to LLVM-upstreamable
 // code.
@@ -257,11 +258,13 @@ isSuitableForBLoopStructureSharing(Loop &L,
 static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
                                     VariableUniformityAnalysisResult &VUA) {
 
-  std::set<llvm::BasicBlock *> Highlights;
-  dumpCFG(*K, K->getName().str() + "_before_loopbbarriers_on_bloop_" +
-                  L.getName().str() + ".dot");
+  llvm::Function *K = L.getLoopPreheader()->getParent();
 
-  LLVM_DEBUG(dbgs() << "Loop: " << L.getName().str() << "\n");
+  std::set<llvm::BasicBlock *> Highlights;
+  /*   dumpCFG(*K, K->getName().str() + "_before_loopbbarriers_on_bloop_" +
+                    L.getName().str() + ".dot");
+
+    LLVM_DEBUG(dbgs() << "Loop: " << L.getName().str() << "\n"); */
 
   // TO clean: This loop construct is not necessary here anymore,
   // as the b-loop property is detected earlier.
@@ -285,7 +288,18 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
         LLVM_DEBUG(dbgs() << "before instr\n");
         LLVM_DEBUG(Preheader->getTerminator()->dump());
 
-        WorkgroupBarrier::createAtEnd(Preheader);
+        // Add appropriate barrier to the loop preheader.
+        // TODO: optimization opportunity by changing sg-barriers to wg-barriers
+        // in uniform loop.
+        if (SubgroupBarrier::isLoopWithSGBarrier(L))
+          // Switch the barrier type if there is WG barrier already.
+          if (WorkgroupBarrier::hasWGBarrier(Preheader))
+            switchBarrierGranularity(Preheader);
+          else
+            SubgroupBarrier::createAtEnd(Preheader);
+        else
+          WorkgroupBarrier::createAtEnd(Preheader);
+
         Preheader->setName(Preheader->getName() + ".loopbarrier");
         Highlights.insert(Preheader);
 
@@ -297,7 +311,11 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
 #else
         if (Header->getFirstNonPHIIt() != Header->begin()) {
 #endif
-          WorkgroupBarrier::createAtStart(Header);
+          if (SubgroupBarrier::isLoopWithSGBarrier(L))
+            SubgroupBarrier::createAtStart(Header);
+          else
+            WorkgroupBarrier::createAtStart(Header);
+
           Header->setName(Header->getName() + ".phibarrier");
           Highlights.insert(Header);
         }
@@ -309,7 +327,12 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
         // after the exit decision.
         BasicBlock *BrExit = L.getExitingBlock();
         if (BrExit != NULL) {
-          WorkgroupBarrier::createAtEnd(BrExit);
+
+          if (SubgroupBarrier::isLoopWithSGBarrier(L))
+            SubgroupBarrier::createAtEnd(BrExit);
+          else
+            WorkgroupBarrier::createAtEnd(BrExit);
+
           BrExit->setName(BrExit->getName() + ".brexitbarrier");
           Highlights.insert(BrExit);
         }
@@ -324,30 +347,35 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
         bool UniformLoopConstruct = isSuitableForBLoopStructureSharing(L, VUA);
 
         if (Latch != NULL && BrExit != Latch) {
-#if LLVM_MAJOR < 20
-          WorkgroupBarrier::create(Latch->getTerminator());
-#else
-          WorkgroupBarrier::create(Latch->getTerminator()->getIterator());
-#endif
+          if (SubgroupBarrier::isLoopWithSGBarrier(L))
+            SubgroupBarrier::createAtEnd(Latch);
+          else
+            WorkgroupBarrier::createAtEnd(Latch);
+
           Latch->setName(Latch->getName() + ".latchbarrier");
         }
 
         if (UniformLoopConstruct) {
           markAsPureUniformBlock(CondBlock, "b-loop condition check");
+          LLVM_DEBUG(dbgs()
+                     << "Marked [" << CondBlock->getName().str()
+                     << "] as pure uniform block: b-loop condition check\n");
           Highlights.insert(CondBlock);
           if (Latch != nullptr) {
             // Only a single latch.
             markAsPureUniformBlock(Latch, "b-loop latch");
+            LLVM_DEBUG(dbgs() << "Marked [" << Latch->getName().str()
+                              << "] as pure uniform block: b-loop latch\n");
             Highlights.insert(Latch);
           }
         }
 
         if (Latch != nullptr) {
           // Single latch case.
-          dumpCFG(*K,
-                  K->getName().str() + "_after_loopbbarriers_on_bloop_" +
-                      L.getName().str() + ".dot",
-                  nullptr, nullptr, &Highlights);
+          /*  dumpCFG(*K,
+                   K->getName().str() + "_after_loopbbarriers_on_bloop_" +
+                       L.getName().str() + ".dot",
+                   nullptr, nullptr, &Highlights); */
           return true;
         }
 
@@ -368,21 +396,21 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
             // (otherwise if might not even belong to this "tail", see
             // forifbarrier1 graph test).
             if (DT.dominates(J->getParent(), Latch2)) {
-#if LLVM_MAJOR < 20
-              WorkgroupBarrier::create(Latch2->getTerminator());
-#else
-              WorkgroupBarrier::create(Latch2->getTerminator()->getIterator());
-#endif
-              if (UniformLoopConstruct)
+
+              if (SubgroupBarrier::isLoopWithSGBarrier(L))
+                SubgroupBarrier::createAtEnd(Latch);
+              else
+                WorkgroupBarrier::createAtEnd(Latch);
+
+              if (UniformLoopConstruct) {
                 markAsPureUniformBlock(Latch2, "b-loop latch");
+                LLVM_DEBUG(dbgs() << "Marked [" << Latch2->getName().str()
+                                  << "] as pure uniform block: b-loop latch\n");
+              }
               Highlights.insert(Latch2);
             }
           }
         }
-        dumpCFG(*K,
-                K->getName().str() + "_after_loopbbarriers_on_bloop_" +
-                    L.getName().str() + ".dot",
-                nullptr, nullptr, &Highlights);
         return true;
       }
     }
@@ -393,8 +421,10 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
 static bool processLoop(Loop &L, llvm::DominatorTree &DT,
                         VariableUniformityAnalysisResult &VUA) {
 
-  if (Barrier::isLoopWithBarrier(L))
+  if (Barrier::isLoopWithBarrier(L)) {
+    // std::cout << "loopbarriers: loop with barrier\n";
     return processLoopWithBarriers(L, DT, VUA);
+  }
 
   // This is a loop without a barrier. Ensure we have a non-barrier
   // block as a preheader so we can capture the loop as a whole
@@ -449,6 +479,7 @@ bool addLoopConstructIsolationBarriers(llvm::Function &F, llvm::LoopInfo &LI,
   // Prettify the loop structure blocks to make them suitable for loop
   // construct sharing etc.
   bool Changed = false;
+
   for (llvm::Loop *OuterLoop : LI) {
     auto Loops = OuterLoop->getLoopsInPreorder();
     for (llvm::Loop *L : Loops) {

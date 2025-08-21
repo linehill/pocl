@@ -37,7 +37,8 @@ namespace pocl {
 /// as regions of pure uniform basic blocks.
 ///
 /// \return true if updated.
-bool canonicalizeBarriers(llvm::Function &F);
+bool canonicalizeBarriers(llvm::Function &F, llvm::LoopInfo &LI,
+                          llvm::DominatorTree &DT);
 
 } // namespace pocl
 

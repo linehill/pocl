@@ -38,14 +38,16 @@
 
 // TODO: Move the needed definitions from these PoCL modules to this file.
 // LLVM prefers self-contained files for passes (even if they grow large).
-#include "BarrierTailReplication.h"
 #include "CanonicalizeBarriers.h"
+#include "DebugHelpers.h"
 #include "Fiber.h"
 #include "ImplicitConditionalBarriers.h"
 #include "ImplicitLoopBarriers.h"
 #include "LLVMUtils.h"
 #include "LoopBarriers.h"
 #include "PHIsToAllocas.h"
+#include "SubgroupBarrier.h"
+#include "WorkgroupBarrier.h"
 #include "WorkitemHandlerChooser.h"
 #include "WorkitemLoops.h"
 
@@ -69,6 +71,7 @@ namespace llvm {
   do {                                                                         \
     if (Changed) {                                                             \
       DT.recalculate(F);                                                       \
+      PDT.recalculate(F);                                                      \
       LI.releaseMemory();                                                      \
       LI.analyze(DT);                                                          \
       LI.verify(DT);                                                           \
@@ -91,6 +94,33 @@ static bool removeLifetimeMarkers(Function &F) {
   return InstrsToDelete.size() > 0;
 }
 
+/// Convert subgroup barriers to workgroup barriers when possible.
+static bool convertSGBarriersToWGBarriers(llvm::Function &F,
+                                          llvm::LoopInfo &LI) {
+
+  for (llvm::Loop *OuterLoop : LI) {
+    auto Loops = OuterLoop->getLoopsInPreorder();
+    for (llvm::Loop *L : Loops) {
+
+      // Loop with wg-barrier and sg-barrier implies non-divergence.
+      // So, it should be safe to convert sg-barriers to wg-barriers in this
+      // case. In nested loops, is it possible that outer loop syncs on wgs, and
+      // inner on sgs?
+      // TODO: In case of nested loops, use getSubLoops to identify if barriers
+      // are on the same level.
+      if (WorkgroupBarrier::isLoopWithWGBarrier(*L) &&
+          SubgroupBarrier::isLoopWithSGBarrier(*L)) {
+        for (llvm::BasicBlock *BB : L->getBlocks()) {
+          if (SubgroupBarrier::hasSGBarrier(BB)) {
+            switchBarrierGranularity(BB);
+          }
+        }
+      }
+    }
+  }
+  return true;
+}
+
 PreservedAnalyses DeSPMDPass::run(Function &F,
                                   FunctionAnalysisManager &AM) {
 
@@ -105,45 +135,41 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
 
   WorkitemHandlerType WIH = getWorkitemHandler();
 
+#ifdef RENAME_UNNAMED_BBS
+  renameUnnamedBlocks(F);
+#endif
+
   Changed = convertPHIsToAllocaAccesses(F, DT) || Changed;
   REFRESH_LOOP_INFO();
 
   pocl::VariableUniformityAnalysisResult VUA;
   VUA.runOnFunction(F, LI, PDT);
 
-  Changed = canonicalizeBarriers(F) || Changed;
+  Changed = canonicalizeBarriers(F, LI, DT) || Changed;
   REFRESH_LOOP_INFO();
 
   if (WIH != WorkitemHandlerType::FIBER) {
+    Changed = convertSGBarriersToWGBarriers(F, LI) || Changed;
     Changed = enforceOuterLoopParIfBeneficial(F, LI, VUA) || Changed;
-    Changed = canonicalizeBarriers(F) || Changed;
-    REFRESH_LOOP_INFO();
-
+    Changed = canonicalizeBarriers(F, LI, DT) || Changed;
     Changed = addLoopConstructIsolationBarriers(F, LI, VUA, DT) || Changed;
-    Changed = canonicalizeBarriers(F) || Changed;
     REFRESH_LOOP_INFO();
 
     DT.recalculate(F);
     PDT.recalculate(F);
 
     Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
-    Changed = canonicalizeBarriers(F) || Changed;
+    Changed = canonicalizeBarriers(F, LI, DT) || Changed;
     REFRESH_LOOP_INFO();
 
     DT.recalculate(F);
     PDT.recalculate(F);
 
-    Changed = replicateBarrierPathTails(F, LI, DT, PDT, VUA) || Changed;
-    Changed = canonicalizeBarriers(F) || Changed;
-    REFRESH_LOOP_INFO();
-
-    DT.recalculate(F);
-    PDT.recalculate(F);
-
-    // Run implicit conditional barriers again since BTR might have added new
-    // conditional barrier cases that must be handled.
+    // Run implicit conditional barriers again, since new conditional
+    // barriers may have been added during the first pass.
     Changed = addImplicitBranchBarriers(F, LI, VUA, PDT, DT) || Changed;
-    Changed = canonicalizeBarriers(F) || Changed;
+    REFRESH_LOOP_INFO();
+    Changed = canonicalizeBarriers(F, LI, DT) || Changed;
     REFRESH_LOOP_INFO();
 
     Changed = removeLifetimeMarkers(F);

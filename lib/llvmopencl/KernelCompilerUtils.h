@@ -29,6 +29,15 @@
 #define LID_G_NAME(DIM) (std::string("_local_id_") + (char)('x' + DIM))
 // The name for the global magic variable for the local linear id.
 #define LLID_G_NAME "_local_linear_id"
+// The name for subgroup intra-loop counter variable.
+#define SG_INTRA_C_NAME "_sg_intra_counter"
+// The name for subgroup inter-loop counter variable.
+#define SG_INTER_C_NAME "_sg_inter_counter"
+// The name for subgroup size variable.
+#define SG_S_NAME "_pocl_sub_group_size"
+
+#define SG_LLID_NAME "_sg_current_llid"
+
 // Generates the name for the global magic variable for the global id iterator.
 #define GID_G_NAME(DIM) (std::string("_global_id_") + (char)('x' + DIM))
 // Generates the name for the global magic variable for the group id.

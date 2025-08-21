@@ -51,6 +51,15 @@ class Kernel;
   class ParallelRegion {
   private:
     using BBContainer = std::vector<llvm::BasicBlock *>;
+    /// Flag identifying a parallel region as a 'subgroup' region, meaning it
+    /// should be executed subgroup-wise.
+    bool sgRegion = false;
+
+    // Flag identifying whether this parallel region refers local id indices.
+    // If not, we can create an inner SG-loop iterating by the linear id and
+    // run the whole subgroup in the inner loop, independent of its size.
+    // This will improve vectorization opportunities.
+    bool RefersLocalIDs = true;
 
   public:
     typedef llvm::SmallVector<ParallelRegion *, 8> ParallelRegionVector;
@@ -62,6 +71,18 @@ class Kernel;
 
     iterator begin() { return BBs_.begin(); }
     iterator end() { return BBs_.end(); }
+
+    /// Returns a flag indicating whether the parallel region is a 'subgroup'
+    /// region.
+    bool isSGRegion() const { return sgRegion; }
+
+    /// Sets a flag that identifies the parallel region as a 'subgroup' region,
+    /// which should be executed subgroup-wise.
+    void setSGRegion() { sgRegion = true; }
+
+    bool HasLocalIDReferences() { return RefersLocalIDs; }
+
+    void markNoLocalIDReferences() { RefersLocalIDs = false; }
 
     const_iterator begin() const { return BBs_.begin(); }
     const_iterator end() const { return BBs_.end(); }
@@ -130,8 +151,8 @@ class Kernel;
          std::vector<llvm::Value*>& params);
 
     static ParallelRegion *
-      Create(const llvm::SmallPtrSet<llvm::BasicBlock *, 8>& bbs,
-             llvm::BasicBlock *entry, llvm::BasicBlock *exit);
+    Create(const llvm::SmallPtrSet<llvm::BasicBlock *, 8> &BBs,
+           llvm::BasicBlock *Entry, llvm::BasicBlock *Exit, bool isSGRegion);
 
     static void GenerateTempNames(llvm::BasicBlock *bb);
 

@@ -169,7 +169,7 @@ static bool automaticLocals(Module &M, FunctionVec &OldKernels) {
   }
 
   if (Changed) {
-    regenerate_kernel_metadata(M, KernelsMap);
+    regenerateKernelMetadata(M, KernelsMap);
     /* Delete the old kernels. */
     for (FunctionMapping::const_iterator I = KernelsMap.begin(), E = KernelsMap.end();
          I != E; ++I) {

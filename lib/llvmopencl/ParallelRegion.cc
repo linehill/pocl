@@ -52,12 +52,20 @@ using namespace std;
 using namespace llvm;
 using namespace pocl;
 
-//#define DEBUG_REMAP
-//#define DEBUG_REPLICATE
-//#define DEBUG_PURGE
-//#define DEBUG_CREATE
-
 #include <iostream>
+
+#define DEBUG_TYPE "ParallelRegion"
+
+#ifdef LLVM_DEBUG
+#undef LLVM_DEBUG
+#endif
+
+#ifdef DEBUG_PR_CREATION
+#define LLVM_DEBUG(X) X
+#define dbgs() std::cerr << DEBUG_TYPE << ": "
+#else
+#define LLVM_DEBUG(X)
+#endif
 
 int ParallelRegion::idGen = 0;
 
@@ -71,127 +79,51 @@ ParallelRegion::ParallelRegion(int forcedRegionId)
  * Ensure all variables are named so they will be replicated and renamed
  * correctly.
  */
-void
-ParallelRegion::GenerateTempNames(llvm::BasicBlock *bb) 
-{
-  for (llvm::BasicBlock::iterator i = bb->begin(), e = bb->end(); i != e; ++i)
-    {
-      llvm::Instruction *instr = &*i;
-      if (instr->hasName() || !instr->isUsedOutsideOfBlock(bb)) continue;
-      int tempCounter = 0;
-      std::string tempName = "";
-      do {
-          std::ostringstream name;
-          name << ".pocl_temp." << tempCounter;
-          ++tempCounter;
-          tempName = name.str();
-      } while (bb->getParent()->getValueSymbolTable()->lookup(tempName) != NULL);
-      instr->setName(tempName);
-    }
-}
+void ParallelRegion::GenerateTempNames(llvm::BasicBlock *BB) {
+  for (llvm::Instruction &Instr : *BB) {
 
-// BarrierBlock *
-// ParallelRegion::getEntryBarrier()
-// {
-//   BasicBlock *entry = front();
-//   BasicBlock *barrier = entry->getSinglePredecessor();
-
-//   return cast<BarrierBlock> (barrier);
-// }
-
-ParallelRegion *
-ParallelRegion::replicate(ValueToValueMapTy &map,
-                          const Twine &suffix = "")
-{
-  ParallelRegion *new_region = new ParallelRegion(pRegionId);
-  
-  /* Because ParallelRegions are all replicated before they
-     are attached to the function, it can happen that
-     the same BB is replicated multiple times and it gets
-     the same name (only the BB name will be autorenamed
-     by LLVM). This causes the variable references to become
-     broken. This hack ensures the BB suffixes are unique
-     before cloning so each path gets their own value
-     names. Split points can be such paths.*/
-  static std::map<std::string, int> cloneCounts;
-
-  for (iterator i = begin(), e = end(); i != e; ++i) {
-    BasicBlock *block = *i;
-    GenerateTempNames(block);
-    std::ostringstream suf;
-    suf << suffix.str();
-    std::string block_name = block->getName().str() + "." + suffix.str();
-    if (cloneCounts[block_name] > 0)
-      {
-        suf << ".pocl_" << cloneCounts[block_name];
-      }
-    BasicBlock *new_block = CloneBasicBlock(block, map, suf.str());
-    cloneCounts[block_name]++;
-    // Insert the block itself into the map.
-    map[block] = new_block;
-    new_region->push_back(new_block);
-
-#ifdef DEBUG_REPLICATE
-    std::cerr << "### clonee block:" << std::endl;
-    block->dump();
-    std::cerr << endl << "### cloned block: " << std::endl;
-    new_block->dump();
-#endif
+    if (Instr.hasName() || !Instr.isUsedOutsideOfBlock(BB))
+      continue;
+    int TempCounter = 0;
+    std::string TempName = "";
+    do {
+      std::ostringstream Name;
+      Name << ".pocl_temp." << TempCounter;
+      ++TempCounter;
+      TempName = Name.str();
+    } while (BB->getParent()->getValueSymbolTable()->lookup(TempName) != NULL);
+    Instr.setName(TempName);
   }
-  
-  new_region->exitIndex_ = exitIndex_;
-  new_region->entryIndex_ = entryIndex_;
-  /* Remap here to get local variables fixed before they
-     are (possibly) overwritten by another clone of the 
-     same BB. */
-  new_region->remap(map); 
-
-#ifdef DEBUG_REPLICATE
-  Verify();
-#endif
-  localizeIDLoads();
-
-  return new_region;
 }
 
-void
-ParallelRegion::remap(ValueToValueMapTy &map)
-{
+void ParallelRegion::remap(ValueToValueMapTy &Map) {
   for (iterator i = begin(), e = end(); i != e; ++i) {
-
-#ifdef DEBUG_REMAP
-    std::cerr << "### block before remap:" << std::endl;
-    (*i)->dump();
-#endif
+    LLVM_DEBUG(dbgs() << "### block before remap: \n");
+    LLVM_DEBUG((*i)->dump());
 
     for (BasicBlock::iterator ii = (*i)->begin(), ee = (*i)->end();
          ii != ee; ++ii)
-      RemapInstruction(&*ii, map,
+      RemapInstruction(&*ii, Map,
                        RF_IgnoreMissingLocals | RF_NoModuleLevelChanges);
 
-#ifdef DEBUG_REMAP
-    std::cerr << endl << "### block after remap: " << std::endl;
-    (*i)->dump();
-#endif
+    LLVM_DEBUG(dbgs() << "### block after remap: \n");
+    LLVM_DEBUG((*i)->dump());
   }
 }
 
-void
-ParallelRegion::chainAfter(ParallelRegion *region)
-{
+void ParallelRegion::chainAfter(ParallelRegion *Region) {
   /* If we are replicating a conditional barrier region, the last block can be
      an unreachable block to mark the impossible path. Skip it and choose the
      correct branch instead.
 
      TODO: why have the unreachable block there the first place? Could we just
      not add it and fix the branch? */
-  BasicBlock *tail = region->exitBB();
-  auto t = tail->getTerminator();
-  if (isa<UnreachableInst>(t))
-    {
-      tail = region->at(region->size() - 2);
-      t = tail->getTerminator();
-    }
+  BasicBlock *Tail = Region->exitBB();
+  auto Term = Tail->getTerminator();
+  if (isa<UnreachableInst>(Term)) {
+    Tail = Region->at(Region->size() - 2);
+    Term = Tail->getTerminator();
+  }
 #ifdef LLVM_BUILD_MODE_DEBUG
     if (t->getNumSuccessors() != 1) {
       std::cout << "!!! trying to chain region" << std::endl;
@@ -204,17 +136,17 @@ ParallelRegion::chainAfter(ParallelRegion *region)
     }
 #endif
 
-  BasicBlock *successor = t->getSuccessor(0);
-  Function *F = successor->getParent();
+    BasicBlock *Successor = Term->getSuccessor(0);
+    Function *F = Successor->getParent();
 
   for (iterator i = begin(), e = end(); i != e; ++i)
-    F->insert(tail->getIterator(), *i);
+    F->insert(Tail->getIterator(), *i);
 
-  t->setSuccessor(0, entryBB());
+  Term->setSuccessor(0, entryBB());
 
-  t = exitBB()->getTerminator();
-  assert (t->getNumSuccessors() == 1);
-  t->setSuccessor(0, successor);
+  Term = exitBB()->getTerminator();
+  assert(Term->getNumSuccessors() == 1);
+  Term->setSuccessor(0, Successor);
 }
 
 /**
@@ -223,16 +155,16 @@ ParallelRegion::chainAfter(ParallelRegion *region)
  * These occur with conditional barriers. The head of the path
  * leading to the conditional barrier is shared by two PRs. The
  * first work-item defines which path is taken (by definition the
- * barrier is taken by all or none of the work-items). The blocks 
- * in the branches are in different regions which can contain branches 
- * to blocks that are in known non-taken path. This method replaces 
- * the targets of such branches with undefined BBs so they will be cleaned 
+ * barrier is taken by all or none of the work-items). The blocks
+ * in the branches are in different regions which can contain branches
+ * to blocks that are in known non-taken path. This method replaces
+ * the targets of such branches with undefined BBs so they will be cleaned
  * up by the optimizer.
  */
 void
 ParallelRegion::purge()
 {
-  SmallVector<BasicBlock *, 4> new_blocks;
+  SmallVector<BasicBlock *, 4> NewBlocks;
 
   // Go through all the BBs in the region and check their branch
   // targets, looking for destinations that are outside the region.
@@ -242,43 +174,34 @@ ParallelRegion::purge()
     // Exit block has a successor out of the region.
     if (*i == exitBB())
       continue;
+    LLVM_DEBUG(dbgs() << "### block before purge: \n");
+    LLVM_DEBUG((*i)->dump());
 
-#ifdef DEBUG_PURGE
-    std::cerr << "### block before purge:" << std::endl;
-    (*i)->dump();
-#endif
-    auto t = (*i)->getTerminator();
-    for (unsigned ii = 0, ee = t->getNumSuccessors(); ii != ee; ++ii) {
-      BasicBlock *successor = t->getSuccessor(ii);
-      if (count(begin(), end(), successor) == 0) {
+    auto Terminator = (*i)->getTerminator();
+    for (unsigned ii = 0, ee = Terminator->getNumSuccessors(); ii != ee; ++ii) {
+      BasicBlock *Successor = Terminator->getSuccessor(ii);
+      if (count(begin(), end(), Successor) == 0) {
         // This successor is not on the parallel region, purge.
-#ifdef DEBUG_PURGE
-          std::cerr 
-              << "purging a branch to a block " 
-              << successor->getName().str() << " outside the region" 
-              << std::endl;
-#endif
+        LLVM_DEBUG(dbgs() << "purging a branch to a block "
+                          << Successor->getName().str()
+                          << " outside the region\n");
 
-        BasicBlock *unreachable =
-          BasicBlock::Create((*i)->getContext(),
-                             (*i)->getName() + ".unreachable",
-                             (*i)->getParent(), back());
-        new UnreachableInst(unreachable->getContext(),
-                            unreachable);
-        t->setSuccessor(ii, unreachable);
-        new_blocks.push_back(unreachable);
+        BasicBlock *Unreachable = BasicBlock::Create(
+            (*i)->getContext(), (*i)->getName() + ".unreachable",
+            (*i)->getParent(), back());
+        new UnreachableInst(Unreachable->getContext(), Unreachable);
+        Terminator->setSuccessor(ii, Unreachable);
+        NewBlocks.push_back(Unreachable);
       }
     }
-#ifdef DEBUG_PURGE
-    std::cerr << std::endl << "### block after purge:" << std::endl;
-    (*i)->dump();
-#endif
+    LLVM_DEBUG(dbgs() << "### block after purge: \n");
+    LLVM_DEBUG((*i)->dump());
   }
 
   // Add the new "unreachable" blocks to the
   // region. We cannot do in the loop as it
   // corrupts iterators.
-  insert(end(), new_blocks.begin(), new_blocks.end());
+  insert(end(), NewBlocks.begin(), NewBlocks.end());
 }
 
 void
@@ -335,12 +258,59 @@ ParallelRegion::dumpNames()
     std::cerr << std::endl;
 }
 
+// Recursive function to check if instruction depends on the 3D local ids.
+bool traceOperands(Value *V, std::set<Value *> &visited, int indent = 0) {
+  if (!V || visited.count(V))
+    return false;
+
+  visited.insert(V);
+
+  if (auto *CI = dyn_cast<CallInst>(V)) {
+    Function *CalledFunc = CI->getCalledFunction();
+    if (CalledFunc && (CalledFunc->getName() == LID_BUILTIN_NAME))
+      return true;
+  }
+
+  if (Instruction *I = dyn_cast<Instruction>(V)) {
+    for (Value *Op : I->operands()) {
+      if (traceOperands(Op, visited, indent + 2))
+        return true;
+    }
+  }
+
+  return false;
+}
+
 ParallelRegion *ParallelRegion::Create(const SmallPtrSet<BasicBlock *, 8> &BBs,
-                                       BasicBlock *Entry, BasicBlock *Exit) {
+                                       BasicBlock *Entry, BasicBlock *Exit,
+                                       bool isSGRegion) {
   ParallelRegion *NewRegion = new ParallelRegion();
 
   assert(Entry != NULL);
   assert(Exit != NULL);
+
+  bool NoIDRefs = true;
+
+  // For subgroup regions, mark region as 'linearizable' IF there are NO
+  // references to 3D ids. This allows looping over PR in a single loop (by
+  // local linear id).
+  if (isSGRegion) {
+    NewRegion->setSGRegion();
+    for (BasicBlock *BB : BBs) {
+      for (Instruction &I : *BB) {
+        std::set<Value *> visited;
+        bool FoundRef = traceOperands(&I, visited);
+        if (FoundRef) {
+          NoIDRefs = false;
+          break;
+        }
+      }
+      if (!NoIDRefs)
+        break;
+    }
+    if (NoIDRefs)
+      NewRegion->markNoLocalIDReferences();
+  }
 
   // This is done in two steps so the order of the vector is the same as
   // original function order.
@@ -350,6 +320,13 @@ ParallelRegion *ParallelRegion::Create(const SmallPtrSet<BasicBlock *, 8> &BBs,
     for (SmallPtrSetIterator<BasicBlock *> j = BBs.begin(); j != BBs.end();
          ++j) {
       if (*j == B) {
+
+#ifdef EXPLICIT_PR_NAMING
+        std::string OldName = (*j)->getName().str();
+        std::string GroupName = isSGRegion ? "SGR_" : "WGR_";
+        (*j)->setName(GroupName + OldName);
+#endif
+
         NewRegion->push_back(&*i);
         if (Entry == *j)
           NewRegion->setEntryBBIndex(NewRegion->size() - 1);
@@ -360,10 +337,10 @@ ParallelRegion *ParallelRegion::Create(const SmallPtrSet<BasicBlock *, 8> &BBs,
     }
   }
 
-  NewRegion->localizeIDLoads();
-#ifdef DEBUG_CREATE
-  assert(NewRegion->Verify());
-#endif
+  if (NewRegion->HasLocalIDReferences())
+    NewRegion->localizeIDLoads();
+
+  LLVM_DEBUG(assert(NewRegion->Verify()););
 
   return NewRegion;
 }
@@ -511,40 +488,41 @@ void ParallelRegion::addParallelLoopMetadata(
  * flow, that is, there should be direct CFG edge from the block to the
  * other.
  */
-void
-ParallelRegion::AddBlockBefore(llvm::BasicBlock *block, llvm::BasicBlock *before)
-{
-    llvm::BasicBlock *oldExit = exitBB();
-    ParallelRegion::iterator beforePos = find(begin(), end(), before);
-    ParallelRegion::iterator oldExitPos = find(begin(), end(), oldExit);
-    assert (beforePos != end());
+void ParallelRegion::AddBlockBefore(llvm::BasicBlock *Block,
+                                    llvm::BasicBlock *Before) {
+  llvm::BasicBlock *OldExit = exitBB();
+  ParallelRegion::iterator BeforePos = find(begin(), end(), Before);
+  ParallelRegion::iterator OldExitPos = find(begin(), end(), OldExit);
+  assert(BeforePos != end());
 
-    /* The old exit node might is now pushed further, at most one position. 
-       Whether this is the case, depends if the node was inserted before or
-       after that node in the vector. That is, if indexof(before) < indexof(oldExit). */
-    if (beforePos < oldExitPos) ++exitIndex_;
+  /* The old exit node might is now pushed further, at most one position.
+     Whether this is the case, depends if the node was inserted before or
+     after that node in the vector. That is, if indexof(before) <
+     indexof(oldExit). */
+  if (BeforePos < OldExitPos)
+    ++exitIndex_;
 
-    insert(beforePos, block);
-    /* The entryIndex_ should be still correct. In case the 'before' block
-       was an old entry node, the new one replaces it as an entry node at
-       the same index and the old one gets pushed forward. */      
+  insert(BeforePos, Block);
+  /* The entryIndex_ should be still correct. In case the 'before' block
+     was an old entry node, the new one replaces it as an entry node at
+     the same index and the old one gets pushed forward. */
 }
 
+void ParallelRegion::AddBlockAfter(llvm::BasicBlock *Block,
+                                   llvm::BasicBlock *After) {
+  llvm::BasicBlock *OldExit = exitBB();
+  ParallelRegion::iterator AfterPos = find(begin(), end(), After);
+  ParallelRegion::iterator OldExitPos = find(begin(), end(), OldExit);
+  assert(AfterPos != end());
 
-void
-ParallelRegion::AddBlockAfter(llvm::BasicBlock *block, llvm::BasicBlock *after)
-{
-    llvm::BasicBlock *oldExit = exitBB();
-    ParallelRegion::iterator afterPos = find(begin(), end(), after);
-    ParallelRegion::iterator oldExitPos = find(begin(), end(), oldExit);
-    assert (afterPos != end());
-
-    /* The old exit node might be pushed further, at most one position. 
-       Whether this is the case, depends if the node was inserted before or
-       after that node in the vector. That is, if indexof(before) < indexof(oldExit). */
-    if (afterPos < oldExitPos) ++exitIndex_;
-    afterPos++;
-    insert(afterPos, block);
+  /* The old exit node might be pushed further, at most one position.
+     Whether this is the case, depends if the node was inserted before or
+     after that node in the vector. That is, if indexof(before) <
+     indexof(oldExit). */
+  if (AfterPos < OldExitPos)
+    ++exitIndex_;
+  AfterPos++;
+  insert(AfterPos, Block);
 }
 
 bool ParallelRegion::hasBlock(llvm::BasicBlock *Block) {
@@ -606,39 +584,34 @@ ParallelRegion::getOrCreateIDLoad(std::string IDGlobalName,
   return IDLoad;
 }
 
-void
-ParallelRegion::InjectPrintF
-(llvm::Instruction *before, std::string formatStr,
- std::vector<Value*>& params)
-{
-  IRBuilder<> builder(before);
-  llvm::Module *M = before->getParent()->getParent()->getParent();
+void ParallelRegion::InjectPrintF(llvm::Instruction *Before,
+                                  std::string FormatStr,
+                                  std::vector<Value *> &Params) {
+  IRBuilder<> Builder(Before);
+  llvm::Module *M = Before->getParent()->getParent()->getParent();
 
-  llvm::Value *stringArg = 
-    builder.CreateGlobalString(formatStr);
-    
+  llvm::Value *StringArg = Builder.CreateGlobalString(FormatStr);
+
   /* generated with help from https://llvm.org/demo/index.cgi */
-  Function* printfFunc = M->getFunction("printf");
-  if (printfFunc == NULL) {
-    PointerType* PointerTy_4 = PointerType::get(IntegerType::get(M->getContext(), 8), 0);
- 
-    std::vector<Type*> FuncTy_6_args;
-    FuncTy_6_args.push_back(PointerTy_4);
-    
-    FunctionType* FuncTy_6 = 
-      FunctionType::get
-      (/*Result=*/IntegerType::get(M->getContext(), 32),
-       /*Params=*/FuncTy_6_args,
-       /*isVarArg=*/true);
+  Function *PrintfFunc = M->getFunction("printf");
+  if (PrintfFunc == nullptr) {
+    PointerType *PointerTy4 =
+        PointerType::get(IntegerType::get(M->getContext(), 8), 0);
 
-    printfFunc = 
-      Function::Create
-      (/*Type=*/FuncTy_6,
-       /*Linkage=*/GlobalValue::ExternalLinkage,
-       /*Name=*/"printf", M); 
-    printfFunc->setCallingConv(CallingConv::C);
+    std::vector<Type *> FuncTy6Args;
+    FuncTy6Args.push_back(PointerTy4);
 
-    AttributeList func_printf_PAL =
+    FunctionType *FuncTy6 =
+        FunctionType::get(/*Result=*/IntegerType::get(M->getContext(), 32),
+                          /*Params=*/FuncTy6Args,
+                          /*isVarArg=*/true);
+
+    PrintfFunc = Function::Create(/*Type=*/FuncTy6,
+                                  /*Linkage=*/GlobalValue::ExternalLinkage,
+                                  /*Name=*/"printf", M);
+    PrintfFunc->setCallingConv(CallingConv::C);
+
+    AttributeList FuncPrintfPAL =
         AttributeList()
 #if LLVM_MAJOR < 21
             .addAttributeAtIndex(M->getContext(), 1U, Attribute::NoCapture)
@@ -646,43 +619,41 @@ ParallelRegion::InjectPrintF
             .addAttributeAtIndex(M->getContext(), 4294967295U,
                                  Attribute::NoUnwind);
 
-    printfFunc->setAttributes(func_printf_PAL);
+    PrintfFunc->setAttributes(FuncPrintfPAL);
   }
 
-  std::vector<Constant*> const_ptr_8_indices;
+  std::vector<Constant *> ConstPtr8Indices;
 
-  ConstantInt* const_int64_9 = ConstantInt::get(M->getContext(), APInt(64, StringRef("0"), 10));
-  const_ptr_8_indices.push_back(const_int64_9);
-  const_ptr_8_indices.push_back(const_int64_9);
-  assert (isa<Constant>(stringArg));
-  Constant* const_ptr_8 =
-    ConstantExpr::getGetElementPtr
-    (PointerType::getUnqual(Type::getInt8Ty(M->getContext())), cast<Constant>(stringArg), const_ptr_8_indices);
+  ConstantInt *ConstInt64_9 =
+      ConstantInt::get(M->getContext(), APInt(64, StringRef("0"), 10));
+  ConstPtr8Indices.push_back(ConstInt64_9);
+  ConstPtr8Indices.push_back(ConstInt64_9);
+  assert(isa<Constant>(StringArg));
+  Constant *ConstPtr8 = ConstantExpr::getGetElementPtr(
+      PointerType::getUnqual(Type::getInt8Ty(M->getContext())),
+      cast<Constant>(StringArg), ConstPtr8Indices);
 
-  std::vector<Value*> args;
-  args.push_back(const_ptr_8);
-  args.insert(args.end(), params.begin(), params.end());
+  std::vector<Value *> Args;
+  Args.push_back(ConstPtr8);
+  Args.insert(Args.end(), Params.begin(), Params.end());
 
-  CallInst::Create(printfFunc, args, "", Inst2InsertPt(before));
+  CallInst::Create(PrintfFunc, Args, "", Inst2InsertPt(Before));
 }
 
-void
-ParallelRegion::SetExitBB(llvm::BasicBlock *block)
-{
+void ParallelRegion::SetExitBB(llvm::BasicBlock *Block) {
   for (size_t i = 0; i < size(); ++i)
     {
-      if (at(i) == block) 
-        {
-          setExitBBIndex(i);
-          return;
-        }
+    if (at(i) == Block) {
+      setExitBBIndex(i);
+      return;
+    }
     }
   assert (false && "The block was not found in the PRegion!");
 }
 
 /**
  * Adds a printf to the end of the parallel region that prints the
- * region ID and the work item ID. 
+ * region ID and the work item ID.
  *
  * Useful for debugging control flow bugs.
  */
@@ -694,24 +665,23 @@ ParallelRegion::InjectRegionPrintF()
 #if 0
   // it should reuse equal strings anyways
   const char* FORMAT_STR_VAR = ".pocl.pRegion_debug_str";
-  llvm::Value *stringArg = M->getGlobalVariable(FORMAT_STR_VAR);
-  if (stringArg == NULL)
+  llvm::Value *StringArg = M->getGlobalVariable(FORMAT_STR_VAR);
+  if (StringArg == nullptr)
     {
       IRBuilder<> builder(entryBB());
-      stringArg = builder.CreateGlobalString("PR %d WI %u %u %u\n", FORMAT_STR_VAR);
+      StringArg = builder.CreateGlobalString("PR %d WI %u %u %u\n", FORMAT_STR_VAR);
     }
 #endif
 
   ConstantInt *pRID =
       ConstantInt::get(M->getContext(), APInt(32, (uint64_t)pRegionId));
-  std::vector<Value*> params;
-  params.push_back(pRID);
-  params.push_back(getOrCreateIDLoad(LID_G_NAME(0)));
-  params.push_back(getOrCreateIDLoad(LID_G_NAME(1)));
-  params.push_back(getOrCreateIDLoad(LID_G_NAME(2)));
+  std::vector<Value *> Params;
+  Params.push_back(pRID);
+  Params.push_back(getOrCreateIDLoad(LID_G_NAME(0)));
+  Params.push_back(getOrCreateIDLoad(LID_G_NAME(1)));
+  Params.push_back(getOrCreateIDLoad(LID_G_NAME(2)));
 
-  InjectPrintF(exitBB()->getTerminator(), "PR %d WI %u %u %u\n", params);
-
+  InjectPrintF(exitBB()->getTerminator(), "PR %d WI %u %u %u\n", Params);
 }
 
 /// Adds a printf to the end of the parallel region that prints the
@@ -799,11 +769,10 @@ bool ParallelRegion::shouldBeSerialized() const {
         if (llvm::AllocaInst *Alloca = dyn_cast_or_null<llvm::AllocaInst>(
                 Store->getPointerOperand())) {
           if (Alloca->getParent() == &BB->getParent()->getEntryBlock()) {
-#ifdef DEBUG_CREATE
-            std::cerr
-                << "#### serializing a region due to use of wg variables:\n";
-            Store->dump();
-#endif
+            LLVM_DEBUG(
+                dbgs()
+                << "#### serializing a region due to use of wg variables:\n");
+            LLVM_DEBUG(Store->dump());
             return true;
           }
         }

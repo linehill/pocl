@@ -474,12 +474,19 @@ static void addStage1PassesToPipeline(cl_device_id Dev,
   // them. Julia expects graceful handling of UIs with printouts before them. We
   // should convert the UIs in the input here otherwise optimizers will remove
   // them.
+
   if (!Dev->spmd)
     addPass(Passes, "unreachables-to-returns");
 
   // must come AFTER flatten-globals & always-inline
   addPass(Passes, "optimize-wi-gvars");
 
+  addPass(Passes, "mem2reg");
+  addPass(Passes, "instcombine<no-verify-fixpoint>");
+  addPass(Passes, "memcpyopt");
+
+  if (!Dev->spmd)
+    addPass(Passes, "unreachables-to-returns");
 }
 
 // add the second part of the PoCL passes (after 1st, up to 2nd optimization in old PM)

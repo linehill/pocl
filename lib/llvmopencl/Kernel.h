@@ -1,24 +1,24 @@
 // Class for kernels, a special kind of function.
-// 
+//
 // Copyright (c) 2011 Universidad Rey Juan Carlos
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
+// of this software and associated documentation files (the "Software"), to
+// deal in the Software without restriction, including without limitation the
+// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+// sell copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+// IN THE SOFTWARE.
 
 #ifndef POCL_KERNEL_H
 #define POCL_KERNEL_H
@@ -33,22 +33,40 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/IR/Dominators.h>
 POP_COMPILER_DIAGS
 #include "ParallelRegion.h"
+#include "VariableUniformityAnalysis.h"
+#include "VariableUniformityAnalysisResult.hh"
+#include <map>
 
 namespace pocl {
 
   class Kernel : public llvm::Function {
   public:
     void getRegionExitBlocks(llvm::SmallVectorImpl<llvm::BasicBlock *> &B);
-    ParallelRegion *createParallelRegionBefore(llvm::BasicBlock *B);
 
-    ParallelRegion::ParallelRegionVector *
-    getParallelRegions(llvm::LoopInfo &LI);
+    /// Creates and returns a parallel region between barrier blocks start and
+    /// end.
+    ParallelRegion *CreateParallelRegionBetween(
+        llvm::BasicBlock *start, llvm::BasicBlock *end,
+        pocl::ParallelRegion::ParallelRegionVector *regions,
+        VariableUniformityAnalysisResult &VUA);
+    /* ParallelRegion::ParallelRegionVector *
+    getParallelRegions(llvm::LoopInfo &LI); */
     void
     getParallelRegions(llvm::LoopInfo &LI,
-                       ParallelRegion::ParallelRegionVector *ParallelRegions);
+                       ParallelRegion::ParallelRegionVector *ParallelRegions,
+                       VariableUniformityAnalysisResult &VUA);
 
     void addLocalSizeInitCode(size_t LocalSizeX, size_t LocalSizeY,
                               size_t LocalSizeZ);
+    /// Finds and creates a parallel region mapping for the barriers. Stores
+    /// barriers in a map such that each key value will act as an entry barrier
+    /// for a parallel region. Each barrier block in the value will act as an
+    /// exit barrier for a parallel region that has the key as an entry
+    /// barrier. { A : [B,C], D : [E]}, means that parallel regions bounded by
+    /// A->B, A->C, D->E will be formed.
+    void getRegionBarrierMapping(
+        std::map<llvm::BasicBlock *, std::vector<llvm::BasicBlock *>>
+            &BarrierMapping);
 
     static bool isKernel(const llvm::Function &F);
 

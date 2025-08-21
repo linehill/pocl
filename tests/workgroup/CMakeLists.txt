@@ -101,63 +101,93 @@ add_test_pocl(NAME "workgroup/outerlooppar_multiple_exits"
 #              WORKITEM_HANDLER "cbs")
 
 # Test cases for subgroup barriers (Not supported in conformance build).
-if(NOT ENABLE_CONFORMANCE)
-  add_test_pocl(NAME "subgroup/basic_subgroup_barrier_fiber"
-                EXPECTED_OUTPUT "basic_sg_barrier_1_4_1_1_fiber.stdout"
-                COMMAND "run_kernel" "basic_sg_barrier.cl" 1 4 1 1
-                WORKITEM_HANDLER "fiber")
+add_test_pocl(NAME "subgroup/basic_subgroup_barrier_fiber"
+              EXPECTED_OUTPUT "basic_sg_barrier_1_4_1_1_fiber.stdout"
+              COMMAND "run_kernel" "basic_sg_barrier.cl" 1 4 1 1
+              WORKITEM_HANDLER "fiber")
 
-  add_test_pocl(NAME "subgroup/basic_subgroup_barrier_loopvec"
-                EXPECTED_OUTPUT "basic_sg_barrier_1_4_1_1_loopvec.stdout"
-                COMMAND "run_kernel" "basic_sg_barrier.cl" 1 4 1 1
-                WORKITEM_HANDLER "loopvec")
+add_test_pocl(NAME "subgroup/basic_subgroup_barrier_loopvec"
+              EXPECTED_OUTPUT "basic_sg_barrier_1_4_1_1_loopvec.stdout"
+              COMMAND "run_kernel" "basic_sg_barrier.cl" 1 4 1 1
+              WORKITEM_HANDLER "loopvec")
 
-  add_test_pocl(NAME "subgroup/basic_diverging_sg_barrier_fiber"
-                EXPECTED_OUTPUT "basic_diverging_sg_barrier_1_4_1_1.stdout"
-                COMMAND "run_kernel" "basic_diverging_sg_barrier.cl" 1 4 1 1
-                WORKITEM_HANDLER "fiber")
+add_test_pocl(NAME "subgroup/basic_diverging_sg_barrier_fiber"
+              EXPECTED_OUTPUT "basic_diverging_sg_barrier_1_4_1_1.stdout"
+              COMMAND "run_kernel" "basic_diverging_sg_barrier.cl" 1 4 1 1
+              WORKITEM_HANDLER "fiber")
 
-  add_test_pocl(NAME "subgroup/diverging_sg_barriers_fiber"
-                EXPECTED_OUTPUT "diverging_sg_barriers_1_128_1_1.stdout"
-                COMMAND "run_kernel" "diverging_sg_barriers.cl" 1 128 1 1
-                WORKITEM_HANDLER "fiber")
+add_test_pocl(NAME "subgroup/basic_diverging_sg_barrier_loopvec"
+              EXPECTED_OUTPUT "basic_diverging_sg_barrier_1_4_1_1.stdout"
+              COMMAND "run_kernel" "basic_diverging_sg_barrier.cl" 1 4 1 1
+              WORKITEM_HANDLER "loopvec")
 
-  add_test_pocl(NAME "subgroup/mixing_barriers_fiber"
-                EXPECTED_OUTPUT "mixing_barriers_1_8_1_1.stdout"
-                COMMAND "run_kernel" "mixing_barriers.cl" 1 8 1 1
-                WORKITEM_HANDLER "fiber")
+add_test_pocl(NAME "subgroup/diverging_sg_barriers_fiber"
+              EXPECTED_OUTPUT "diverging_sg_barriers_1_128_1_1.stdout"
+              COMMAND "run_kernel" "diverging_sg_barriers.cl" 1 128 1 1
+              WORKITEM_HANDLER "fiber")
 
-  add_test_pocl(NAME "subgroup/sg_barrier_in_for_in_if_fiber"
-                EXPECTED_OUTPUT "sg_barrier_in_for_in_if_1_4_1_1_fiber.stdout"
-                COMMAND "run_kernel" "sg_barrier_in_for_in_if.cl" 1 4 1 1
-                WORKITEM_HANDLER "fiber")
+add_test_pocl(NAME "subgroup/mixing_barriers_fiber"
+              EXPECTED_OUTPUT "mixing_barriers_1_8_1_1.stdout"
+              COMMAND "run_kernel" "mixing_barriers.cl" 1 8 1 1
+              WORKITEM_HANDLER "fiber")
+
+add_test_pocl(NAME "subgroup/sg_barrier_in_for_in_if_fiber"
+              EXPECTED_OUTPUT "sg_barrier_in_for_in_if_1_4_1_1_fiber.stdout"
+              COMMAND "run_kernel" "sg_barrier_in_for_in_if.cl" 1 4 1 1
+              WORKITEM_HANDLER "fiber")
+
+add_test_pocl(NAME "subgroup/sg_barriers_with_sg_size_spanning_multiple_x_lanes_fiber"
+              EXPECTED_OUTPUT "sg_barriers_with_sg_size_spanning_multiple_x_lanes_1_8_8_1_fiber.stdout"
+              COMMAND "run_kernel" "sg_barriers_with_tricky_sg_size_1.cl" 1 8 8 1
+              WORKITEM_HANDLER "fiber")
+
+add_test_pocl(NAME "subgroup/sg_barriers_with_sg_size_spanning_multiple_x_lanes_loopvec"
+              EXPECTED_OUTPUT "sg_barriers_with_sg_size_spanning_multiple_x_lanes_1_8_8_1_loopvec.stdout"
+              COMMAND "run_kernel" "sg_barriers_with_tricky_sg_size_1.cl" 1 8 8 1
+              WORKITEM_HANDLER "loopvec")
+
+add_test_pocl(NAME "subgroup/sg_barriers_with_sg_size_spanning_multiple_z_lanes_fiber"
+              EXPECTED_OUTPUT "sg_barriers_with_sg_size_spanning_multiple_z_lanes_1_4_1_32_fiber.stdout"
+              COMMAND "run_kernel" "sg_barriers_with_tricky_sg_size_2.cl" 1 4 1 32
+              WORKITEM_HANDLER "fiber")
+
+add_test_pocl(NAME "subgroup/sg_barriers_with_sg_size_spanning_multiple_z_lanes_loopvec"
+              EXPECTED_OUTPUT "sg_barriers_with_sg_size_spanning_multiple_z_lanes_1_4_1_32_loopvec.stdout"
+              COMMAND "run_kernel" "sg_barriers_with_tricky_sg_size_2.cl" 1 4 1 32
+              WORKITEM_HANDLER "loopvec")
+
+add_test_pocl(NAME "subgroup/ids_in_sg_regions_fiber"
+              EXPECTED_OUTPUT "ids_in_sg_regions_2_4_4_4_fiber.stdout"
+              COMMAND "run_kernel" "ids_in_sg_regions.cl" 2 4 4 4
+              WORKITEM_HANDLER "fiber")
+
+add_test_pocl(NAME "subgroup/ids_in_sg_regions_loopvec"
+              EXPECTED_OUTPUT "ids_in_sg_regions_2_4_4_4_fiber.stdout"
+              COMMAND "run_kernel" "ids_in_sg_regions.cl" 2 4 4 4
+              WORKITEM_HANDLER "loopvec")
+
+
+set(TEST_LIST
+  "subgroup/basic_subgroup_barrier_fiber"
+  "subgroup/basic_subgroup_barrier_loopvec"
+  "subgroup/basic_diverging_sg_barrier_fiber"
+  "subgroup/basic_diverging_sg_barrier_loopvec"
+  "subgroup/diverging_sg_barriers_fiber"
+  "subgroup/mixing_barriers_fiber"
+  "subgroup/sg_barrier_in_for_in_if_fiber"
+  "subgroup/sg_barriers_with_sg_size_spanning_multiple_x_lanes_fiber"
+  "subgroup/sg_barriers_with_sg_size_spanning_multiple_x_lanes_loopvec"
+  "subgroup/sg_barriers_with_sg_size_spanning_multiple_z_lanes_fiber"
+  "subgroup/sg_barriers_with_sg_size_spanning_multiple_z_lanes_loopvec"
+  "subgroup/ids_in_sg_regions_fiber"
+  "subgroup/ids_in_sg_regions_loopvec"
+  )
+set_property(TEST ${TEST_LIST}
+  APPEND PROPERTY ENVIRONMENT "POCL_MAX_COMPUTE_UNITS=1")
+# Disable subgroup tests in conformance build.
+if(ENABLE_CONFORMANCE)
+  set_tests_properties(${TEST_LIST} PROPERTIES LABELS "cpu_fail")
 endif()
-
-# Cases which are not dependent on the work-group or work-item
-# execution (printout) order or the method (use the default method
-# for the device).
-set(VARIANTS "loopvec;fiber")
-foreach(VARIANT ${VARIANTS})
-  set_tests_properties(
-    "workgroup/unbarriered_for_loops_${VARIANT}"
-    "workgroup/barriered_for_loops_${VARIANT}"
-    "workgroup/switch_case_${VARIANT}"
-#    "workgroup/b_loop_with_none_of_the_WIs_reaching_the_barrier_cbs"
-    "workgroup/b_loop_with_none_of_the_WIs_reaching_the_barrier_fiber"
-    "workgroup/for_with_divergent_return_${VARIANT}"
-    "workgroup/cond_barriers_in_for_${VARIANT}"
-    "workgroup/different_implicit_barrier_injection_scenarios"
-#    "workgroup/cond_barrier_in_var_for_cbs"
-    "subgroup/basic_subgroup_barrier_${VARIANT}"
-    "subgroup/basic_diverging_sg_barrier_fiber"
-    "subgroup/diverging_sg_barriers_fiber"
-    "subgroup/mixing_barriers_fiber"
-    "subgroup/sg_barrier_in_for_in_if_fiber"
-    PROPERTIES
-      COST 2.0
-      PROCESSORS 1
-      DEPENDS "pocl_version_check")
-endforeach()
 
 add_test_pocl(NAME "workgroup/unconditional_barriers"
               EXPECTED_OUTPUT "basic_barriers_2_2_2_2.stdout"
@@ -272,20 +302,27 @@ add_test_pocl(NAME "workgroup/ballot"
               EXPECTED_OUTPUT "ballot_1_32_1_1.stdout"
               COMMAND "run_kernel" "ballot.cl" "1" "32" "1" "1")
 
-# Disable subgroup & ballot tests in conformance build.
-if(ENABLE_CONFORMANCE)
-  set_tests_properties(
-    "subgroup/basic_subgroup_barrier_fiber"
-    "subgroup/basic_subgroup_barrier_loopvec"
-    "subgroup/basic_diverging_sg_barrier_fiber"
-    "subgroup/diverging_sg_barriers_fiber"
-    "subgroup/mixing_barriers_fiber"
-    "subgroup/sg_barrier_in_for_in_if_fiber"
-    "workgroup/ballot_loopvec"
-    "workgroup/ballot_fiber"
-    PROPERTIES
-      LABELS "cpu_fail")
-endif()
+add_test_pocl(NAME "workgroup/sg_shuffle_down"
+              EXPECTED_OUTPUT "sg_shuffle_down_1_8_1_1.stdout"
+              COMMAND "run_kernel" "simple_sg_shuffle_down.cl" "1" "8" "1" "1")
+
+add_test_pocl(NAME "workgroup/sg_shuffle_up"
+              EXPECTED_OUTPUT "sg_shuffle_up_1_8_1_1.stdout"
+              COMMAND "run_kernel" "simple_sg_shuffle_up.cl" "1" "8" "1" "1")
+
+set(VARIANTS "loopvec;fiber")
+foreach(VARIANT ${VARIANTS})
+  set(TEST_LIST
+    "workgroup/ballot_${VARIANT}"
+    "workgroup/sg_shuffle_down_${VARIANT}"
+    "workgroup/sg_shuffle_up_${VARIANT}")
+  set_property(TEST ${TEST_LIST}
+    APPEND PROPERTY ENVIRONMENT "POCL_MAX_COMPUTE_UNITS=1")
+  # Disable subgroup & ballot tests in conformance build.
+  if(ENABLE_CONFORMANCE)
+    set_tests_properties(${TEST_LIST} PROPERTIES LABELS "cpu_fail")
+  endif()
+endforeach()
 
 
 # These tests are now always ran with the basic device with a predefined

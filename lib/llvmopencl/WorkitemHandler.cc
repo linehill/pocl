@@ -41,6 +41,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "Kernel.h"
 #include "KernelCompilerUtils.h"
 #include "LLVMUtils.h"
+#include "SubgroupBarrier.h"
 #include "WorkitemHandler.h"
 #include "WorkitemHandlerChooser.h"
 #include "WorkitemLoops.h"
@@ -56,8 +57,6 @@ POP_COMPILER_DIAGS
 
 POP_COMPILER_DIAGS
 
-// #define DEBUG_WORK_ITEM_HANDLERS
-// #define POCL_KERNEL_COMPILER_DUMP_CFGS
 #define DEBUG_TYPE "WIH"
 
 // Use the LLVM_DEBUG-style macros to gradually convert to LLVM-upstreamable
@@ -151,8 +150,15 @@ void WorkitemHandler::Initialize(Kernel *K_) {
                          M->getOrInsertGlobal(GOFFS_G_NAME(1), ST),
                          M->getOrInsertGlobal(GOFFS_G_NAME(2), ST)};
 
+  // Local linear ID for fiber.
+  LocLinID = M->getOrInsertGlobal(LLID_G_NAME, ST);
+
   GlobalIdOrigins = {0, 0, 0};
   GlobalSizes = {0, 0, 0};
+
+  llvm::Constant *Init = llvm::ConstantInt::get(ST, 0);
+  llvm::Constant *Init32 =
+      llvm::ConstantInt::get(llvm::Type::getInt32Ty(M->getContext()), 0);
 }
 
 /// Determines whether the given instruction should be context saved.
@@ -180,11 +186,6 @@ bool WorkitemHandler::shouldNotBeContextSaved(
       return true;
   }
 
-  // Skip everything else in case of Fiber for now. Not optimal, but causes
-  // problems with current implementation.
-  if (WIH == WorkitemHandlerType::FIBER)
-    return false;
-
   // Generated id loads should not be replicated as it leads to problems in
   // conditional branch case where the header node of the region is shared
   // across the peeled branches and thus the header node's ID loads might get
@@ -197,6 +198,11 @@ bool WorkitemHandler::shouldNotBeContextSaved(
                        Load->getPointerOperand() == GlobalIdGlobals[1] ||
                        Load->getPointerOperand() == GlobalIdGlobals[2]))
     return true;
+
+  // Skip everything else in case of Fiber for now. Not optimal, but causes
+  // problems with current implementation.
+  if (WIH == WorkitemHandlerType::FIBER)
+    return false;
 
   // In case of uniform variables (same value for all work-items), there is no
   // point to create a context array slot for them, but just use the original
@@ -216,7 +222,6 @@ bool WorkitemHandler::shouldNotBeContextSaved(
 #endif
     return true;
   }
-
   return false;
 }
 
@@ -264,7 +269,6 @@ llvm::AllocaInst *WorkitemHandler::getContextArray(llvm::Instruction *Inst,
 llvm::Instruction *WorkitemHandler::addContextSave(llvm::Instruction *Def,
                                                    llvm::AllocaInst *AllocaI,
                                                    ParallelRegion *Region) {
-
   if (isa<AllocaInst>(Def)) {
     // If the variable to be context saved is itself an alloca, we have created
     // one big alloca that stores the data of all the work-items and return
@@ -294,13 +298,11 @@ llvm::Instruction *WorkitemHandler::addContextSave(llvm::Instruction *Def,
     GepArgs.push_back(ConstantInt::get(ST, 0));
 
     if (WIH == WorkitemHandlerType::FIBER) {
-      GepArgs.push_back(Builder.CreateLoad(ST, LocalIdGlobals[2], "LocalZ"));
-      GepArgs.push_back(Builder.CreateLoad(ST, LocalIdGlobals[1], "LocalY"));
-      GepArgs.push_back(Builder.CreateLoad(ST, LocalIdGlobals[0], "LocalX"));
+      llvm::Value *LinearIndex = Builder.CreateLoad(ST, LocLinID);
+      GepArgs.push_back(LinearIndex);
     } else {
-      GepArgs.push_back(Region->getOrCreateIDLoad(LID_G_NAME(2)));
-      GepArgs.push_back(Region->getOrCreateIDLoad(LID_G_NAME(1)));
-      GepArgs.push_back(Region->getOrCreateIDLoad(LID_G_NAME(0)));
+      GepArgs.push_back(Builder.CreateLoad(
+          ST, M->getGlobalVariable(LLID_G_NAME), "local_linear_id"));
     }
   }
 
@@ -470,6 +472,9 @@ void WorkitemHandler::addContextSaveRestore(llvm::Instruction *Def, llvm::LoopIn
       pocl_get_bool_option("POCL_PREGION_VALUE_REMAT", true) &&
       WIH != WorkitemHandlerType::FIBER;
 
+  // This can be now controlled with env var as well
+  // RematCandidate = false;
+
   // In case of a rematerialized alloca with only a single store, this will have
   // the store that initializes it.
   StoreInst *InitializerStore = nullptr;
@@ -530,6 +535,19 @@ void WorkitemHandler::addContextSaveRestore(llvm::Instruction *Def, llvm::LoopIn
         RematCandidate = false;
         LLVM_DEBUG(dbgs() << "Stores inside a loop\n");
         LLVM_DEBUG(User->dump());
+      }
+    }
+
+    // These are the cases that we want to 'force' context save.
+    // Note that we are forcing context load outside of the parallel regions.
+    if (PRegion == nullptr &&
+        SubgroupBarrier::hasSGBarrier(User->getParent())) {
+      llvm::BranchInst *Br = dyn_cast<llvm::BranchInst>(User);
+      if (Br->isConditional()) {
+        LLVM_DEBUG(dbgs() << "User with SG-barrier and conditional branch - "
+                             "Force context save this\n");
+        Uses.push_back(User);
+        continue;
       }
     }
 
@@ -807,10 +825,12 @@ llvm::AllocaInst *WorkitemHandler::createAlignedAndPaddedContextAlloca(
 
   PaddingAdded = false;
   BasicBlock &BB = Inst->getParent()->getParent()->getEntryBlock();
+
   IRBuilder<> Builder(Before);
   Function *FF = Inst->getParent()->getParent();
   Module *M = Inst->getParent()->getParent()->getParent();
   const llvm::DataLayout &Layout = M->getDataLayout();
+
   DICompileUnit *CU = nullptr;
   std::unique_ptr<DIBuilder> DB;
   if (M->debug_compile_units_begin() != M->debug_compile_units_end()) {
@@ -866,6 +886,9 @@ llvm::AllocaInst *WorkitemHandler::createAlignedAndPaddedContextAlloca(
     uint64_t Alignment = SrcAlloca->getAlign().value();
     uint64_t StoreSize = Layout.getTypeStoreSize(SrcAlloca->getAllocatedType());
 
+    // Need padding if alignment > 1 AND StoreSize is NOT a multiple of
+    // alignment. If x is aligned to N bytes, then it is also aligned to any
+    // factor of N.
     if ((Alignment > 1) && (StoreSize & (Alignment - 1))) {
       uint64_t AlignedSize = (StoreSize & (~(Alignment - 1))) + Alignment;
 #ifdef DEBUG_WORK_ITEM_LOOPS
@@ -934,9 +957,9 @@ llvm::AllocaInst *WorkitemHandler::createAlignedAndPaddedContextAlloca(
 
     Alloca = Builder.CreateAlloca(AllocType, NumberOfWorkItems, Name);
   } else {
-    llvm::Type *ContextArrayType = ArrayType::get(
-        ArrayType::get(ArrayType::get(AllocType, WGLocalSizeX), WGLocalSizeY),
-        WGLocalSizeZ);
+
+    llvm::Type *ContextArrayType =
+        ArrayType::get(AllocType, WGLocalSizeX * WGLocalSizeY * WGLocalSizeZ);
     Alloca = Builder.CreateAlloca(ContextArrayType, nullptr, Name);
   }
 
@@ -1024,10 +1047,16 @@ WorkitemHandler::createContextArrayGEP(llvm::AllocaInst *CtxArrayAlloca,
     else
       GEPArgs.push_back(getLinearWIIndexInRegion(Before));
   } else {
-    GEPArgs.push_back(ConstantInt::get(ST, 0));
-    GEPArgs.push_back(getLocalIdInRegion(Before, 2));
-    GEPArgs.push_back(getLocalIdInRegion(Before, 1));
-    GEPArgs.push_back(getLocalIdInRegion(Before, 0));
+    if (WIH == WorkitemHandlerType::FIBER) {
+      llvm::Value *LinearIndex = Builder.CreateLoad(ST, LocLinID);
+      llvm::Value *Zero = llvm::ConstantInt::get(ST, 0);
+      GEPArgs.push_back(Zero);
+      GEPArgs.push_back(LinearIndex);
+    } else {
+      llvm::Value *Zero = llvm::ConstantInt::get(ST, 0);
+      GEPArgs.push_back(Zero);
+      GEPArgs.push_back(getLinearWIIndexInRegion(Before));
+    }
   }
 
   if (AlignPadding)
@@ -1067,6 +1096,9 @@ llvm::Value *WorkitemHandler::getLinearWiIndex(llvm::IRBuilder<> &Builder,
   Value *LocalSizeXTimesY =
       Builder.CreateBinOp(Instruction::Mul, LoadX, LoadY, "ls_xy");
 
+  // NOTE: We are keeping track of LLID now, so no need to recalculate it from
+  // 3D ids?
+  // -> Change logic.
   Value *Result;
   if (WIH == WorkitemHandlerType::FIBER) {
     llvm::LoadInst *LoadXId = Builder.CreateLoad(ST, LocalIdGlobals[0], "id_x");

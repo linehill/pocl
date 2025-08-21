@@ -1,0 +1,386 @@
+subgroup size: 16
+subgroup 0 B: local-id: (0, 0, 0), sg-id: 0
+subgroup 0 B: local-id: (1, 0, 0), sg-id: 0
+subgroup 0 B: local-id: (2, 0, 0), sg-id: 0
+subgroup 0 B: local-id: (3, 0, 0), sg-id: 0
+subgroup 0 B: local-id: (0, 0, 1), sg-id: 0
+subgroup 0 B: local-id: (1, 0, 1), sg-id: 0
+subgroup 0 B: local-id: (2, 0, 1), sg-id: 0
+subgroup 0 B: local-id: (3, 0, 1), sg-id: 0
+subgroup 0 B: local-id: (0, 0, 2), sg-id: 0
+subgroup 0 B: local-id: (1, 0, 2), sg-id: 0
+subgroup 0 B: local-id: (2, 0, 2), sg-id: 0
+subgroup 0 B: local-id: (3, 0, 2), sg-id: 0
+subgroup 0 B: local-id: (0, 0, 3), sg-id: 0
+subgroup 0 B: local-id: (1, 0, 3), sg-id: 0
+subgroup 0 B: local-id: (2, 0, 3), sg-id: 0
+subgroup 0 B: local-id: (3, 0, 3), sg-id: 0
+subgroup 0 A: local-id: (0, 0, 0), sg-id: 0
+subgroup 0 A: local-id: (1, 0, 0), sg-id: 0
+subgroup 0 A: local-id: (2, 0, 0), sg-id: 0
+subgroup 0 A: local-id: (3, 0, 0), sg-id: 0
+subgroup 0 A: local-id: (0, 0, 1), sg-id: 0
+subgroup 0 A: local-id: (1, 0, 1), sg-id: 0
+subgroup 0 A: local-id: (2, 0, 1), sg-id: 0
+subgroup 0 A: local-id: (3, 0, 1), sg-id: 0
+subgroup 0 A: local-id: (0, 0, 2), sg-id: 0
+subgroup 0 A: local-id: (1, 0, 2), sg-id: 0
+subgroup 0 A: local-id: (2, 0, 2), sg-id: 0
+subgroup 0 A: local-id: (3, 0, 2), sg-id: 0
+subgroup 0 A: local-id: (0, 0, 3), sg-id: 0
+subgroup 0 A: local-id: (1, 0, 3), sg-id: 0
+subgroup 0 A: local-id: (2, 0, 3), sg-id: 0
+subgroup 0 A: local-id: (3, 0, 3), sg-id: 0
+subgroup 1 B: local-id: (0, 0, 4), sg-id: 1
+subgroup 1 B: local-id: (1, 0, 4), sg-id: 1
+subgroup 1 B: local-id: (2, 0, 4), sg-id: 1
+subgroup 1 B: local-id: (3, 0, 4), sg-id: 1
+subgroup 1 B: local-id: (0, 0, 5), sg-id: 1
+subgroup 1 B: local-id: (1, 0, 5), sg-id: 1
+subgroup 1 B: local-id: (2, 0, 5), sg-id: 1
+subgroup 1 B: local-id: (3, 0, 5), sg-id: 1
+subgroup 1 B: local-id: (0, 0, 6), sg-id: 1
+subgroup 1 B: local-id: (1, 0, 6), sg-id: 1
+subgroup 1 B: local-id: (2, 0, 6), sg-id: 1
+subgroup 1 B: local-id: (3, 0, 6), sg-id: 1
+subgroup 1 B: local-id: (0, 0, 7), sg-id: 1
+subgroup 1 B: local-id: (1, 0, 7), sg-id: 1
+subgroup 1 B: local-id: (2, 0, 7), sg-id: 1
+subgroup 1 B: local-id: (3, 0, 7), sg-id: 1
+subgroup 1 A: local-id: (0, 0, 4), sg-id: 1
+subgroup 1 A: local-id: (1, 0, 4), sg-id: 1
+subgroup 1 A: local-id: (2, 0, 4), sg-id: 1
+subgroup 1 A: local-id: (3, 0, 4), sg-id: 1
+subgroup 1 A: local-id: (0, 0, 5), sg-id: 1
+subgroup 1 A: local-id: (1, 0, 5), sg-id: 1
+subgroup 1 A: local-id: (2, 0, 5), sg-id: 1
+subgroup 1 A: local-id: (3, 0, 5), sg-id: 1
+subgroup 1 A: local-id: (0, 0, 6), sg-id: 1
+subgroup 1 A: local-id: (1, 0, 6), sg-id: 1
+subgroup 1 A: local-id: (2, 0, 6), sg-id: 1
+subgroup 1 A: local-id: (3, 0, 6), sg-id: 1
+subgroup 1 A: local-id: (0, 0, 7), sg-id: 1
+subgroup 1 A: local-id: (1, 0, 7), sg-id: 1
+subgroup 1 A: local-id: (2, 0, 7), sg-id: 1
+subgroup 1 A: local-id: (3, 0, 7), sg-id: 1
+subgroup 2 B: local-id: (0, 0, 8), sg-id: 2
+subgroup 2 B: local-id: (1, 0, 8), sg-id: 2
+subgroup 2 B: local-id: (2, 0, 8), sg-id: 2
+subgroup 2 B: local-id: (3, 0, 8), sg-id: 2
+subgroup 2 B: local-id: (0, 0, 9), sg-id: 2
+subgroup 2 B: local-id: (1, 0, 9), sg-id: 2
+subgroup 2 B: local-id: (2, 0, 9), sg-id: 2
+subgroup 2 B: local-id: (3, 0, 9), sg-id: 2
+subgroup 2 B: local-id: (0, 0, 10), sg-id: 2
+subgroup 2 B: local-id: (1, 0, 10), sg-id: 2
+subgroup 2 B: local-id: (2, 0, 10), sg-id: 2
+subgroup 2 B: local-id: (3, 0, 10), sg-id: 2
+subgroup 2 B: local-id: (0, 0, 11), sg-id: 2
+subgroup 2 B: local-id: (1, 0, 11), sg-id: 2
+subgroup 2 B: local-id: (2, 0, 11), sg-id: 2
+subgroup 2 B: local-id: (3, 0, 11), sg-id: 2
+subgroup 2 A: local_id: (0, 0, 8), sg-id: 2
+subgroup 2 A: local_id: (1, 0, 8), sg-id: 2
+subgroup 2 A: local_id: (2, 0, 8), sg-id: 2
+subgroup 2 A: local_id: (3, 0, 8), sg-id: 2
+subgroup 2 A: local_id: (0, 0, 9), sg-id: 2
+subgroup 2 A: local_id: (1, 0, 9), sg-id: 2
+subgroup 2 A: local_id: (2, 0, 9), sg-id: 2
+subgroup 2 A: local_id: (3, 0, 9), sg-id: 2
+subgroup 2 A: local_id: (0, 0, 10), sg-id: 2
+subgroup 2 A: local_id: (1, 0, 10), sg-id: 2
+subgroup 2 A: local_id: (2, 0, 10), sg-id: 2
+subgroup 2 A: local_id: (3, 0, 10), sg-id: 2
+subgroup 2 A: local_id: (0, 0, 11), sg-id: 2
+subgroup 2 A: local_id: (1, 0, 11), sg-id: 2
+subgroup 2 A: local_id: (2, 0, 11), sg-id: 2
+subgroup 2 A: local_id: (3, 0, 11), sg-id: 2
+subgroup x B: local_id: (0, 0, 12), sg-id: 3
+subgroup x B: local_id: (1, 0, 12), sg-id: 3
+subgroup x B: local_id: (2, 0, 12), sg-id: 3
+subgroup x B: local_id: (3, 0, 12), sg-id: 3
+subgroup x B: local_id: (0, 0, 13), sg-id: 3
+subgroup x B: local_id: (1, 0, 13), sg-id: 3
+subgroup x B: local_id: (2, 0, 13), sg-id: 3
+subgroup x B: local_id: (3, 0, 13), sg-id: 3
+subgroup x B: local_id: (0, 0, 14), sg-id: 3
+subgroup x B: local_id: (1, 0, 14), sg-id: 3
+subgroup x B: local_id: (2, 0, 14), sg-id: 3
+subgroup x B: local_id: (3, 0, 14), sg-id: 3
+subgroup x B: local_id: (0, 0, 15), sg-id: 3
+subgroup x B: local_id: (1, 0, 15), sg-id: 3
+subgroup x B: local_id: (2, 0, 15), sg-id: 3
+subgroup x B: local_id: (3, 0, 15), sg-id: 3
+subgroup x A: local_id: (0, 0, 12), sg-id: 3
+subgroup x A: local_id: (1, 0, 12), sg-id: 3
+subgroup x A: local_id: (2, 0, 12), sg-id: 3
+subgroup x A: local_id: (3, 0, 12), sg-id: 3
+subgroup x A: local_id: (0, 0, 13), sg-id: 3
+subgroup x A: local_id: (1, 0, 13), sg-id: 3
+subgroup x A: local_id: (2, 0, 13), sg-id: 3
+subgroup x A: local_id: (3, 0, 13), sg-id: 3
+subgroup x A: local_id: (0, 0, 14), sg-id: 3
+subgroup x A: local_id: (1, 0, 14), sg-id: 3
+subgroup x A: local_id: (2, 0, 14), sg-id: 3
+subgroup x A: local_id: (3, 0, 14), sg-id: 3
+subgroup x A: local_id: (0, 0, 15), sg-id: 3
+subgroup x A: local_id: (1, 0, 15), sg-id: 3
+subgroup x A: local_id: (2, 0, 15), sg-id: 3
+subgroup x A: local_id: (3, 0, 15), sg-id: 3
+subgroup x B: local_id: (0, 0, 16), sg-id: 4
+subgroup x B: local_id: (1, 0, 16), sg-id: 4
+subgroup x B: local_id: (2, 0, 16), sg-id: 4
+subgroup x B: local_id: (3, 0, 16), sg-id: 4
+subgroup x B: local_id: (0, 0, 17), sg-id: 4
+subgroup x B: local_id: (1, 0, 17), sg-id: 4
+subgroup x B: local_id: (2, 0, 17), sg-id: 4
+subgroup x B: local_id: (3, 0, 17), sg-id: 4
+subgroup x B: local_id: (0, 0, 18), sg-id: 4
+subgroup x B: local_id: (1, 0, 18), sg-id: 4
+subgroup x B: local_id: (2, 0, 18), sg-id: 4
+subgroup x B: local_id: (3, 0, 18), sg-id: 4
+subgroup x B: local_id: (0, 0, 19), sg-id: 4
+subgroup x B: local_id: (1, 0, 19), sg-id: 4
+subgroup x B: local_id: (2, 0, 19), sg-id: 4
+subgroup x B: local_id: (3, 0, 19), sg-id: 4
+subgroup x A: local_id: (0, 0, 16), sg-id: 4
+subgroup x A: local_id: (1, 0, 16), sg-id: 4
+subgroup x A: local_id: (2, 0, 16), sg-id: 4
+subgroup x A: local_id: (3, 0, 16), sg-id: 4
+subgroup x A: local_id: (0, 0, 17), sg-id: 4
+subgroup x A: local_id: (1, 0, 17), sg-id: 4
+subgroup x A: local_id: (2, 0, 17), sg-id: 4
+subgroup x A: local_id: (3, 0, 17), sg-id: 4
+subgroup x A: local_id: (0, 0, 18), sg-id: 4
+subgroup x A: local_id: (1, 0, 18), sg-id: 4
+subgroup x A: local_id: (2, 0, 18), sg-id: 4
+subgroup x A: local_id: (3, 0, 18), sg-id: 4
+subgroup x A: local_id: (0, 0, 19), sg-id: 4
+subgroup x A: local_id: (1, 0, 19), sg-id: 4
+subgroup x A: local_id: (2, 0, 19), sg-id: 4
+subgroup x A: local_id: (3, 0, 19), sg-id: 4
+subgroup x B: local_id: (0, 0, 20), sg-id: 5
+subgroup x B: local_id: (1, 0, 20), sg-id: 5
+subgroup x B: local_id: (2, 0, 20), sg-id: 5
+subgroup x B: local_id: (3, 0, 20), sg-id: 5
+subgroup x B: local_id: (0, 0, 21), sg-id: 5
+subgroup x B: local_id: (1, 0, 21), sg-id: 5
+subgroup x B: local_id: (2, 0, 21), sg-id: 5
+subgroup x B: local_id: (3, 0, 21), sg-id: 5
+subgroup x B: local_id: (0, 0, 22), sg-id: 5
+subgroup x B: local_id: (1, 0, 22), sg-id: 5
+subgroup x B: local_id: (2, 0, 22), sg-id: 5
+subgroup x B: local_id: (3, 0, 22), sg-id: 5
+subgroup x B: local_id: (0, 0, 23), sg-id: 5
+subgroup x B: local_id: (1, 0, 23), sg-id: 5
+subgroup x B: local_id: (2, 0, 23), sg-id: 5
+subgroup x B: local_id: (3, 0, 23), sg-id: 5
+subgroup x A: local_id: (0, 0, 20), sg-id: 5
+subgroup x A: local_id: (1, 0, 20), sg-id: 5
+subgroup x A: local_id: (2, 0, 20), sg-id: 5
+subgroup x A: local_id: (3, 0, 20), sg-id: 5
+subgroup x A: local_id: (0, 0, 21), sg-id: 5
+subgroup x A: local_id: (1, 0, 21), sg-id: 5
+subgroup x A: local_id: (2, 0, 21), sg-id: 5
+subgroup x A: local_id: (3, 0, 21), sg-id: 5
+subgroup x A: local_id: (0, 0, 22), sg-id: 5
+subgroup x A: local_id: (1, 0, 22), sg-id: 5
+subgroup x A: local_id: (2, 0, 22), sg-id: 5
+subgroup x A: local_id: (3, 0, 22), sg-id: 5
+subgroup x A: local_id: (0, 0, 23), sg-id: 5
+subgroup x A: local_id: (1, 0, 23), sg-id: 5
+subgroup x A: local_id: (2, 0, 23), sg-id: 5
+subgroup x A: local_id: (3, 0, 23), sg-id: 5
+subgroup x B: local_id: (0, 0, 24), sg-id: 6
+subgroup x B: local_id: (1, 0, 24), sg-id: 6
+subgroup x B: local_id: (2, 0, 24), sg-id: 6
+subgroup x B: local_id: (3, 0, 24), sg-id: 6
+subgroup x B: local_id: (0, 0, 25), sg-id: 6
+subgroup x B: local_id: (1, 0, 25), sg-id: 6
+subgroup x B: local_id: (2, 0, 25), sg-id: 6
+subgroup x B: local_id: (3, 0, 25), sg-id: 6
+subgroup x B: local_id: (0, 0, 26), sg-id: 6
+subgroup x B: local_id: (1, 0, 26), sg-id: 6
+subgroup x B: local_id: (2, 0, 26), sg-id: 6
+subgroup x B: local_id: (3, 0, 26), sg-id: 6
+subgroup x B: local_id: (0, 0, 27), sg-id: 6
+subgroup x B: local_id: (1, 0, 27), sg-id: 6
+subgroup x B: local_id: (2, 0, 27), sg-id: 6
+subgroup x B: local_id: (3, 0, 27), sg-id: 6
+subgroup x A: local_id: (0, 0, 24), sg-id: 6
+subgroup x A: local_id: (1, 0, 24), sg-id: 6
+subgroup x A: local_id: (2, 0, 24), sg-id: 6
+subgroup x A: local_id: (3, 0, 24), sg-id: 6
+subgroup x A: local_id: (0, 0, 25), sg-id: 6
+subgroup x A: local_id: (1, 0, 25), sg-id: 6
+subgroup x A: local_id: (2, 0, 25), sg-id: 6
+subgroup x A: local_id: (3, 0, 25), sg-id: 6
+subgroup x A: local_id: (0, 0, 26), sg-id: 6
+subgroup x A: local_id: (1, 0, 26), sg-id: 6
+subgroup x A: local_id: (2, 0, 26), sg-id: 6
+subgroup x A: local_id: (3, 0, 26), sg-id: 6
+subgroup x A: local_id: (0, 0, 27), sg-id: 6
+subgroup x A: local_id: (1, 0, 27), sg-id: 6
+subgroup x A: local_id: (2, 0, 27), sg-id: 6
+subgroup x A: local_id: (3, 0, 27), sg-id: 6
+subgroup x B: local_id: (0, 0, 28), sg-id: 7
+subgroup x B: local_id: (1, 0, 28), sg-id: 7
+subgroup x B: local_id: (2, 0, 28), sg-id: 7
+subgroup x B: local_id: (3, 0, 28), sg-id: 7
+subgroup x B: local_id: (0, 0, 29), sg-id: 7
+subgroup x B: local_id: (1, 0, 29), sg-id: 7
+subgroup x B: local_id: (2, 0, 29), sg-id: 7
+subgroup x B: local_id: (3, 0, 29), sg-id: 7
+subgroup x B: local_id: (0, 0, 30), sg-id: 7
+subgroup x B: local_id: (1, 0, 30), sg-id: 7
+subgroup x B: local_id: (2, 0, 30), sg-id: 7
+subgroup x B: local_id: (3, 0, 30), sg-id: 7
+subgroup x B: local_id: (0, 0, 31), sg-id: 7
+subgroup x B: local_id: (1, 0, 31), sg-id: 7
+subgroup x B: local_id: (2, 0, 31), sg-id: 7
+subgroup x B: local_id: (3, 0, 31), sg-id: 7
+subgroup x A: local_id: (0, 0, 28), sg-id: 7
+subgroup x A: local_id: (1, 0, 28), sg-id: 7
+subgroup x A: local_id: (2, 0, 28), sg-id: 7
+subgroup x A: local_id: (3, 0, 28), sg-id: 7
+subgroup x A: local_id: (0, 0, 29), sg-id: 7
+subgroup x A: local_id: (1, 0, 29), sg-id: 7
+subgroup x A: local_id: (2, 0, 29), sg-id: 7
+subgroup x A: local_id: (3, 0, 29), sg-id: 7
+subgroup x A: local_id: (0, 0, 30), sg-id: 7
+subgroup x A: local_id: (1, 0, 30), sg-id: 7
+subgroup x A: local_id: (2, 0, 30), sg-id: 7
+subgroup x A: local_id: (3, 0, 30), sg-id: 7
+subgroup x A: local_id: (0, 0, 31), sg-id: 7
+subgroup x A: local_id: (1, 0, 31), sg-id: 7
+subgroup x A: local_id: (2, 0, 31), sg-id: 7
+subgroup x A: local_id: (3, 0, 31), sg-id: 7
+local_id: (0, 0, 0), sg-id: 0
+local_id: (1, 0, 0), sg-id: 0
+local_id: (2, 0, 0), sg-id: 0
+local_id: (3, 0, 0), sg-id: 0
+local_id: (0, 0, 1), sg-id: 0
+local_id: (1, 0, 1), sg-id: 0
+local_id: (2, 0, 1), sg-id: 0
+local_id: (3, 0, 1), sg-id: 0
+local_id: (0, 0, 2), sg-id: 0
+local_id: (1, 0, 2), sg-id: 0
+local_id: (2, 0, 2), sg-id: 0
+local_id: (3, 0, 2), sg-id: 0
+local_id: (0, 0, 3), sg-id: 0
+local_id: (1, 0, 3), sg-id: 0
+local_id: (2, 0, 3), sg-id: 0
+local_id: (3, 0, 3), sg-id: 0
+local_id: (0, 0, 4), sg-id: 1
+local_id: (1, 0, 4), sg-id: 1
+local_id: (2, 0, 4), sg-id: 1
+local_id: (3, 0, 4), sg-id: 1
+local_id: (0, 0, 5), sg-id: 1
+local_id: (1, 0, 5), sg-id: 1
+local_id: (2, 0, 5), sg-id: 1
+local_id: (3, 0, 5), sg-id: 1
+local_id: (0, 0, 6), sg-id: 1
+local_id: (1, 0, 6), sg-id: 1
+local_id: (2, 0, 6), sg-id: 1
+local_id: (3, 0, 6), sg-id: 1
+local_id: (0, 0, 7), sg-id: 1
+local_id: (1, 0, 7), sg-id: 1
+local_id: (2, 0, 7), sg-id: 1
+local_id: (3, 0, 7), sg-id: 1
+local_id: (0, 0, 8), sg-id: 2
+local_id: (1, 0, 8), sg-id: 2
+local_id: (2, 0, 8), sg-id: 2
+local_id: (3, 0, 8), sg-id: 2
+local_id: (0, 0, 9), sg-id: 2
+local_id: (1, 0, 9), sg-id: 2
+local_id: (2, 0, 9), sg-id: 2
+local_id: (3, 0, 9), sg-id: 2
+local_id: (0, 0, 10), sg-id: 2
+local_id: (1, 0, 10), sg-id: 2
+local_id: (2, 0, 10), sg-id: 2
+local_id: (3, 0, 10), sg-id: 2
+local_id: (0, 0, 11), sg-id: 2
+local_id: (1, 0, 11), sg-id: 2
+local_id: (2, 0, 11), sg-id: 2
+local_id: (3, 0, 11), sg-id: 2
+local_id: (0, 0, 12), sg-id: 3
+local_id: (1, 0, 12), sg-id: 3
+local_id: (2, 0, 12), sg-id: 3
+local_id: (3, 0, 12), sg-id: 3
+local_id: (0, 0, 13), sg-id: 3
+local_id: (1, 0, 13), sg-id: 3
+local_id: (2, 0, 13), sg-id: 3
+local_id: (3, 0, 13), sg-id: 3
+local_id: (0, 0, 14), sg-id: 3
+local_id: (1, 0, 14), sg-id: 3
+local_id: (2, 0, 14), sg-id: 3
+local_id: (3, 0, 14), sg-id: 3
+local_id: (0, 0, 15), sg-id: 3
+local_id: (1, 0, 15), sg-id: 3
+local_id: (2, 0, 15), sg-id: 3
+local_id: (3, 0, 15), sg-id: 3
+local_id: (0, 0, 16), sg-id: 4
+local_id: (1, 0, 16), sg-id: 4
+local_id: (2, 0, 16), sg-id: 4
+local_id: (3, 0, 16), sg-id: 4
+local_id: (0, 0, 17), sg-id: 4
+local_id: (1, 0, 17), sg-id: 4
+local_id: (2, 0, 17), sg-id: 4
+local_id: (3, 0, 17), sg-id: 4
+local_id: (0, 0, 18), sg-id: 4
+local_id: (1, 0, 18), sg-id: 4
+local_id: (2, 0, 18), sg-id: 4
+local_id: (3, 0, 18), sg-id: 4
+local_id: (0, 0, 19), sg-id: 4
+local_id: (1, 0, 19), sg-id: 4
+local_id: (2, 0, 19), sg-id: 4
+local_id: (3, 0, 19), sg-id: 4
+local_id: (0, 0, 20), sg-id: 5
+local_id: (1, 0, 20), sg-id: 5
+local_id: (2, 0, 20), sg-id: 5
+local_id: (3, 0, 20), sg-id: 5
+local_id: (0, 0, 21), sg-id: 5
+local_id: (1, 0, 21), sg-id: 5
+local_id: (2, 0, 21), sg-id: 5
+local_id: (3, 0, 21), sg-id: 5
+local_id: (0, 0, 22), sg-id: 5
+local_id: (1, 0, 22), sg-id: 5
+local_id: (2, 0, 22), sg-id: 5
+local_id: (3, 0, 22), sg-id: 5
+local_id: (0, 0, 23), sg-id: 5
+local_id: (1, 0, 23), sg-id: 5
+local_id: (2, 0, 23), sg-id: 5
+local_id: (3, 0, 23), sg-id: 5
+local_id: (0, 0, 24), sg-id: 6
+local_id: (1, 0, 24), sg-id: 6
+local_id: (2, 0, 24), sg-id: 6
+local_id: (3, 0, 24), sg-id: 6
+local_id: (0, 0, 25), sg-id: 6
+local_id: (1, 0, 25), sg-id: 6
+local_id: (2, 0, 25), sg-id: 6
+local_id: (3, 0, 25), sg-id: 6
+local_id: (0, 0, 26), sg-id: 6
+local_id: (1, 0, 26), sg-id: 6
+local_id: (2, 0, 26), sg-id: 6
+local_id: (3, 0, 26), sg-id: 6
+local_id: (0, 0, 27), sg-id: 6
+local_id: (1, 0, 27), sg-id: 6
+local_id: (2, 0, 27), sg-id: 6
+local_id: (3, 0, 27), sg-id: 6
+local_id: (0, 0, 28), sg-id: 7
+local_id: (1, 0, 28), sg-id: 7
+local_id: (2, 0, 28), sg-id: 7
+local_id: (3, 0, 28), sg-id: 7
+local_id: (0, 0, 29), sg-id: 7
+local_id: (1, 0, 29), sg-id: 7
+local_id: (2, 0, 29), sg-id: 7
+local_id: (3, 0, 29), sg-id: 7
+local_id: (0, 0, 30), sg-id: 7
+local_id: (1, 0, 30), sg-id: 7
+local_id: (2, 0, 30), sg-id: 7
+local_id: (3, 0, 30), sg-id: 7
+local_id: (0, 0, 31), sg-id: 7
+local_id: (1, 0, 31), sg-id: 7
+local_id: (2, 0, 31), sg-id: 7
+local_id: (3, 0, 31), sg-id: 7
+OK

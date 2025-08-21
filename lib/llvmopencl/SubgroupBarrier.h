@@ -35,7 +35,36 @@ namespace pocl {
 /// Other work-group methods (for now) identify 'SubgroupBarrier' as
 /// a 'Barrier' and treat it as a work-group barrier.
 class SubgroupBarrier : public Barrier {
+private:
+#if LLVM_MAJOR < 20
+  static SubgroupBarrier *create(llvm::Instruction *InsertBefore) {
+    if (InsertBefore != &InsertBefore->getParent()->front() &&
+#else
+  static SubgroupBarrier *create(InstListType::iterator InsertBefore) {
+    if (InsertBefore != InsertBefore->getParent()->begin() &&
+#endif
+        llvm::isa<SubgroupBarrier>(InsertBefore->getPrevNode()))
+      return llvm::cast<SubgroupBarrier>(InsertBefore->getPrevNode());
+
+    llvm::Module *M = InsertBefore->getModule();
+    llvm::FunctionCallee FC = M->getOrInsertFunction(
+        SGBARRIER_FUNCTION_NAME, llvm::Type::getVoidTy(M->getContext()));
+    llvm::Function *F = llvm::cast<llvm::Function>(FC.getCallee());
+    F->addFnAttr(llvm::Attribute::Convergent);
+    return llvm::cast<pocl::SubgroupBarrier>(
+        llvm::CallInst::Create(F, "", InsertBefore));
+  }
+
 public:
+  static bool isLoopWithSGBarrier(llvm::Loop &L) {
+    for (llvm::BasicBlock *BB : L.blocks())
+      for (llvm::Instruction &I : *BB)
+        if (llvm::isa<SubgroupBarrier>(&I))
+          return true;
+
+    return false;
+  }
+
   static bool classof(const SubgroupBarrier *S) { return true; }
 
   static bool classof(const llvm::CallInst *C) {
@@ -54,11 +83,40 @@ public:
     return (llvm::isa<User>(V) && classof(llvm::cast<llvm::User>(V)));
   }
   static bool hasSGBarrier(const llvm::BasicBlock *BB) {
-    for (llvm::BasicBlock::const_iterator I = BB->begin(), E = BB->end();
-         I != E; ++I)
-      if (llvm::isa<SubgroupBarrier>(I))
+    for (const llvm::Instruction &I : *BB)
+      if (llvm::isa<SubgroupBarrier>(&I))
         return true;
     return false;
+  }
+
+#if LLVM_MAJOR < 20
+  static SubgroupBarrier *createAtEnd(llvm::BasicBlock *BB) {
+    return create(BB->getTerminator());
+  }
+#else
+  static SubgroupBarrier *createAtEnd(llvm::BasicBlock *BB) {
+    return create(BB->getTerminator()->getIterator());
+  }
+#endif
+
+#if LLVM_MAJOR < 20
+  static SubgroupBarrier *createAtStart(llvm::BasicBlock *BB) {
+    return create(BB->getFirstNonPHI());
+  }
+#else
+  static SubgroupBarrier *createAtStart(llvm::BasicBlock *BB) {
+    return create(BB->getFirstInsertionPt());
+  }
+#endif
+
+  // Returns true in case the given basic block ends with a subgroup barrier,
+  // that is, contains only a branch instruction after a subgroup barrier call.
+  static bool endsWithSGBarrier(const llvm::BasicBlock *BB) {
+    const llvm::Instruction *Inst = BB->getTerminator();
+    if (Inst == NULL)
+      return false;
+    return BB->size() > 1 && Inst->getPrevNode() != NULL &&
+           llvm::isa<SubgroupBarrier>(Inst->getPrevNode());
   }
 };
 

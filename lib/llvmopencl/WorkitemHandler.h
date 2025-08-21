@@ -131,6 +131,33 @@ protected:
   std::array<llvm::Value *, 3> NumGroupsGlobals;
   std::array<llvm::Value *, 3> GlobalOffsetGlobals;
 
+  llvm::Value *LLID;
+
+  // Keeps track of subgroups in SG-loops.
+  llvm::Value *SgInterCounter;
+  // Keeps track of work-items in SG-loops.
+  llvm::Value *SgIntraCounter;
+
+  llvm::Value *NXLanes;
+
+  // Local id:s of the first WI of the currently executing subgroup.
+  llvm::Value *sg_locals_x;
+  llvm::Value *sg_locals_y;
+  llvm::Value *sg_locals_z;
+
+  llvm::Value *sg_localg_x;
+  llvm::Value *sg_localg_y;
+  llvm::Value *sg_localg_z;
+
+  // Testing these for new approach:
+  llvm::Value *Y_LowerLimit;
+  llvm::Value *Y_UpperLimit;
+  //
+
+  llvm::Value *sg_current_llid;
+
+  llvm::Value *LocLinID;
+
   // Points to the global size computation instructions in the entry
   // block of the currently handled kernel.
   std::array<llvm::Instruction *, 3> GlobalSizes;

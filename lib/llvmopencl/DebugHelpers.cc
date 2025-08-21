@@ -91,7 +91,7 @@ static void printBasicBlock(
   if (WorkgroupBarrier::hasWGBarrier(B)) {
     S << ",fillcolor=red,style=filled";
   } else if (SubgroupBarrier::hasSGBarrier(B)) {
-    S << ", fillcolor=blue,style=filled";
+    S << ", fillcolor=lightgreen,style=filled";
   } else if (isPureUniformBlock(B)) {
     S << ",fillcolor=grey,style=filled";
   }
@@ -220,6 +220,7 @@ void dumpCFG(llvm::Function &F, std::string FileName,
             (Highlights != NULL && Highlights->find(BB) != Highlights->end()));
         RegionBBs.insert(BB);
       }
+
       S << "label=\"Parallel region #" << RegID << "\";" << std::endl;
       S << "}" << std::endl;
     }
@@ -240,7 +241,13 @@ void dumpCFG(llvm::Function &F, std::string FileName,
             (Highlights != NULL && Highlights->find(BB) != Highlights->end()));
         RegionBBs.insert(BB);
       }
-      S << "label=\"Parallel region #" << PR->getID() << "\";" << std::endl;
+      if (PR->isSGRegion()) {
+        S << "label=\"Parallel SUB region #" << PR->getID() << "\";"
+          << std::endl;
+        S << "style=filled;\nfillcolor=lightblue;" << std::endl;
+      } else {
+        S << "label=\"Parallel region #" << PR->getID() << "\";" << std::endl;
+      }
       S << "}" << std::endl;
     }
   }
@@ -342,6 +349,15 @@ void PoCLCFGPrinter::registerWithPB(llvm::PassBuilder &PB) {
 
         return false;
       });
+}
+
+void renameUnnamedBlocks(llvm::Function &F) {
+
+  int Counter = 0;
+  for (auto &BB : F) {
+    if (!BB.hasName())
+      BB.setName("block_" + std::to_string(Counter++));
+  }
 }
 
 } // namespace pocl

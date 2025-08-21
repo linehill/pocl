@@ -23,6 +23,7 @@
 // THE SOFTWARE.
 
 #include <iostream>
+#include <stack>
 
 #include "CompilerWarnings.h"
 IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
@@ -39,19 +40,90 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "Kernel.h"
 #include "KernelCompilerUtils.h"
 #include "LLVMUtils.h"
+#include "SubgroupBarrier.h"
 #include "WorkgroupBarrier.h"
 
 #include "pocl.h"
 #include "pocl_llvm_api.h"
 
-// #define DEBUG_PR_CREATION
-
 POP_COMPILER_DIAGS
+
+#define DEBUG_TYPE "ParallelRegion"
+
+#ifdef LLVM_DEBUG
+#undef LLVM_DEBUG
+#endif
+
+#ifdef DEBUG_PR_CREATION
+#define LLVM_DEBUG(X) X
+#define dbgs() std::cerr << DEBUG_TYPE << ": "
+#else
+#define LLVM_DEBUG(X)
+#endif
 
 using namespace llvm;
 using namespace pocl;
 
 static void addPredecessors(SmallVectorImpl<BasicBlock *> &V, BasicBlock *BB);
+
+void Kernel::getRegionBarrierMapping(
+    std::map<llvm::BasicBlock *, std::vector<llvm::BasicBlock *>>
+        &BarrierMapping) {
+
+  // Collect barrier blocks here.
+  SmallVector<llvm::BasicBlock *, 4> BarrierBlocks;
+
+  for (iterator i = begin(), e = end(); i != e; ++i) {
+    llvm::BasicBlock *BB = cast<BasicBlock>(i);
+    // Exclude the exit barrier as it won't act as an entry barrier.
+    if (Barrier::hasBarrier(BB) &&
+        BB->getTerminator()->getNumSuccessors() > 0) {
+      BarrierBlocks.push_back(BB);
+    }
+    // Pure uniform blocks also behave similarly to barriers in the context of
+    // parallel region formation.
+    if (isPureUniformBlock(BB)) {
+      BarrierBlocks.push_back(BB);
+    }
+  }
+
+  // Create a barrier mapping.
+  for (llvm::BasicBlock *BarrEntry : BarrierBlocks) {
+
+    // Collect exit barriers here.
+    std::vector<llvm::BasicBlock *> BarrierExits;
+
+    // Iterate all successors up until barriers.
+    std::vector<llvm::BasicBlock *> worklist;
+    std::vector<llvm::BasicBlock *> visited;
+    worklist.push_back(BarrEntry);
+
+    while (!worklist.empty()) {
+      llvm::BasicBlock *current = worklist.back();
+      worklist.pop_back();
+      visited.push_back(current);
+      // Dont proceed with paths with non start-barrier.
+      if (current != BarrEntry && Barrier::hasBarrier(current)) {
+        BarrierExits.push_back(current);
+        continue;
+      }
+
+      // These will serve as exits:
+      if (isPureUniformBlock(current) && current != BarrEntry) {
+        BarrierExits.push_back(current);
+        continue;
+      }
+
+      for (llvm::BasicBlock *Succ : successors(current)) {
+        if (std::find(visited.begin(), visited.end(), Succ) == visited.end()) {
+          worklist.push_back(Succ);
+        }
+      }
+    }
+
+    BarrierMapping[BarrEntry] = BarrierExits;
+  }
+}
 
 /// Finds the exit blocks of parallel regions.
 ///
@@ -69,118 +141,280 @@ void Kernel::getRegionExitBlocks(SmallVectorImpl<llvm::BasicBlock *> &B) {
       B.push_back(BB);
     } else if (Barrier::hasBarrier(BB)) {
       B.push_back(BB);
-    } else if (isPureUniformBlock(BB)) {
+    } else if (isPureUniformBlock(BB) && BB != &getEntryBlock()) {
       B.push_back(BB);
     }
   }
 }
 
-/* @todo Move to ParallelRegion.cc */
-ParallelRegion *Kernel::createParallelRegionBefore(llvm::BasicBlock *B) {
+ParallelRegion *Kernel::CreateParallelRegionBetween(
+    llvm::BasicBlock *EntryBarr, llvm::BasicBlock *ExitBarr,
+    pocl::ParallelRegion::ParallelRegionVector *regions,
+    VariableUniformityAnalysisResult &VUA) {
 
-#ifdef DEBUG_PR_CREATION
-  std::cerr << "# createParallelRegionBefore " << B->getName().str()
-            << std::endl;
-#endif
+  LLVM_DEBUG(dbgs() << "# createParallelRegionBetween "
+                    << EntryBarr->getName().str() << " and "
+                    << ExitBarr->getName().str() << "\n");
 
-  BasicBlock *RegionEntryBarrier = NULL;
-  // The original entry basic block of the parallel region, before creating the
-  // context restore entry.
-  BasicBlock *OrigEntry = NULL;
-  BasicBlock *Exit = B->getSinglePredecessor();
+  BasicBlock *EntryBlock = nullptr;
 
-  // The special entry block is not treated as a parallel region.
-  if (Exit == &getEntryBlock())
+  bool isSGRegion = false;
+
+  // Subgroup region is a PR bounded by sg-barriers. Set the flag in case we
+  // encounter one.
+  if (SubgroupBarrier::hasSGBarrier(EntryBarr) &&
+      SubgroupBarrier::hasSGBarrier(ExitBarr)) {
+    isSGRegion = true;
+  }
+
+  bool emptyPath = false;
+
+  // Set the parallel region entry block and check that it's not empty region.
+  for (llvm::BasicBlock *Succ : successors(EntryBarr)) {
+
+    // Empty region.
+    if (Succ == ExitBarr) {
+      // return nullptr;
+      emptyPath = true;
+    } else {
+      EntryBlock = Succ;
+    }
+  }
+
+  // If there is single empty path from entry barrier to exit barrier, do not
+  // create parallel region.
+  if (emptyPath && EntryBlock == nullptr) {
     return nullptr;
+  }
 
-  SmallVector<BasicBlock *, 4> PendingBlocks;
-  addPredecessors(PendingBlocks, B);
+  // We have to handle cases where entry barrier has two branches, both of which
+  // go to the same parallel region. Extract the condition out of the barrier
+  // and create single entry block.
+  int successorCount = EntryBarr->getTerminator()->getNumSuccessors();
+  int exitBarrCountered = 0;
+  bool createNewEntryBlock = false;
+
+  // We have
+  if (successorCount > 1) {
+    createNewEntryBlock = true;
+    // Traverse all successors until barrier is encountered. If barrier is same
+    // for all paths, create single entry block. Unless there is a barrier
+    // directly after entry.
+    for (int i = 0; i < successorCount; i++) {
+      llvm::BasicBlock *Successor = EntryBarr->getTerminator()->getSuccessor(i);
+
+      std::vector<llvm::BasicBlock *> worklist;
+      std::vector<llvm::BasicBlock *> visited;
+
+      if (Barrier::hasBarrier(Successor)) {
+        createNewEntryBlock = false;
+        continue;
+      }
+
+      worklist.push_back(Successor);
+
+      while (!worklist.empty()) {
+
+        llvm::BasicBlock *Current = worklist.back();
+        visited.push_back(Current);
+        worklist.pop_back();
+
+        if (Barrier::hasBarrier(Current) && Current != ExitBarr) {
+          createNewEntryBlock = false;
+          break;
+        }
+        if (Current == ExitBarr) {
+          continue;
+        }
+
+        for (llvm::BasicBlock *SuccBlock : successors(Current)) {
+          if (std::find(visited.begin(), visited.end(), SuccBlock) ==
+              visited.end()) {
+            worklist.push_back(SuccBlock);
+          }
+        }
+      }
+    }
+  }
+
+  // Create new entry block, when there is a conditional branch from entry
+  // barrier and both branches should be in the same parallel region. Create a
+  // new barrier block before the old entry barrier and then remove the barrier
+  // from the old barrier block.
+  //  (B)     (B)
+  //  /|   ->  |
+  // ()()     ()
+  //          /|
+  //         ()()
+  if (createNewEntryBlock) {
+
+    ValueToValueMapTy VMap;
+    BasicBlock *ClonedEntryBarr = CloneBasicBlock(
+        EntryBarr, VMap, "_singular_entry", EntryBarr->getParent());
+
+    // Update instructions inside cloned block to use mapped values
+    for (Instruction &I : *ClonedEntryBarr) {
+      RemapInstruction(&I, VMap, RF_IgnoreMissingLocals);
+    }
+
+    // Remove barrier from the cloned block.
+    llvm::Instruction *BarrierToRemove;
+    for (llvm::Instruction &Instr : *ClonedEntryBarr) {
+      if (isa<Barrier>(&Instr))
+        BarrierToRemove = &Instr;
+    }
+
+    BarrierToRemove->eraseFromParent();
+
+    // Erase branching from the barrier and make a new branch to singular entry
+    // block.
+    llvm::Instruction *BarrTerminator = EntryBarr->getTerminator();
+    BarrTerminator->eraseFromParent();
+
+    llvm::IRBuilder<> Builder(EntryBarr);
+    Builder.CreateBr(ClonedEntryBarr);
+  }
 
   SmallPtrSet<BasicBlock *, 8> BlocksInRegion;
-  while (!PendingBlocks.empty()) {
-    BasicBlock *Current = PendingBlocks.back();
-    PendingBlocks.pop_back();
 
-#ifdef DEBUG_PR_CREATION
-    std::cerr << "## considering " << Current->getName().str() << std::endl;
-#endif
+  BasicBlock *ExitBlock = nullptr;
 
-    // avoid infinite recursion of loops
-    if (BlocksInRegion.count(Current) != 0)
-      continue;
+  bool done = false;
 
-    // If we reach another barrier this must be the parallel region's original
-    // entry node.
-    if (Barrier::hasOnlyBarrier(Current)) {
-      if (RegionEntryBarrier == NULL)
-        RegionEntryBarrier = Current;
-#ifdef DEBUG_PR_CREATION
-      std::cerr << "### it's a barrier!" << std::endl;
-#endif
+  // Traverse the paths from entry barrier to exit barrier and collect the basic
+  // blocks. Single barrier can branch to multiple parallel regions so we need
+  // to check all paths to find the correct exit barrier.
+  for (llvm::BasicBlock *EntryBarrSucc : successors(EntryBarr)) {
+
+    // Skip immediate successive barriers after the entry barrier.
+    if (Barrier::hasBarrier(EntryBarrSucc)) {
       continue;
     }
 
-    if (isPureUniformBlock(Current)) {
-#ifdef DEBUG_PR_CREATION
-      std::cerr << "## reached a required uniform block, not including it"
-                << std::endl;
-      Current->dump();
-#endif
-      continue;
+    // Found the correct path to exit barrier, no need to check others.
+    if (done) {
+      break;
     }
 
-    // We expect no other instructions in barrier blocks expect the function
-    // entry node where we push context data allocas.
-    if (Barrier::hasBarrier(Current)) {
-      assert(
-          false &&
-          "Barrier found in a non-barrier (non-entry) block! (forgot barrier "
-          "canonicalization?)");
+    // Entry block candidate.
+    EntryBlock = EntryBarrSucc;
+
+    std::vector<llvm::BasicBlock *> worklist;
+    SmallVector<llvm::BasicBlock *, 4> visited;
+
+    worklist.push_back(EntryBarrSucc);
+
+    // Keep track of the previous block, the exit block will be stored here once
+    // we find the correct exit barrier.
+    llvm::BasicBlock *PreviousBlock;
+
+    while (!worklist.empty()) {
+      llvm::BasicBlock *CurrentBlock = worklist.back();
+      worklist.pop_back();
+
+      visited.push_back(CurrentBlock);
+
+      if (!Barrier::hasBarrier(CurrentBlock) &&
+          !isPureUniformBlock(CurrentBlock)) {
+        BlocksInRegion.insert(CurrentBlock);
+      } else {
+        // Ended up traversing the incorrect parallel region.
+        // Clear the collected blocks and continue with next successor of
+        // entry barrier.
+        if (CurrentBlock != ExitBarr) {
+          BlocksInRegion.clear();
+          break;
+        } else {
+          ExitBlock = PreviousBlock;
+          done = true;
+          continue;
+        }
+      }
+
+      for (llvm::BasicBlock *SuccBlock : successors(CurrentBlock)) {
+        if (find(visited, SuccBlock) == visited.end())
+          worklist.push_back(SuccBlock);
+      }
+      PreviousBlock = CurrentBlock;
     }
-
-#ifdef DEBUG_PR_CREATION
-    std::cerr << "added it to the region" << std::endl;
-#endif
-    // Non-barrier block, this must be on the region.
-    BlocksInRegion.insert(Current);
-
-    // Add predecessors to pending queue.
-    addPredecessors(PendingBlocks, Current);
   }
 
-  if (BlocksInRegion.empty())
-    return NULL;
-
-  // Find the entry node.
-  assert(RegionEntryBarrier != NULL);
-  for (unsigned Suc = 0,
-                Num = RegionEntryBarrier->getTerminator()->getNumSuccessors();
-       Suc < Num; ++Suc) {
-    llvm::BasicBlock *EntryCandidate =
-        RegionEntryBarrier->getTerminator()->getSuccessor(Suc);
-    if (BlocksInRegion.count(EntryCandidate) == 0)
-      continue;
-    OrigEntry = EntryCandidate;
-    break;
+  // It can be the case that Exit barrier is the successor of Entry barrier AND
+  // there is no other unbarriered path from entry barrier to exit barrier. In
+  // this case, parallel region is not created.
+  if (BlocksInRegion.size() == 0) {
+    return nullptr;
   }
-  assert(BlocksInRegion.count(OrigEntry) != 0);
 
-  // Ensure we have a unique PR entry block without phis where all the context
-  // restore code will be added and which acts as a unique landing pad from
-  // other PRs.
+  // Single parallel region can have two different entry barriers.
+  // Check that this region has not been created already with different barrier
+  // pair.
+  for (ParallelRegion::ParallelRegionVector::iterator PRI = regions->begin(),
+                                                      PRE = regions->end();
+       PRI != PRE; ++PRI) {
+
+    ParallelRegion *PRegion = (*PRI);
+
+    if (PRegion->exitBB() == ExitBlock)
+      return nullptr;
+  }
+
+  llvm::BasicBlock *MaybeExitBlock = ExitBarr->getSinglePredecessor();
+
+  // Single exit block.
+  if (MaybeExitBlock != nullptr) {
+    ExitBlock = MaybeExitBlock;
+  } else {
+    // More than one exit block leading to exit barrier.
+    // Need to create singular exit block, and update references.
+
+    std::vector<llvm::BasicBlock *> exitBlocks;
+    // Collect blocks that precede the exit barrier AND belong to this region.
+    for (llvm::BasicBlock *ExitBarrPred : predecessors(ExitBarr)) {
+      if (BlocksInRegion.count(ExitBarrPred) == 1)
+        exitBlocks.push_back(ExitBarrPred);
+    }
+
+    if (exitBlocks.size() > 1) {
+      // Create new singular exit block for the region.
+      llvm::BasicBlock *NewExitBlock =
+          llvm::BasicBlock::Create(EntryBarr->getContext(), "singular_exit",
+                                   EntryBarr->getParent(), ExitBarr);
+      BlocksInRegion.insert(NewExitBlock);
+      llvm::IRBuilder<> Builder(EntryBarr->getContext());
+      Builder.SetInsertPoint(NewExitBlock);
+
+      Builder.CreateBr(ExitBarr);
+
+      // Update references to new exit blocks.
+      for (llvm::BasicBlock *ExitingBlock : exitBlocks) {
+        for (unsigned succ_idx = 0;
+             succ_idx < ExitingBlock->getTerminator()->getNumSuccessors();
+             ++succ_idx) {
+          if (ExitingBlock->getTerminator()->getSuccessor(succ_idx) == ExitBarr)
+            ExitingBlock->getTerminator()->setSuccessor(succ_idx, NewExitBlock);
+        }
+      }
+      ExitBlock = NewExitBlock;
+    } else {
+      ExitBlock = exitBlocks[0];
+    }
+  }
+
   BasicBlock *PREntry = BasicBlock::Create(
-      OrigEntry->getContext(),
+      EntryBlock->getContext(),
       "parallel_region_" + std::to_string(ParallelRegion::getNextID()) +
           "_entry",
-      OrigEntry->getParent(), OrigEntry);
+      EntryBlock->getParent(), EntryBlock);
 
   IRBuilder<> Builder(PREntry);
-  Builder.CreateBr(OrigEntry);
+  Builder.CreateBr(EntryBlock);
 
   // Does it have a jump to the next block?
   BlocksInRegion.insert(PREntry);
+
   std::set<BasicBlock *> Preds;
-  for (pred_iterator PI = pred_begin(OrigEntry), PE = pred_end(OrigEntry);
+  for (pred_iterator PI = pred_begin(EntryBlock), PE = pred_end(EntryBlock);
        PI != PE; ++PI) {
     Preds.insert(*PI);
   }
@@ -193,34 +427,98 @@ ParallelRegion *Kernel::createParallelRegionBefore(llvm::BasicBlock *B) {
     if (BlocksInRegion.count(PredBB) > 0)
       continue; // Must be an intra-PR loop backedge source.
 
-    // Fix the branch of the predecessor to point to the new entry.
     BranchInst *BR = cast<BranchInst>(PredBB->getTerminator());
+
     for (unsigned Suc = 0; Suc < BR->getNumSuccessors(); ++Suc)
-      if (BR->getSuccessor(Suc) == OrigEntry)
+      if (BR->getSuccessor(Suc) == EntryBlock)
         BR->setSuccessor(Suc, PREntry);
-    OrigEntry->replacePhiUsesWith(PredBB, PREntry);
+    EntryBlock->replacePhiUsesWith(PredBB, PREntry);
   }
 
-  // Similarly, make sure we have an exit block that can be included entirely
-  // in the region. Note that barrier blocks nor pure uniform blocks are not
-  // included in any pregion.
-  if (Exit == nullptr) {
-    BasicBlock *NewExit = SplitBlock(B, &B->front());
-    NewExit->takeName(B);
-    std::string Name = "parallel_region_" +
-                       std::to_string(ParallelRegion::getNextID()) + "_exit";
-    B->setName(Name);
-    BlocksInRegion.insert(B);
-    Exit = B;
+  // Corner-case exists where there is a branch from entry barrier to exit
+  // barrier skipping the parallel region altogether. This may be intended if it
+  // is a 'work-group level' branch. However, sometimes they are supposed to be
+  // 'WI level' branches. We have to check if this is the case and fix those.
+  // TODO: This is not the ideal solution, and depends on how things are
+  // implemented currently. Maybe we don't need this if PR formation logic is
+  // rewritten. This was Gromacs 'PME-Gather/Solve'-kernel issue.
+  //  (B)
+  //  / |
+  //  | [PR]
+  //  |/
+  //  (B)
+
+  // In all relevant cases, there are two branches from the entry barrier.
+  if (EntryBarr->getTerminator()->getNumSuccessors() > 1) {
+
+    for (int i = 0; i < EntryBarr->getTerminator()->getNumSuccessors(); ++i) {
+      // If we have a branch from entry barrier to exit barrier.
+      if (EntryBarr->getTerminator()->getSuccessor(i) == ExitBarr) {
+
+        // Check if loop-variable is uniform.
+        llvm::Function *F = EntryBarr->getParent();
+        llvm::BranchInst *Br =
+            dyn_cast<llvm::BranchInst>(EntryBarr->getTerminator());
+
+        if (!VUA.isUniform(F, Br->getCondition())) {
+
+          // Modify entry barrier to have a single branch, and move the
+          // conditional branch inside the PR. Note we cant simply redirect the
+          // 'passing' branch to exit block of the PR. So we have to create new
+          // exit block as well.
+
+          // The new entry block.
+          llvm::BasicBlock *NewEntryBB =
+              BasicBlock::Create(EntryBarr->getContext(), "handled_entry",
+                                 EntryBarr->getParent(), EntryBarr);
+          IRBuilder<> Builder(NewEntryBB);
+
+          // Branch to 'old' entry block.
+          Builder.CreateBr(PREntry);
+          BlocksInRegion.insert(NewEntryBB);
+
+          // The new exit block.
+          llvm::BasicBlock *NewExitBB =
+              BasicBlock::Create(EntryBarr->getContext(), "handled_exit",
+                                 EntryBarr->getParent(), ExitBarr);
+
+          Builder.SetInsertPoint(ExitBlock);
+
+          // Insert the new exit block between the old exit block and the exit
+          // barrier.
+          llvm::Instruction *Term = ExitBlock->getTerminator();
+          Builder.CreateBr(NewExitBB);
+          Term->eraseFromParent();
+          Builder.SetInsertPoint(NewExitBB);
+          Builder.CreateBr(ExitBarr);
+          BlocksInRegion.insert(NewExitBB);
+
+          // Finally, move the conditional branch from the barrier to the new
+          // entry block.
+          llvm::Instruction *BranchTerminator = EntryBarr->getTerminator();
+          BranchTerminator->removeFromParent();
+          Builder.SetInsertPoint(EntryBarr);
+          Builder.CreateBr(NewEntryBB);
+          Builder.SetInsertPoint(NewEntryBB);
+          llvm::Instruction *Terminator = NewEntryBB->getTerminator();
+
+          // This is deprecated on LLVM20.
+          BranchTerminator->insertBefore(Terminator);
+
+          Terminator->eraseFromParent();
+
+          // Redirect the 'exit barrier' branch to the new exit block.
+          BranchTerminator->replaceUsesOfWith(ExitBarr, NewExitBB);
+
+          // Update new entry/exit block.
+          PREntry = NewEntryBB;
+          ExitBlock = NewExitBB;
+        }
+      }
+    }
   }
-  assert(PREntry != nullptr);
-  assert(Exit != nullptr);
 
-#ifdef DEBUG_PR_CREATION
-  std::cerr << "## exit node: " << Exit->getName().str() << std::endl;
-#endif
-
-  return ParallelRegion::Create(BlocksInRegion, PREntry, Exit);
+  return ParallelRegion::Create(BlocksInRegion, PREntry, ExitBlock, isSGRegion);
 }
 
 static void addPredecessors(SmallVectorImpl<BasicBlock *> &V, BasicBlock *BB) {
@@ -233,131 +531,59 @@ static void addPredecessors(SmallVectorImpl<BasicBlock *> &V, BasicBlock *BB) {
 /// of basic blocks between barriers that can be freely parallelized across
 /// work-items in the work-group.
 void Kernel::getParallelRegions(
-    llvm::LoopInfo &LI, ParallelRegion::ParallelRegionVector *ParallelRegions) {
+    llvm::LoopInfo &LI, ParallelRegion::ParallelRegionVector *ParallelRegions,
+    VariableUniformityAnalysisResult &VUA) {
 
   SmallVector<BasicBlock *, 4> RegionExitBlocks;
-  getRegionExitBlocks(RegionExitBlocks);
 
-  // We need to keep track of traversed barriers to detect back edges.
-  SmallPtrSet<BasicBlock *, 8> HandledExits;
+  std::map<llvm::BasicBlock *, std::vector<llvm::BasicBlock *>> BarrierMap;
 
-  // First find all the ParallelRegions in the Function.
-  while (!RegionExitBlocks.empty()) {
+  // Get barrier mapping.
+  getRegionBarrierMapping(BarrierMap);
 
-    // We start on an exit block and process the parallel regions upwards
-    // (finding an execution trace).
-    BasicBlock *RegionExitBlock = RegionExitBlocks.back();
-    assert(RegionExitBlock != nullptr);
-    RegionExitBlocks.pop_back();
+  for (const auto &region : BarrierMap) {
 
-    ParallelRegion *PR = createParallelRegionBefore(RegionExitBlock);
-    // We can get empty PRs due to successive barriers.
-    if (PR == nullptr)
-      continue;
-    ParallelRegions->push_back(PR);
-  }
-#if 0
-    while (ParallelRegion *PR = createParallelRegionBefore(RegionExitBlock)) {
-      assert(PR != NULL && !PR->empty() &&
-             "Empty parallel region in kernel (contiguous barriers)!");
+    llvm::BasicBlock *entryBarrier = region.first;
 
-      HandledExits.insert(RegionExitBlock);
-      RegionExitBlock = NULL;
-      ParallelRegions->push_back(PR);
+    const std::vector<llvm::BasicBlock *> &exitBarriers = region.second;
 
-      BasicBlock *Entry = PR->entryBB();
-      int found_predecessors = 0;
-      BasicBlock *loop_barrier = NULL;
-      for (pred_iterator i = pred_begin(Entry), e = pred_end(Entry);
-           i != e; ++i) {
-        BasicBlock *Barrier = (*i);
-        // Check if we have found barriers that start new parallel regions.
-        if (!found_barriers.count(Barrier))
-          exit_blocks.push_back(Barrier);
-        // This should be now obsolete thanks to the dedicated entry block
-        // added always to the beginning of the parallel region. It should
-        // never be a k-loop entry block.
-        if (!found_barriers.count(Barrier)) {
-          // If this is a loop header block we might have edges from two
-          // unprocessed barriers. The one inside the loop (coming from a
-          // computation block after a branch block) should be processed
-          // first.
-          std::string bbName = "";
-          bool IsInTheSameLoop =
-              LI.getLoopFor(Barrier) != NULL && LI.getLoopFor(Entry) != NULL &&
-              LI.getLoopFor(Entry) == LI.getLoopFor(Barrier);
+    for (llvm::BasicBlock *exitBarrier : exitBarriers) {
 
-          if (IsInTheSameLoop)
-            {
-#ifdef DEBUG_PR_CREATION
-            std::cout << "### found a barrier inside a loop:" << std::endl;
-            std::cout << Barrier->getName().str() << std::endl;
-#endif
-              if (loop_barrier != NULL) {
-                // there can be multiple latches and each have their barrier,
-                // save the previously found inner loop barrier
-                exit_blocks.push_back(loop_barrier);
-              }
-              loop_barrier = Barrier;
-            }
-          else
-            {
-#ifdef DEBUG_PR_CREATION
-              std::cout << "### found a barrier:" << std::endl;
-              std::cout << Barrier->getName().str() << std::endl;
-#endif
-              exit = Barrier;
-            }
-          ++found_predecessors;
-        }
+      ParallelRegion *PR = CreateParallelRegionBetween(
+          entryBarrier, exitBarrier, ParallelRegions, VUA);
+
+      // We might have empty region.
+      if (PR == nullptr) {
+        continue;
       }
 
-      if (loop_barrier != NULL)
-        {
-          /* The secondary barrier to process in case it was a loop
-             header. Push it for later processing. */
-          if (exit != NULL) 
-            exit_blocks.push_back(exit);
-          /* always process the inner loop regions first */
-          if (!found_barriers.count(loop_barrier))
-            exit = loop_barrier;
-          loop_barrier = NULL;
-        }
+      // Check that parallel region does not exist already.
+      // This can happen if there are two different entry barriers to the
+      // parallel region.
+      bool PRexists = false;
 
-#ifdef DEBUG_PR_CREATION
-      std::cout << "### created a ParallelRegion:" << std::endl;
-      PR->dumpNames();
-      std::cout << std::endl;
-#endif
+      for (ParallelRegion::ParallelRegionVector::iterator
+               PRI = ParallelRegions->begin(),
+               PRE = ParallelRegions->end();
+           PRI != PRE; ++PRI) {
 
-      if (found_predecessors == 0)
-        {
-          /* This path has been traversed and we encountered no more
-             unprocessed regions. It means we have either traversed all
-             paths from the exit or have transformed a loop and thus 
-             encountered only a barrier that was seen (and thus
-             processed) before. */
+        ParallelRegion *PRegion = (*PRI);
+
+        if (PRegion->exitBB() == PR->exitBB()) {
+          PRexists = true;
           break;
         }
-      assert ((exit != NULL) && "Parallel region without entry barrier!");
+      }
+      if (!PRexists) {
+        ParallelRegions->push_back(PR);
+      }
     }
   }
-#endif
 
 #ifdef DEBUG_PR_CREATION
   dumpCFG(*this, this->getName().str() + ".pregions.dot", nullptr,
           ParallelRegions);
 #endif
-}
-
-ParallelRegion::ParallelRegionVector *
-Kernel::getParallelRegions(llvm::LoopInfo &LI) {
-  ParallelRegion::ParallelRegionVector *ParallelRegions =
-      new ParallelRegion::ParallelRegionVector;
-
-  getParallelRegions(LI, ParallelRegions);
-
-  return ParallelRegions;
 }
 
 void Kernel::addLocalSizeInitCode(size_t LocalSizeX, size_t LocalSizeY,
@@ -375,15 +601,15 @@ void Kernel::addLocalSizeInitCode(size_t LocalSizeX, size_t LocalSizeY,
   llvm::Type *SizeT = IntegerType::get(M->getContext(), AddressBits);
 
   GV = M->getGlobalVariable("_local_size_x");
-  if (GV != NULL) {
+  if (GV != nullptr) {
     Builder.CreateStore(ConstantInt::get(SizeT, LocalSizeX), GV);
   }
 
   GV = M->getGlobalVariable("_local_size_y");
-  if (GV != NULL)
+  if (GV != nullptr)
     Builder.CreateStore(ConstantInt::get(SizeT, LocalSizeY), GV);
 
   GV = M->getGlobalVariable("_local_size_z");
-  if (GV != NULL)
+  if (GV != nullptr)
     Builder.CreateStore(ConstantInt::get(SizeT, LocalSizeZ), GV);
 }

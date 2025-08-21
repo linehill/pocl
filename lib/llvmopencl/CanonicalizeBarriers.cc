@@ -39,6 +39,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "CanonicalizeBarriers.h"
 #include "DebugHelpers.h"
 #include "LLVMUtils.h"
+#include "SubgroupBarrier.h"
 #include "Workgroup.h"
 #include "WorkgroupBarrier.h"
 
@@ -46,7 +47,19 @@ POP_COMPILER_DIAGS
 
 #include <set>
 
-// #define DEBUG_CANON_BARRIERS
+#define DEBUG_TYPE "DeSPMD-CanonBAR"
+// Use the LLVM_DEBUG-style macros to gradually convert to LLVM-upstreamable
+// code.
+#ifdef LLVM_DEBUG
+#undef LLVM_DEBUG
+#endif
+
+#ifdef DEBUG_CANON_BARRIERS
+#define LLVM_DEBUG(X) X
+#define dbgs() std::cerr << DEBUG_TYPE << ": "
+#else
+#define LLVM_DEBUG(X)
+#endif
 
 namespace pocl {
 
@@ -56,13 +69,12 @@ static bool isolateBarrierBlocks(Function &F);
 
 using InstructionSet = std::set<llvm::Instruction *>;
 
-bool canonicalizeBarriers(Function &F) {
+bool canonicalizeBarriers(Function &F, llvm::LoopInfo &LI,
+                          llvm::DominatorTree &DT) {
 
-#ifdef DEBUG_CANON_BARRIERS
-  std::cerr << "Before CanonicalizeBarriers:\n";
-  F.dump();
-  llvm::verifyFunction(F);
-#endif
+  LLVM_DEBUG(dbgs() << "Before CanonicalizeBarriers:\n");
+  LLVM_DEBUG(F.dump());
+  LLVM_DEBUG(llvm::verifyFunction(F));
 
   dumpCFG(F, F.getName().str() + "_before_canon.dot");
 
@@ -78,6 +90,7 @@ bool canonicalizeBarriers(Function &F) {
   if (!isPureUniformBlock(Entry)) {
     SplitBlock(Entry, &(Entry->front()));
     Entry = &F.getEntryBlock();
+    LLVM_DEBUG(dbgs() << "Marking function entry block as pure uniform.\n");
     markAsPureUniformBlock(Entry, "wg-function entry");
     Entry->setName("wg-func-entry");
     Changed = true;
@@ -92,36 +105,41 @@ bool canonicalizeBarriers(Function &F) {
     FirstPRStart->setName("entry.barrier");
     WorkgroupBarrier::createAtEnd(FirstPRStart);
     Changed = true;
+    LLVM_DEBUG(
+        dbgs() << "Inserted implicit entry barrier (WG) in basic block [ "
+               << FirstPRStart->getName().str() << " ]\n");
   }
 
-  // Function exits should have barriers.
+  // Function exits should have WG barriers.
+  // Note: Even if exit has SG barrier, create new WG barrier exit.
   for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I) {
     BasicBlock *BB = &*I;
     auto *T = BB->getTerminator();
-    const bool IsExitNode =
-        (T->getNumSuccessors() == 0) && (!Barrier::hasOnlyBarrier(BB));
+    const bool IsExitNode = (T->getNumSuccessors() == 0) &&
+                            (!WorkgroupBarrier::hasOnlyWGBarrier(BB));
 
-    if (IsExitNode && !Barrier::hasOnlyBarrier(BB)) {
-      // In case the bb is already terminated with a barrier,
+    if (IsExitNode && !WorkgroupBarrier::hasOnlyWGBarrier(BB)) {
+      // In case the bb is already terminated with a WG barrier,
       // split before the barrier so we don't create an empty
       // parallel region.
       //
       // This is because the assumptions of the other passes in the
       // compilation that are
-      // a) exit node is a barrier block
+      // a) exit node is a barrier block1
       // b) there are no empty parallel regions (which would be formed
       // between the explicit barrier and the added one). */
       /// TO CLEAN: The splitting should not be needed any more.
-#ifdef DEBUG_CANON_BARRIERS
-      std::cerr << "CanonBar: isExitNode & !hasOnlyBarrier\n";
-#endif
       BasicBlock *Exit;
-      if (Barrier::endsWithBarrier(BB))
+      if (WorkgroupBarrier::endsWithWGBarrier(BB))
         Exit = SplitBlock(BB, T->getPrevNode());
       else
         Exit = SplitBlock(BB, T);
       Exit->setName("exit.barrier");
-      WorkgroupBarrier::create(Inst2InsertPt(T));
+      WorkgroupBarrier::createAtEnd(Exit);
+
+      LLVM_DEBUG(
+          dbgs() << "Inserted implicit exit barrier (WG) in basic block [ "
+                 << Exit->getName().str() << " ]\n");
       Changed = true;
     }
   }
@@ -132,22 +150,44 @@ bool canonicalizeBarriers(Function &F) {
     Changed |= MoreChanges;
   } while (MoreChanges);
 
+  // Handling isolation barriers on uniform block relies on loop analysis.
+  DT.recalculate(F);
+  LI.releaseMemory();
+  LI.analyze(DT);
+
   // Ensure regions of forced uniform blocks are isolated with a barrier
   // so they start/end parallel regions cleanly.
   for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I) {
     BasicBlock *BB = &*I;
     if (isPureUniformBlock(BB)) {
+
+      // Determine whether isolation barrier should be WG barrier or SG barrier.
+      bool UseSGBarr = false;
+
+      // Insert isolating SG barrier IF basic block is within a loop that has
+      // sg-barrier(s). Otherwise, insert isolating WG barrier.
+      if (llvm::Loop *L = LI.getLoopFor(BB)) {
+        if (SubgroupBarrier::isLoopWithSGBarrier(*L))
+          UseSGBarr = true;
+      }
+
       for (pred_iterator I = pred_begin(BB), E = pred_end(BB); I != E; ++I) {
         BasicBlock *PredBB = *I;
         if (!isPureUniformBlock(PredBB) && !Barrier::endsWithBarrier(PredBB)) {
+
           // Create the barrier to the beginning of the uniform block so
           // all predecessors can branch to it in case it's a join point.
-#if LLVM_MAJOR < 20
-          WorkgroupBarrier::create(BB->getFirstNonPHI());
-#else
-          WorkgroupBarrier::create(BB->getFirstNonPHIIt());
-#endif
+          if (UseSGBarr)
+            SubgroupBarrier::createAtStart(BB);
+          else
+            WorkgroupBarrier::createAtStart(BB);
+
           Changed = true;
+          LLVM_DEBUG(dbgs()
+                     << "Inserted implicit uniform block isolation barrier "
+                     << (UseSGBarr ? "(SG)" : "(WG)")
+                     << " at the start of basic block [ " << BB->getName().str()
+                     << " ]\n");
           continue;
         }
       }
@@ -158,12 +198,17 @@ bool canonicalizeBarriers(Function &F) {
             !Barrier::startsWithBarrier(SuccBB)) {
           // Create a barrier at the end of the uniform block which can then
           // potentially start multiple parallel regions.
-#if LLVM_MAJOR < 20
-          WorkgroupBarrier::create(BB->getTerminator());
-#else
-          WorkgroupBarrier::create(BB->getTerminator()->getIterator());
-#endif
+          if (UseSGBarr)
+            SubgroupBarrier::createAtEnd(BB);
+          else
+            WorkgroupBarrier::createAtEnd(BB);
+
           Changed = true;
+          LLVM_DEBUG(dbgs()
+                     << "Inserted implicit uniform block isolation barrier "
+                     << (UseSGBarr ? "(SG)" : "(WG)")
+                     << " at the end of basic block [ " << BB->getName().str()
+                     << " ]\n");
           continue;
         }
       }
@@ -171,7 +216,8 @@ bool canonicalizeBarriers(Function &F) {
   }
 
   // Prune empty regions: If there are two successive pure barrier blocks
-  // without side branches, remove the other one.
+  // without side branches, remove the other one (unless one of the blocks
+  // contains a subgroup-barrier).
   bool EmptyRegionDeleted = false;
   do {
     EmptyRegionDeleted = false;
@@ -183,8 +229,18 @@ bool canonicalizeBarriers(Function &F) {
 
       BasicBlock *Successor = Term->getSuccessor(0);
 
+      // Skip cases where there is an SG-barrier - WG-barrier pair
+      if (WorkgroupBarrier::hasWGBarrier(BB) &&
+          SubgroupBarrier::hasSGBarrier(Successor))
+        continue;
+      if (SubgroupBarrier::hasSGBarrier(BB) &&
+          WorkgroupBarrier::hasWGBarrier(Successor))
+        continue;
+
       if (Barrier::hasOnlyBarrier(Successor) &&
           Successor->getSinglePredecessor() == BB) {
+        LLVM_DEBUG(dbgs() << "Removing redundant barrier block [ "
+                          << BB->getName().str() << " ]\n");
         BB->replaceAllUsesWith(Successor);
         BB->eraseFromParent();
         EmptyRegionDeleted = true;
@@ -195,11 +251,9 @@ bool canonicalizeBarriers(Function &F) {
   } while (EmptyRegionDeleted);
 
   if (Changed) {
-#ifdef DEBUG_CANON_BARRIERS
-    std::cerr << "After CanonicalizeBarriers:\n";
-    F.dump();
-    llvm::verifyFunction(F);
-#endif
+    LLVM_DEBUG(dbgs() << "After CanonicalizeBarriers:\n");
+    LLVM_DEBUG(F.dump(););
+    LLVM_DEBUG(llvm::verifyFunction(F););
     dumpCFG(F, F.getName().str() + "_after_canon.dot", nullptr, nullptr);
   }
 
@@ -251,7 +305,13 @@ static bool isolateBarrierBlocks(Function &F) {
         // no need to split before barrier.
         continue;
       }
+      // This is the case where there are multiple predecessors.
+    } else {
+      // Skip if barrier is the first instruction of the block.
+      if (&BB->front() == (*I))
+        continue;
     }
+
     if ((BB == &(BB->getParent()->getEntryBlock())) && (&BB->front() == (*I)))
       continue;
 

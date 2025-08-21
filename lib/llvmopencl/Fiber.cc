@@ -89,6 +89,8 @@ private:
   // Pointer to workgroup data structure alloca.
   llvm::AllocaInst *WGStateAlloc;
 
+  void preprocessBarriers();
+
   void handleWIContextVariables();
 
   llvm::AllocaInst *allocateStorage(llvm::IRBuilder<> &Builder,
@@ -109,6 +111,50 @@ private:
 
   void generateDispatcherBody(llvm::IRBuilder<> *Builder);
 };
+
+/// Move conditional branches out of the barrier blocks.
+///
+/// Results in barriers having a single successor block.
+/// This way it is easier to keep track where the scheduled
+/// work-item should jump next (which are the 'after barrier' blocks).
+void FiberImpl::preprocessBarriers() {
+
+#ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
+  dumpCFG(*F, F->getName().str() + "_fiber_before_preprocessing_barriers.dot",
+          nullptr, nullptr);
+#endif
+
+  std::vector<llvm::BasicBlock *> BarriersToPreprocess;
+
+  // Collect barrier blocks that have a conditional branch.
+  for (auto &Block : *F) {
+    if (Barrier::hasBarrier(&Block))
+      if (Block.getTerminator()->getNumSuccessors() > 1)
+        BarriersToPreprocess.push_back(&Block);
+  }
+
+  // For each barrier with a conditional branch, create a single successor block
+  // and move the conditional branch there.
+  for (llvm::BasicBlock *Barr : BarriersToPreprocess) {
+    llvm::BasicBlock *SingleSuccessor =
+        llvm::BasicBlock::Create(F->getContext(), "BranchRedirect", F);
+    llvm::IRBuilder<> BranchBuilder(SingleSuccessor);
+
+    llvm::BranchInst *Terminator =
+        llvm::cast<llvm::BranchInst>(Barr->getTerminator());
+    BranchBuilder.CreateCondBr(Terminator->getCondition(),
+                               Terminator->getSuccessor(0),
+                               Terminator->getSuccessor(1));
+    Terminator->eraseFromParent();
+    BranchBuilder.SetInsertPoint(Barr);
+    BranchBuilder.CreateBr(SingleSuccessor);
+  }
+
+#ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
+  dumpCFG(*F, F->getName().str() + "_fiber_after_preprocessing_barriers.dot",
+          nullptr, nullptr);
+#endif
+}
 
 /// Handles context save/restore of workitem variables.
 ///
@@ -219,6 +265,8 @@ void FiberImpl::initializeLocalIds(BasicBlock *Entry, IRBuilder<> *Builder) {
     if (GvXyz != NULL)
       Builder->CreateStore(llvm::ConstantInt::getNullValue(ST), GvXyz);
   }
+
+  Builder->CreateStore(ConstantInt::get(ST, 0), LocLinID);
 }
 
 /// Generates LLVM IR for calculating the size of workgroup.
@@ -290,9 +338,12 @@ void FiberImpl::handleBarrierReached(llvm::IRBuilder<> *Builder,
         Builder->CreateGEP(NextJumpIndices->getAllocatedType(), NextJumpIndices,
                            {LinearID}, "exit_block_ptr");
   } else {
-    NextBlockPtr = Builder->CreateGEP(
-        NextJumpIndices->getAllocatedType(), NextJumpIndices,
-        {ZeroIndex, LocalZ, LocalY, LocalX}, "exit_block_ptr");
+    llvm::Value *LinearIndex = Builder->CreateLoad(ST, LocLinID);
+    llvm::Value *Zero = llvm::ConstantInt::get(ST, 0);
+    // llvm::Value *LinearID = getLinearWiIndex(*Builder, M, nullptr, WIH);
+    NextBlockPtr =
+        Builder->CreateGEP(NextJumpIndices->getAllocatedType(), NextJumpIndices,
+                           {Zero, LinearIndex}, "exit_block_ptr");
   }
 
   llvm::Value *NextBlockIdx =
@@ -335,7 +386,7 @@ void FiberImpl::processBarriers() {
 
       // This is the exit block with a barrier.
       // Create additional block to prevent early returns.
-      // This way all wis pass through the 'old' exit block.
+      // This way all WIs pass through the 'old' exit block.
     } else if (BBlock->getTerminator()->getNumSuccessors() == 0) {
 
       // New exit block.
@@ -463,20 +514,12 @@ void FiberImpl::initializeWGDataStruct(llvm::IRBuilder<> *Builder) {
 llvm::AllocaInst *FiberImpl::allocateStorage(llvm::IRBuilder<> &Builder,
                                              std::string VarName,
                                              llvm::Value *Nwi) {
-  // Dummy LoadInst. Something like this is required to use WIHandler's
-  // allocation functionality.
-  llvm::Value *DummyValue =
-      Builder.CreateLoad(ST, LocalIdIterators[0], "dummy");
-  llvm::LoadInst *DummyInst = llvm::dyn_cast<llvm::LoadInst>(DummyValue);
-  bool PaddingAdded = false;
 
-  // Use WIHandler's allocation machinery to create a proper alloca.
-  // This will handle dynamic/non-dynamic cases.
-  llvm::AllocaInst *BlockIDArray = createAlignedAndPaddedContextAlloca(
-      DummyInst, DummyInst, VarName, PaddingAdded);
-
-  // This is not needed anymore.
-  DummyInst->eraseFromParent();
+  // NOTE: This does not handle dynamic WG sizes
+  llvm::Type *ContextArrayType =
+      ArrayType::get(ST, WGLocalSizeX * WGLocalSizeY * WGLocalSizeZ);
+  llvm::AllocaInst *BlockIDArray =
+      Builder.CreateAlloca(ContextArrayType, nullptr, VarName);
 
   llvm::Value *Zero = Builder.getInt8(0);
   llvm::MaybeAlign MaybeAlign(BlockIDArray->getAlign().value());
@@ -512,6 +555,8 @@ void FiberImpl::generateDispatcherBody(llvm::IRBuilder<> *EntryBlockBuilder) {
   // Retrieve the return value, i.e. WI id.
   llvm::Value *LinearWI = DBuilder.CreateCall(SchedFunc, {WGStateAlloc});
   LinearWI->setName("next_linear_wi");
+
+  DBuilder.CreateStore(LinearWI, LocLinID);
 
   // 'Unlinearize' the WI id.
   // X
@@ -574,15 +619,17 @@ void FiberImpl::generateDispatcherBody(llvm::IRBuilder<> *EntryBlockBuilder) {
 
   // Pointer to next block for current WI.
   llvm::Value *NextBlockPtr;
+
   if (WGDynamicLocalSize) {
     llvm::Value *LinearID = getLinearWiIndex(DBuilder, M, nullptr, WIH);
     NextBlockPtr =
         DBuilder.CreateGEP(NextJumpIndices->getAllocatedType(), NextJumpIndices,
                            {LinearID}, "exit_block_ptr");
   } else {
+    llvm::Value *Zero = llvm::ConstantInt::get(ST, 0);
     NextBlockPtr =
         DBuilder.CreateGEP(NextJumpIndices->getAllocatedType(), NextJumpIndices,
-                           {ZeroIndex, LocZ, LocY, LocX}, "exit_block_ptr");
+                           {Zero, LinearWI}, "exit_block_ptr");
   }
 
   // Retrieve next block index.
@@ -610,6 +657,9 @@ bool FiberImpl::processFunction(llvm::Function &F) {
   Int64Type = llvm::Type::getInt64Ty(M->getContext());
 
   llvm::BasicBlock *EntryBlock = nullptr;
+
+  // First preprocess barriers so that they only have single successor.
+  preprocessBarriers();
 
   // Ger pointer to the entry block and collect the blocks that have barriers.
   for (auto &Block : F) {

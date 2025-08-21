@@ -1,5 +1,5 @@
 /* Test case for diverging subgroups. Work group method should allow
-   synchronization on subgroup basis with subgroup barrier. 
+   synchronization on subgroup basis with subgroup barrier.
 
    Copyright (c) 2025 Taio Nevalainen / Tampere University
 
@@ -27,9 +27,9 @@
 __attribute ((intel_reqd_sub_group_size (SG_SIZE))) __kernel void
 test_kernel (void)
 {
-  int gid_x = get_global_id (0);
-  int gid_y = get_global_id (1);
-  int gid_z = get_global_id (2);
+  int gid_x = get_local_id (0);
+  int gid_y = get_local_id (1);
+  int gid_z = get_local_id (2);
 
   int sg_id = get_sub_group_id ();
   int sg_local_id = get_sub_group_local_id ();

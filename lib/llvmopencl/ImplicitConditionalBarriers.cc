@@ -35,6 +35,7 @@ IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
 #include "ImplicitConditionalBarriers.h"
 #include "ImplicitLoopBarriers.h"
 #include "LLVMUtils.h"
+#include "SubgroupBarrier.h"
 #include "VariableUniformityAnalysis.h"
 #include "VariableUniformityAnalysisResult.hh"
 #include "Workgroup.h"
@@ -45,6 +46,18 @@ POP_COMPILER_DIAGS
 #include <iostream>
 
 #include "pocl.h"
+
+#define DEBUG_TYPE "DeSPMD-ICB"
+
+#ifdef ENABLE_DEBUG
+#undef ENABLE_DEBUG
+#endif
+
+#ifdef DEBUG_COND_BARRIERS
+#define ENABLE_DEBUG
+#endif
+
+#include "TemporaryLLVMDebugMacros.hh"
 
 namespace pocl {
 
@@ -92,20 +105,17 @@ bool addImplicitBranchBarriers(llvm::Function &F, llvm::LoopInfo &LI,
 
     // Unconditional barrier postdominates the entry node.
     if (PDT.dominates(&BB, &F.getEntryBlock())) {
-#ifdef DEBUG_COND_BARRIERS
-      std::cerr << "### BB postdominates the entry block" << std::endl;
-      BB.dump();
-#endif
+      LLVM_DEBUG(dbgs() << "BB postdominates the entry block\n");
+      LLVM_DEBUG(BB.dump());
       continue;
     }
     ConditionalBarriers.push_back(&BB);
   }
 
   for (BasicBlock *BB : ConditionalBarriers) {
-#ifdef DEBUG_COND_BARRIERS
-    std::cerr << "### handling a conditional barrier in basic block:\n";
-    BB->dump();
-#endif
+    LLVM_DEBUG(dbgs() << "Handling a conditional barrier in basic block:\n");
+    LLVM_DEBUG(BB->dump());
+
     // Trace upwards from the barrier until one encounters another
     // barrier or the split point that makes the barrier conditional.
     // In case of the latter, add a new barrier to both branches of the split
@@ -114,19 +124,17 @@ bool addImplicitBranchBarriers(llvm::Function &F, llvm::LoopInfo &LI,
     // BB before which to inject the barrier.
     BasicBlock *Pos = BB;
     if (pred_begin(BB) == pred_end(BB)) {
-#ifdef DEBUG_COND_BARRIERS
-      std::cerr << "BB before which to inject the barrier:\n";
-      BB->dump();
-#endif
+      LLVM_DEBUG(dbgs() << "BB before which to inject the barrier:\n");
+      LLVM_DEBUG(BB->dump());
+
       assert (pred_begin(BB) == pred_end(BB));
     }
     BasicBlock *Pred = firstNonBackedgePredecessor(BB, DT);
 
     while (!Barrier::hasOnlyBarrier(Pred) && PDT.dominates(BB, Pred)) {
 
-#ifdef DEBUG_COND_BARRIERS
-      std::cerr << "### looking at BB " << Pred->getName().str() << std::endl;
-#endif
+      LLVM_DEBUG(dbgs() << "Looking at BB " << Pred->getName().str() << "\n");
+
       Pos = Pred;
       // If our BB post dominates the given block, we know it is not the
       // branching block that makes the barrier conditional.
@@ -136,28 +144,37 @@ bool addImplicitBranchBarriers(llvm::Function &F, llvm::LoopInfo &LI,
     }
 
     if (Barrier::hasOnlyBarrier(Pos)) continue;
-    // Inject a barrier at the beginning of the BB and let the
-    // CanonicalizeBarrier to clean it up (split to a separate BB).
-
-    // mri-q of parboil breaks in case injected at the beginning
-    // TODO: investigate. It might related to the alloca-converted
-    // PHIs. It has a loop that is autoconverted to a b-loop and the
-    // conditional barrier is inserted after the loop short cut check.
-    WorkgroupBarrier::createAtStart(Pos);
 
     Changed = true;
 
-#ifdef DEBUG_COND_BARRIERS
-    std::cerr << "### added an implicit barrier to the BB" << std::endl;
-    Pos->dump();
-#endif
     if (BasicBlock *Source = Pos->getSinglePredecessor()) {
-      WorkgroupBarrier::createAtEnd(Source);
-#ifdef DEBUG_COND_BARRIERS
-      std::cerr << "### added an implicit barrier to a source of the BB as well"
-                << std::endl;
-      Source->dump();
-#endif
+
+      if (!Barrier::hasBarrier(Source)) {
+        if (WorkgroupBarrier::hasWGBarrier(BB))
+          WorkgroupBarrier::createAtEnd(Source);
+        else
+          SubgroupBarrier::createAtEnd(Source);
+      }
+
+      // Add implicit barrier to merge block as well.
+      BasicBlock *MergeBlock = PDT.getNode(Source)->getIDom()->getBlock();
+      if (MergeBlock) {
+
+        if (!Barrier::hasBarrier(MergeBlock)) {
+
+          if (WorkgroupBarrier::hasWGBarrier(BB))
+            WorkgroupBarrier::createAtStart(MergeBlock);
+          else
+            SubgroupBarrier::createAtStart(MergeBlock);
+
+          // If the conditional barrier is an SG-barrier, but the merge block
+          // already contains a WG-barrier, change it to an SG-barrier.
+        } else if (SubgroupBarrier::hasSGBarrier(BB) &&
+                   WorkgroupBarrier::hasWGBarrier(MergeBlock)) {
+
+          switchBarrierGranularity(MergeBlock);
+        }
+      }
     }
   }
 
@@ -165,15 +182,11 @@ bool addImplicitBranchBarriers(llvm::Function &F, llvm::LoopInfo &LI,
   dumpCFG(F, F.getName().str() + "_after_implicit_cond_barriers.dot", nullptr,
           nullptr);
 #endif
-
-  Changed = pocl::canonicalizeBarriers(F) || Changed;
   if (Changed) {
-#ifdef DEBUG_COND_BARRIERS
-    std::cerr << "### After ImplicitConditionalBarriers " << std::endl;
-    F.dump();
-    dumpCFG(F, F.getName().str() + "_after_cond_barriers.dot", nullptr,
-            nullptr);
-#endif
+    LLVM_DEBUG(dbgs() << "After ImplicitConditionalBarriers\n");
+    LLVM_DEBUG(F.dump());
+    LLVM_DEBUG(dumpCFG(F, F.getName().str() + "_after_cond_barriers.dot",
+                       nullptr, nullptr));
   }
   return Changed;
 }

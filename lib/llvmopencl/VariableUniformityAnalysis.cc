@@ -535,7 +535,7 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
          ui != ue; ++ui) {
       llvm::Instruction *user = cast<Instruction>(ui->getUser());
       if (user == NULL) continue;
-      
+
       llvm::StoreInst *store = dyn_cast<llvm::StoreInst>(user);
       if (store) {
         if (!isUniform(F, store->getValueOperand()) ||
@@ -544,11 +544,12 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
 #ifdef DEBUG_UNIFORMITY_ANALYSIS
             std::cerr << "### alloca was written in a non-uniform BB" << std::endl;
             store->getParent()->dump();
-            /* TODO: This is a problematic chicken-egg situation because the 
-               BB uniformity check ends up analyzing allocas in phi-removed code:
-               the loop constructs refer to these allocas and at that point we
-               do not yet know if the BB itself is uniform. This leads to not
-               being able to detect loop iteration variables as uniform. */
+            /* TODO: This is a problematic chicken-egg situation because the
+               BB uniformity check ends up analyzing allocas in phi-removed
+               code: the loop constructs refer to these allocas and at that
+               point we do not yet know if the BB itself is uniform. This leads
+               to not being able to detect loop iteration variables as uniform.
+             */
 #endif
           }
           isUniformAlloca = false;
@@ -588,7 +589,7 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
       uniformityCache_ = backupCache;
     }
     setUniform(F, V, isUniformAlloca);
-    
+
     return isUniformAlloca;
   }
 

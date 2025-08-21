@@ -38,7 +38,6 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "AllocasToEntry.h"
 #include "AutomaticLocals.h"
 #include "Barrier.h"
-#include "BarrierTailReplication.h"
 #include "CanonicalizeBarriers.h"
 #include "DeSPMD.h"
 #include "DebugHelpers.h"
@@ -60,9 +59,11 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "ParallelRegion.h"
 #include "SanitizeUBofDivRem.h"
 #include "SubCFGFormation.h"
+#include "SubgroupBarrier.h"
 #include "UnreachablesToReturns.h"
 #include "VariableUniformityAnalysis.h"
 #include "Workgroup.h"
+#include "WorkgroupBarrier.h"
 #include "WorkitemHandlerChooser.h"
 #include "WorkitemLoops.h"
 
@@ -150,58 +151,54 @@ std::string tryDemangleWithoutAddressSpaces(const std::string& MangledName) {
  * Only checks if the first operand of the metadata is the kernel
  * function.
  */
-void
-regenerate_kernel_metadata(llvm::Module &M, FunctionMapping &kernels)
-{
+void regenerateKernelMetadata(llvm::Module &M, FunctionMapping &kernels) {
   // reproduce the opencl.kernel_wg_size_info metadata
-  NamedMDNode *WGSizes = M.getNamedMetadata("opencl.kernel_wg_size_info");
-  if (WGSizes != NULL && WGSizes->getNumOperands() > 0)
-    {
-      for (std::size_t mni = 0; mni < WGSizes->getNumOperands(); ++mni)
-        {
-          MDNode *wgsizeMD = dyn_cast<MDNode>(WGSizes->getOperand(mni));
-          for (FunctionMapping::const_iterator i = kernels.begin(),
-                 e = kernels.end(); i != e; ++i)
-            {
-              Function *OldKernel = (*i).first;
-              Function *NewKernel = (*i).second;
-              Function *FuncFromMD;
-              FuncFromMD = dyn_cast<Function>(
-                dyn_cast<ValueAsMetadata>(wgsizeMD->getOperand(0))->getValue());
-              if (OldKernel == NewKernel || wgsizeMD->getNumOperands() == 0 ||
-                  FuncFromMD != OldKernel)
-                continue;
-              // found a wg size metadata that points to the old kernel, copy its
-              // operands except the first one to a new MDNode
-              SmallVector<Metadata*, 8> operands;
-              operands.push_back(llvm::ValueAsMetadata::get(NewKernel));
-              for (unsigned opr = 1; opr < wgsizeMD->getNumOperands(); ++opr) {
-                  operands.push_back(wgsizeMD->getOperand(opr));
-              }
-              MDNode *new_wg_md = MDNode::get(M.getContext(), operands);
-              WGSizes->addOperand(new_wg_md);
-            }
+
+  NamedMDNode *WgSizes = M.getNamedMetadata("opencl.kernel_wg_size_info");
+  if (WgSizes != NULL && WgSizes->getNumOperands() > 0) {
+    for (std::size_t Mni = 0; Mni < WgSizes->getNumOperands(); ++Mni) {
+      MDNode *WgSizeMD = dyn_cast<MDNode>(WgSizes->getOperand(Mni));
+      for (FunctionMapping::const_iterator I = kernels.begin(),
+                                           E = kernels.end();
+           I != E; ++I) {
+        Function *OldKernel = (*I).first;
+        Function *NewKernel = (*I).second;
+        Function *FuncFromMd;
+        FuncFromMd = dyn_cast<Function>(
+            dyn_cast<ValueAsMetadata>(WgSizeMD->getOperand(0))->getValue());
+        if (OldKernel == NewKernel || WgSizeMD->getNumOperands() == 0 ||
+            FuncFromMd != OldKernel)
+          continue;
+        // found a wg size metadata that points to the old kernel, copy its
+        // operands except the first one to a new MDNode
+        SmallVector<Metadata *, 8> Operands;
+        Operands.push_back(llvm::ValueAsMetadata::get(NewKernel));
+        for (unsigned Opr = 1; Opr < WgSizeMD->getNumOperands(); ++Opr) {
+          Operands.push_back(WgSizeMD->getOperand(Opr));
         }
+        MDNode *NewWgMd = MDNode::get(M.getContext(), Operands);
+        WgSizes->addOperand(NewWgMd);
+      }
     }
+  }
 
   // reproduce the opencl.kernels metadata, if it exists
   // unconditionally adding opencl.kernels confuses the
   // metadata parser in pocl_llvm_metadata.cc, which uses
   // "opencl.kernels" to distinguish old SPIR format from new
-  NamedMDNode *nmd = M.getNamedMetadata("opencl.kernels");
-  if (nmd) {
-    M.eraseNamedMetadata(nmd);
+  NamedMDNode *Nmd = M.getNamedMetadata("opencl.kernels");
+  if (Nmd) {
+    M.eraseNamedMetadata(Nmd);
 
-    nmd = M.getOrInsertNamedMetadata("opencl.kernels");
-    for (FunctionMapping::const_iterator i = kernels.begin(),
-         e = kernels.end();
-       i != e; ++i) {
-      MDNode *md = MDNode::get(M.getContext(), ArrayRef<Metadata *>(
-        llvm::ValueAsMetadata::get((*i).second)));
-      nmd->addOperand(md);
+    Nmd = M.getOrInsertNamedMetadata("opencl.kernels");
+    for (FunctionMapping::const_iterator I = kernels.begin(), E = kernels.end();
+         I != E; ++I) {
+      MDNode *Md = MDNode::get(
+          M.getContext(),
+          ArrayRef<Metadata *>(llvm::ValueAsMetadata::get((*I).second)));
+      Nmd->addOperand(Md);
     }
   }
-
 }
 
 // Recursively descend a Value's users and convert any constant expressions into
@@ -368,18 +365,18 @@ bool isLocalMemFunctionArg(llvm::Function *F, unsigned ArgIndex) {
 
 bool isProgramScopeVariable(GlobalVariable &GVar, unsigned DeviceLocalAS) {
 
-  bool retval = false;
+  bool RetVal = false;
 
   // no need to handle constants
   if (GVar.isConstant()) {
-    retval = false;
+    RetVal = false;
     goto END;
   }
 
   // program-scope variables from direct Clang compilation have external
   // linkage with Target AS numbers
   if (GVar.getLinkage() == GlobalValue::LinkageTypes::ExternalLinkage) {
-    retval = true;
+    RetVal = true;
     goto END;
   }
 
@@ -404,7 +401,7 @@ bool isProgramScopeVariable(GlobalVariable &GVar, unsigned DeviceLocalAS) {
       if (!GVar.hasName()) {
         GVar.setName("__anonymous_gvar");
       }
-      retval = true;
+      RetVal = true;
     }
 
     // variables in local AS cannot have initializer (OpenCL standard).
@@ -422,7 +419,7 @@ bool isProgramScopeVariable(GlobalVariable &GVar, unsigned DeviceLocalAS) {
         if (!GVar.hasName()) {
           GVar.setName("__anonymous_gvar");
         }
-        retval = true;
+        RetVal = true;
       }
     }
   }
@@ -434,7 +431,7 @@ END:
             << " is ProgramScope variable: " << retval << "\n";
 
 #endif
-  return retval;
+  return RetVal;
 }
 
 bool isPureUniformBlock(BasicBlock *BB) {
@@ -469,9 +466,9 @@ void setFuncArgAddressSpaceMD(llvm::Function *F, unsigned ArgIndex,
   LLVMContext &C = F->getContext();
 
   llvm::SmallVector<llvm::Metadata *, 8> AddressQuals;
-  for (unsigned i = 0; i < ArgIndex; ++i) {
+  for (unsigned I = 0; I < ArgIndex; ++I) {
     AddressQuals.push_back(createConstantIntMD(
-        C, OldMD != nullptr ? getConstantIntMDValue(OldMD->getOperand(i))
+        C, OldMD != nullptr ? getConstantIntMDValue(OldMD->getOperand(I))
                             : SPIR_ADDRESS_SPACE_GLOBAL));
   }
   AddressQuals.push_back(createConstantIntMD(C, AS));
@@ -496,7 +493,7 @@ void markFunctionAlwaysInline(llvm::Function *F) {
 // should be processed by the kernel compiler.
 bool isKernelToProcess(const llvm::Function &F) {
 
-  const Module *m = F.getParent();
+  const Module *M = F.getParent();
 
   if (F.getMetadata("kernel_arg_access_qual") &&
       F.getMetadata("pocl_generated") == nullptr)
@@ -509,11 +506,11 @@ bool isKernelToProcess(const llvm::Function &F) {
   if (F.getName().starts_with("@llvm"))
     return false;
 
-  NamedMDNode *kernels = m->getNamedMetadata("opencl.kernels");
-  if (kernels == NULL) {
+  NamedMDNode *Kernels = M->getNamedMetadata("opencl.kernels");
+  if (Kernels == NULL) {
 
     std::string KernelName;
-    bool HasMeta = getModuleStringMetadata(*m, "KernelName", KernelName);
+    bool HasMeta = getModuleStringMetadata(*M, "KernelName", KernelName);
 
     if (HasMeta && KernelName.size() && F.getName().str() == KernelName)
       return true;
@@ -521,13 +518,13 @@ bool isKernelToProcess(const llvm::Function &F) {
     return false;
   }
 
-  for (unsigned i = 0, e = kernels->getNumOperands(); i != e; ++i) {
-    if (kernels->getOperand(i)->getOperand(0) == NULL)
+  for (unsigned I = 0, E = Kernels->getNumOperands(); I != E; ++I) {
+    if (Kernels->getOperand(I)->getOperand(0) == NULL)
       continue; // globaldce might have removed uncalled kernels
-    Function *k = cast<Function>(
-        dyn_cast<ValueAsMetadata>(kernels->getOperand(i)->getOperand(0))
+    Function *K = cast<Function>(
+        dyn_cast<ValueAsMetadata>(Kernels->getOperand(I)->getOperand(0))
             ->getValue());
-    if (&F == k)
+    if (&F == K)
       return true;
   }
 
@@ -537,16 +534,16 @@ bool isKernelToProcess(const llvm::Function &F) {
 // Returns true in case the given function is a kernel with work-group
 // barriers inside it.
 bool hasWorkgroupBarriers(const llvm::Function &F) {
-  for (llvm::Function::const_iterator i = F.begin(), e = F.end(); i != e; ++i) {
-    const llvm::BasicBlock *bb = &*i;
-    if (pocl::Barrier::hasBarrier(bb)) {
+  for (llvm::Function::const_iterator I = F.begin(), E = F.end(); I != E; ++I) {
+    const llvm::BasicBlock *BB = &*I;
+    if (pocl::Barrier::hasBarrier(BB)) {
 
       // Ignore the implicit entry and exit barriers.
-      if (pocl::Barrier::hasOnlyBarrier(bb) && bb == &F.getEntryBlock())
+      if (pocl::Barrier::hasOnlyBarrier(BB) && BB == &F.getEntryBlock())
         continue;
 
-      if (pocl::Barrier::hasOnlyBarrier(bb) &&
-          bb->getTerminator()->getNumSuccessors() == 0)
+      if (pocl::Barrier::hasOnlyBarrier(BB) &&
+          BB->getTerminator()->getNumSuccessors() == 0)
         continue;
 
       return true;
@@ -581,9 +578,6 @@ bool areAllGvarsDefined(llvm::Module *Program, std::string &log,
         FoundAllReferences = false;
       } else {
         GVarSet.insert(&GVar);
-        // std::cerr << "**************************\n";
-        // GVar.dump();
-        // std::cerr << "**************************\n";
       }
     }
   }
@@ -656,6 +650,11 @@ const char *WorkgroupVariablesArray[NumWorkgroupVariables+1] = {"_local_id_x",
                                     "_global_id_z",
                                     "_pocl_sub_group_size",
                                     "_local_linear_id",
+                                    "_sg_intra_counter",
+                                    "_sg_inter_counter",
+                                    "_n_x_lanes",
+                                    "_sg_y_lower_limit",
+                                    "_sg_y_upper_limit",
                                     PoclGVarBufferName,
                                     NULL};
 
@@ -859,6 +858,33 @@ bool removeMetadataFromClangStubs(llvm::Module *Program) {
 #endif
 #endif
   return true;
+}
+
+/// Replace subgroup barrier with workgroup barrier, and vice versa.
+///
+/// \param BB the basic block in which replacement happens.
+void switchBarrierGranularity(llvm::BasicBlock *Bb) {
+
+  assert(pocl::Barrier::hasBarrier(Bb) &&
+         "Basic block does not contain a barrier to swap!");
+
+  bool HasSGBarr = SubgroupBarrier::hasSGBarrier(Bb);
+
+  if (HasSGBarr)
+    WorkgroupBarrier::createAtEnd(Bb);
+  else
+    SubgroupBarrier::createAtEnd(Bb);
+
+  llvm::Instruction *BarrierToRemove;
+
+  for (auto It = Bb->begin(); It != Bb->end(); ++It) {
+    llvm::Instruction *Current = &*It;
+    if (isa<SubgroupBarrier>(Current) && HasSGBarr)
+      BarrierToRemove = Current;
+    else if (isa<WorkgroupBarrier>(Current) && !HasSGBarr)
+      BarrierToRemove = Current;
+  }
+  BarrierToRemove->eraseFromParent();
 }
 
 } // namespace pocl

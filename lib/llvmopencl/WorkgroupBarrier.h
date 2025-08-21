@@ -28,7 +28,8 @@
 namespace pocl {
 // Class for work-group barrier instructions, inherits from barrier class.
 class WorkgroupBarrier : public Barrier {
-public:
+
+private:
   /// Ensures there is a workgroup barrier call in the basic block before
   /// the given instruction.
   ///
@@ -55,6 +56,20 @@ public:
       (llvm::CallInst::Create(F, "", InsertBefore));
   }
 
+public:
+  static bool isLoopWithWGBarrier(llvm::Loop &L) {
+    for (llvm::Loop::block_iterator i = L.block_begin(), e = L.block_end();
+         i != e; ++i) {
+      for (llvm::BasicBlock::iterator j = (*i)->begin(), e = (*i)->end();
+           j != e; ++j) {
+        if (llvm::isa<WorkgroupBarrier>(j)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
 #if LLVM_MAJOR < 20
   static WorkgroupBarrier *createAtEnd(llvm::BasicBlock *BB) {
     return create(BB->getTerminator());
@@ -77,7 +92,7 @@ public:
 
   static bool classof(const Barrier *) { return true; }
   static bool classof(const llvm::CallInst *C) {
-    return C->getCalledFunction() != NULL &&
+    return C->getCalledFunction() != nullptr &&
            C->getCalledFunction()->getName() == WGBARRIER_FUNCTION_NAME;
   }
   static bool classof(const Instruction *I) {
@@ -97,6 +112,21 @@ public:
       if (llvm::isa<WorkgroupBarrier>(I))
         return true;
     return false;
+  }
+
+  // Returns true in case the given basic block ends with a workgroup barrier,
+  // that is, contains only a terminator instruction after a workgroup barrier
+  // call.
+  static bool endsWithWGBarrier(const llvm::BasicBlock *BB) {
+    const llvm::Instruction *Inst = BB->getTerminator();
+    if (Inst == nullptr)
+      return false;
+    return BB->size() > 1 && Inst->getPrevNode() != nullptr &&
+           llvm::isa<WorkgroupBarrier>(Inst->getPrevNode());
+  }
+
+  static bool hasOnlyWGBarrier(const llvm::BasicBlock *BB) {
+    return endsWithWGBarrier(BB) && BB->size() == 2;
   }
 };
 

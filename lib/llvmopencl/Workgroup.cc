@@ -47,7 +47,6 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 POP_COMPILER_DIAGS
 
 #include "Barrier.h"
-#include "BarrierTailReplication.h"
 #include "CanonicalizeBarriers.h"
 #include "DebugHelpers.h"
 #include "KernelCompilerUtils.h"
@@ -406,7 +405,7 @@ bool WorkgroupImpl::runOnModule(Module &M, llvm::FunctionAnalysisManager &FAM) {
   }
 
   if (!DeviceUsingArgBufferLauncher && DeviceIsSPMD) {
-    regenerate_kernel_metadata(M, KernelsMap);
+    regenerateKernelMetadata(M, KernelsMap);
   }
 
   // Delete the old kernels. They are inlined into the wrapper, and
@@ -599,6 +598,11 @@ bool WorkgroupImpl::runOnModule(Module &M, llvm::FunctionAnalysisManager &FAM) {
             pocl_get_int_option("POCL_VECTORIZER_PREFER_VECTOR_WIDTH", 0)) {
       F.addFnAttr("prefer-vector-width", std::to_string(VecWidth));
     }
+
+#ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
+    /* dumpCFG(F, F.getName().str() + "_after_workgroup.dot", nullptr,
+            nullptr); */
+#endif
   }
 
   return true;
@@ -1198,7 +1202,6 @@ void WorkgroupImpl::privatizeContext(Function *F) {
 
   // Privatize _global_id_* to private allocas.
   // They are referred to by WorkItemLoops to fetch the global id directly.
-
   CreateBuilder(Builder, F->getEntryBlock());
 
   // Localize the local linear ID.
@@ -1209,6 +1212,79 @@ void WorkgroupImpl::privatizeContext(Function *F) {
       for (BasicBlock::iterator ii = i->begin(), ee = i->end(); ii != ee;
            ++ii) {
         ii->replaceUsesOfWith(LocalLinearID, LocalLLID);
+      }
+    }
+  }
+
+  // Localize the subgroup intra-loop counter.
+  if (GlobalVariable *GlobalSGIntraCounter =
+          M->getGlobalVariable(SG_INTRA_C_NAME)) {
+    Value *LocalSGIntraCounter =
+        Builder.CreateAlloca(SizeT, 0, SG_INTRA_C_NAME);
+
+    for (Function::iterator i = F->begin(), e = F->end(); i != e; ++i) {
+      for (BasicBlock::iterator ii = i->begin(), ee = i->end(); ii != ee;
+           ++ii) {
+        ii->replaceUsesOfWith(GlobalSGIntraCounter, LocalSGIntraCounter);
+      }
+    }
+  }
+
+  // Localize the subgroup inter-loop counter.
+  if (GlobalVariable *GlobalSGInterCounter =
+          M->getGlobalVariable(SG_INTER_C_NAME)) {
+    Value *LocalSGInterCounter =
+        Builder.CreateAlloca(SizeT, 0, SG_INTER_C_NAME);
+
+    for (Function::iterator i = F->begin(), e = F->end(); i != e; ++i) {
+      for (BasicBlock::iterator ii = i->begin(), ee = i->end(); ii != ee;
+           ++ii) {
+        ii->replaceUsesOfWith(GlobalSGInterCounter, LocalSGInterCounter);
+      }
+    }
+  }
+
+  // Localize the subgroup inter-loop counter.
+  if (GlobalVariable *GlobalSGLLID = M->getGlobalVariable(SG_LLID_NAME)) {
+    Value *LocalSGLLID = Builder.CreateAlloca(SizeT, 0, SG_LLID_NAME);
+
+    for (Function::iterator i = F->begin(), e = F->end(); i != e; ++i) {
+      for (BasicBlock::iterator ii = i->begin(), ee = i->end(); ii != ee;
+           ++ii) {
+        ii->replaceUsesOfWith(GlobalSGLLID, LocalSGLLID);
+      }
+    }
+  }
+
+  if (GlobalVariable *GlobalNX = M->getGlobalVariable("_n_x_lanes")) {
+    Value *LocalNX = Builder.CreateAlloca(SizeT, 0, "_n_x_lanes");
+
+    for (Function::iterator i = F->begin(), e = F->end(); i != e; ++i) {
+      for (BasicBlock::iterator ii = i->begin(), ee = i->end(); ii != ee;
+           ++ii) {
+        ii->replaceUsesOfWith(GlobalNX, LocalNX);
+      }
+    }
+  }
+
+  if (GlobalVariable *GlobalYL = M->getGlobalVariable("_sg_y_lower_limit")) {
+    Value *LocalYL = Builder.CreateAlloca(SizeT, 0, "_sg_y_lower_limit");
+
+    for (Function::iterator i = F->begin(), e = F->end(); i != e; ++i) {
+      for (BasicBlock::iterator ii = i->begin(), ee = i->end(); ii != ee;
+           ++ii) {
+        ii->replaceUsesOfWith(GlobalYL, LocalYL);
+      }
+    }
+  }
+
+  if (GlobalVariable *GlobalYU = M->getGlobalVariable("_sg_y_upper_limit")) {
+    Value *LocalYU = Builder.CreateAlloca(SizeT, 0, "_sg_y_upper_limit");
+
+    for (Function::iterator i = F->begin(), e = F->end(); i != e; ++i) {
+      for (BasicBlock::iterator ii = i->begin(), ee = i->end(); ii != ee;
+           ++ii) {
+        ii->replaceUsesOfWith(GlobalYU, LocalYU);
       }
     }
   }
@@ -1360,7 +1436,7 @@ void WorkgroupImpl::privatizeContext(Function *F) {
           PC_NUM_GROUPS));
 
   // Initialize the SG size global and privatize it.
-  if (M->getGlobalVariable("_pocl_sub_group_size") != nullptr) {
+  if (M->getGlobalVariable(SG_S_NAME) != nullptr) {
     Value *SGSize = getRequiredSubgroupSize(*F);
     if (SGSize == nullptr) {
       Builder.SetInsertPoint(LocalSizeXStore->getNextNode());
@@ -1368,7 +1444,7 @@ void WorkgroupImpl::privatizeContext(Function *F) {
                                   LocalSizeAllocas[0]);
     }
     assert(SGSize != nullptr);
-    privatizeGlobalLoads(F, Builder, {"_pocl_sub_group_size"}, {SGSize});
+    privatizeGlobalLoads(F, Builder, {SG_S_NAME}, {SGSize});
   }
 
   if (DeviceSidePrintf) {
@@ -1945,7 +2021,11 @@ llvm::Value *WorkgroupImpl::getRequiredSubgroupSize(llvm::Function &F) {
     ConstantAsMetadata *ConstMD =
         cast<ConstantAsMetadata>(SGSizeMD->getOperand(0));
     ConstantInt *Const = cast<ConstantInt>(ConstMD->getValue());
-    return Const;
+    // Cast it to i64 as all other workgroup variables are i64 too.
+    ConstantInt *Const64 = llvm::cast<ConstantInt>(
+        llvm::ConstantInt::get(SizeT, Const->getSExtValue()));
+
+    return Const64;
   }
   return nullptr;
 }

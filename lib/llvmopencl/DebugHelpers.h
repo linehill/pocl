@@ -67,6 +67,13 @@ void viewCFG(llvm::Function &F);
 //
 // @return True in case the function was changed.
 bool chopBBs (llvm::Function &F, llvm::Pass &P);
+
+/// Renames unnamed basic blocks in the given function.
+///
+/// Each unnamed block is renamed to 'block_x', where 'x' is a running number.
+/// This greatly improves quality of life when debugging.
+void renameUnnamedBlocks(llvm::Function &F);
+
 class PoCLCFGPrinter : public llvm::PassInfoMixin<PoCLCFGPrinter> {
 public:
   explicit PoCLCFGPrinter(llvm::raw_ostream &OutS, llvm::StringRef Pref = "")
@@ -87,8 +94,16 @@ private:
 
 }
 
-// Controls the debug output from BarrierTailReplication.cc.
-//#define DEBUG_BARRIER_REPL
+// Enables renaming of unnamed basic blocks to improve debugging.
+// #define RENAME_UNNAMED_BBS
+
+// Renames basic blocks as [WGR|SGR]_<name> to improve debugging.
+// WGR (Workgroup Region) and SGR (Subgroup Region) imply WILoops
+// and SGLoops, respectively.
+// #define EXPLICIT_PR_NAMING
+
+// Controls debug output from CanonicalizeBarriers.cc
+// #define DEBUG_CANON_BARRIERS
 
 // Controls the debug output from ImplicitConditionalBarriers.cc.
 //#define DEBUG_COND_BARRIERS
@@ -108,8 +123,18 @@ private:
 // Controls the debug output from Kernel.cc parallel region generation.
 //#define DEBUG_PR_CREATION
 
+// Controls more fine-grained debugs from the ParallelRegion.cc
+#ifdef DEBUG_PR_CREATION
+#define DEBUG_PR_REMAP
+#define DEBUG_PR_PURGE
+#define DEBUG_PR_CREATE
+#endif
+
 // Controls the debug output from WorkitemLoops.cc parallel region generation.
 //#define DEBUG_WORK_ITEM_LOOPS
+
+// Controls the debug output form WorkItemHandler.cc.
+// #define DEBUG_WORK_ITEM_HANDLERS
 
 // Controls the debug output from Fiber.cc.
 //#define DEBUG_FIBER

@@ -61,7 +61,7 @@ namespace pocl {
 
 typedef std::map<llvm::Function*, llvm::Function*> FunctionMapping;
 
-constexpr unsigned NumWorkgroupVariables = 22;
+constexpr unsigned NumWorkgroupVariables = 27;
 extern const char *WorkgroupVariablesArray[];
 extern const std::vector<std::string> WorkgroupVariablesVector;
 // work-item function names
@@ -80,7 +80,7 @@ extern const std::vector<std::string> DIFuncNameVec;
 // (b) we don't want to show them to the user anyway
 std::string tryDemangleWithoutAddressSpaces(const std::string& MangledName);
 
-void regenerate_kernel_metadata(llvm::Module &M, FunctionMapping &kernels);
+void regenerateKernelMetadata(llvm::Module &M, FunctionMapping &kernels);
 
 void breakConstantExpressions(llvm::Value *Val, llvm::Function *Func);
 
@@ -119,6 +119,11 @@ bool isWorkitemFunctionWithOnlyCompilerExpandableCalls(const llvm::Function &F);
 /// Returns true if \param Call is a work-item function call that can be
 /// directly analyzed and expanded by the kernel compiler.
 bool isCompilerExpandableWIFunctionCall(const llvm::CallInst &Call);
+
+/// Swaps barrier to another type of barrier.
+///
+/// SG-barrier to WG-barrier, or vice versa.
+void switchBarrierGranularity(llvm::BasicBlock *Bb);
 
 POCL_EXPORT
 bool isGVarUsedByFunction(llvm::GlobalVariable *GVar, llvm::Function *F);
