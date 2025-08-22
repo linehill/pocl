@@ -30,7 +30,6 @@ POP_COMPILER_DIAGS
 IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DIBuilder.h>
-#include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Metadata.h>
 #include <llvm/IR/Module.h>

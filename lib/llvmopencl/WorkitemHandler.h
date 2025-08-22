@@ -30,11 +30,13 @@
 #include "Kernel.h"
 #include "VariableUniformityAnalysis.h"
 #include "VariableUniformityAnalysisResult.hh"
-#include <iostream>
+#include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/PassManager.h>
 #include <llvm/Pass.h>
 #include <llvm/Support/CommandLine.h>
+
+#include <iostream>
 
 namespace pocl {
 

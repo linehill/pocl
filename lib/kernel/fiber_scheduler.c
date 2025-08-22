@@ -21,8 +21,7 @@
    IN THE SOFTWARE.
 */
 
-//#include "fiber_scheduler.h"
-#include <stdio.h>
+//#include <stdio.h>
 
 /* Data structure that contains work-group information.
    Passed in from the kernel. */

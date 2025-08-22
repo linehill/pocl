@@ -119,6 +119,7 @@ bool convertPHIsToAllocaAccesses(llvm::Function &F, llvm::DominatorTree &DT) {
   }
 
   for (PHINode *Phi : PHIs) {
+
     std::string AllocaName = std::string(Phi->getName().str()) + ".ex_phi";
 
     llvm::Function *Function = Phi->getParent()->getParent();
@@ -207,7 +208,11 @@ bool convertPHIsToAllocaAccesses(llvm::Function &F, llvm::DominatorTree &DT) {
       // Add loads to each of the successor basic blocks of the PHI instead.
       std::vector<llvm::LoadInst *> SunkLoads;
       for (BasicBlock *Succ : successors(PhiBB)) {
+#if LLVM_MAJOR < 20
         Builder.SetInsertPoint(Succ->getFirstNonPHI());
+#else
+        Builder.SetInsertPoint(Succ->getFirstNonPHIIt());
+#endif
         llvm::LoadInst *Load = Builder.CreateLoad(Phi->getType(), AllocaI);
         SunkLoads.push_back(Load);
       }

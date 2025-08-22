@@ -644,7 +644,7 @@ void FiberImpl::generateDispatcherBody(llvm::IRBuilder<> *EntryBlockBuilder) {
         DBuilder.CreateSwitch(LoadedValue, BarrierExitBlocks[0]);
 
     // Add case for each barrier exit.
-    for (int I = 1; I < BarrierExitBlocks.size(); I++) {
+    for (long unsigned int I = 1; I < BarrierExitBlocks.size(); I++) {
       llvm::ConstantInt *CaseValue =
           llvm::ConstantInt::get(DBuilder.getInt64Ty(), I);
       SwitchInst->addCase(CaseValue, BarrierExitBlocks[I]);

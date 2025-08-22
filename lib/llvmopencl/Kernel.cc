@@ -452,7 +452,7 @@ ParallelRegion *Kernel::CreateParallelRegionBetween(
   // In all relevant cases, there are two branches from the entry barrier.
   if (EntryBarr->getTerminator()->getNumSuccessors() > 1) {
 
-    for (int i = 0; i < EntryBarr->getTerminator()->getNumSuccessors(); ++i) {
+    for (unsigned int i = 0; i < EntryBarr->getTerminator()->getNumSuccessors(); ++i) {
       // If we have a branch from entry barrier to exit barrier.
       if (EntryBarr->getTerminator()->getSuccessor(i) == ExitBarr) {
 
