@@ -61,6 +61,49 @@ namespace pocl {
 
 using namespace llvm;
 
+
+/// An in-depth check to evaluate whether sinking can be done.
+///
+/// We have to evaluate the domination relationship of the Users
+/// and inserted loads.
+/// \param Phi the PHI instruction to consider.
+/// \param Users the users of the PHI node.
+bool isFeasibleToSink(llvm::BasicBlock *PhiBlock, std::vector<llvm::Value *> Users, llvm::DominatorTree &DT) {
+
+  bool ShouldSink = true;
+
+  // Check that every basic block containing user instruction is dominated by
+  // some potential load basic block.
+  for (auto &Usr : Users) {
+
+    llvm::Instruction *UserInstr = dyn_cast<Instruction>(Usr);
+
+    bool FoundDominatingBlock = false;
+
+    for (BasicBlock *PhiSucc : successors(PhiBlock)) {
+      // For a PHI user, check the dominance in the context of incoming
+      // blocks instead.
+      if (llvm::isa<llvm::PHINode>(UserInstr)) {
+        llvm::PHINode *PhiUser = dyn_cast<PHINode>(UserInstr);
+
+        for (int I = 0; I < PhiUser->getNumIncomingValues(); ++I) {
+          BasicBlock *IncomingBB = PhiUser->getIncomingBlock(I);
+
+          if (DT.dominates(PhiSucc, IncomingBB))
+            FoundDominatingBlock = true;
+        }
+        // For a Non-phi user:
+      } else {
+        if (DT.dominates(PhiSucc, UserInstr->getParent()))
+          FoundDominatingBlock = true;
+      }
+    }
+    if(!FoundDominatingBlock)
+      ShouldSink = false;
+  }
+  return ShouldSink;
+}
+
 bool convertPHIsToAllocaAccesses(llvm::Function &F, llvm::DominatorTree &DT) {
 
   LLVM_DEBUG(dbgs() << "Before PHIsToAllocas\n");
@@ -144,6 +187,12 @@ bool convertPHIsToAllocaAccesses(llvm::Function &F, llvm::DominatorTree &DT) {
           IsSinkable = false;
           break;
         }
+
+        // Check if we can find dominating load.
+        if (!isFeasibleToSink(PhiBB, Users, DT)) {
+          IsSinkable = false;
+          break;
+        }
       }
     }
 
@@ -167,9 +216,28 @@ bool convertPHIsToAllocaAccesses(llvm::Function &F, llvm::DominatorTree &DT) {
         llvm::Instruction *Instr = dyn_cast<Instruction>(U);
         llvm::LoadInst *DominatingLoad = nullptr;
         for (llvm::LoadInst *Load : SunkLoads) {
-          if (DT.dominates(Load->getParent(), Instr->getParent())) {
-            DominatingLoad = Load;
-            break;
+          LLVM_DEBUG(std::cerr << "SunkLoad:\n");
+          LLVM_DEBUG(Load->dump());
+          // If user itself is a phi node, the basic block isn't necessarily
+          // dominated by any of the loads.
+          if (llvm::isa<llvm::PHINode>(Instr)) {
+
+            llvm::PHINode *PhiUser = dyn_cast<PHINode>(Instr);
+            // Check dominance in the context of incoming blocks instead.
+            for (unsigned I = 0; I < PhiUser->getNumIncomingValues(); ++I) {
+              BasicBlock *IncomingBB = PhiUser->getIncomingBlock(I);
+
+              if (DT.dominates(Load->getParent(), IncomingBB)) {
+                DominatingLoad = Load;
+                break;
+              }
+            }
+            // For a Non-phi user:
+          } else {
+            if (DT.dominates(Load->getParent(), Instr->getParent())) {
+              DominatingLoad = Load;
+              break;
+            }
           }
         }
         assert(DominatingLoad != nullptr && "No dominating load created?");
