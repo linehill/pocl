@@ -33,9 +33,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/IR/Dominators.h>
 POP_COMPILER_DIAGS
 #include "ParallelRegion.h"
-#include "VariableUniformityAnalysis.h"
 #include "VariableUniformityAnalysisResult.hh"
-#include <map>
 
 namespace pocl {
 
@@ -49,8 +47,7 @@ namespace pocl {
         llvm::BasicBlock *start, llvm::BasicBlock *end,
         pocl::ParallelRegion::ParallelRegionVector *regions,
         VariableUniformityAnalysisResult &VUA);
-    /* ParallelRegion::ParallelRegionVector *
-    getParallelRegions(llvm::LoopInfo &LI); */
+
     void
     getParallelRegions(llvm::LoopInfo &LI,
                        ParallelRegion::ParallelRegionVector *ParallelRegions,

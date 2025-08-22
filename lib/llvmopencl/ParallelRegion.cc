@@ -283,7 +283,7 @@ bool traceOperands(Value *V, std::set<Value *> &visited, int indent = 0) {
 
 ParallelRegion *ParallelRegion::Create(const SmallPtrSet<BasicBlock *, 8> &BBs,
                                        BasicBlock *Entry, BasicBlock *Exit,
-                                       bool isSGRegion) {
+                                       bool IsSGRegion) {
   ParallelRegion *NewRegion = new ParallelRegion();
 
   assert(Entry != NULL);
@@ -294,7 +294,7 @@ ParallelRegion *ParallelRegion::Create(const SmallPtrSet<BasicBlock *, 8> &BBs,
   // For subgroup regions, mark region as 'linearizable' IF there are NO
   // references to 3D ids. This allows looping over PR in a single loop (by
   // local linear id).
-  if (isSGRegion) {
+  if (IsSGRegion) {
     NewRegion->setSGRegion();
     for (BasicBlock *BB : BBs) {
       for (Instruction &I : *BB) {
@@ -323,7 +323,7 @@ ParallelRegion *ParallelRegion::Create(const SmallPtrSet<BasicBlock *, 8> &BBs,
 
 #ifdef EXPLICIT_PR_NAMING
         std::string OldName = (*j)->getName().str();
-        std::string GroupName = isSGRegion ? "SGR_" : "WGR_";
+        std::string GroupName = IsSGRegion ? "SGR_" : "WGR_";
         (*j)->setName(GroupName + OldName);
 #endif
 
