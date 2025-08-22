@@ -180,8 +180,9 @@ buffer_args_are_disjoint (_cl_command_node *command)
       if (meta->arg_info[i].type != POCL_ARG_TYPE_POINTER)
         continue;
 
-      /* TODO: Should this be dyn_kernel_args? */
-      struct pocl_argument *al = &(k->dyn_arguments[i]);
+      /* look at the command's (enqueued) arguments,
+       * not the cl_kernel object's currently set arguments */
+      struct pocl_argument *al = &(run_cmd->arguments[i]);
       if (al->value == NULL)
         continue;
 
@@ -288,7 +289,9 @@ buffer_args_max_size (_cl_command_node *command)
       if (meta->arg_info[i].type != POCL_ARG_TYPE_POINTER)
         continue;
 
-      struct pocl_argument *al = &(k->dyn_arguments[i]);
+      /* look at the command's (enqueued) arguments,
+       * not the cl_kernel object's currently set arguments */
+      struct pocl_argument *al = &(run_cmd->arguments[i]);
       if (al->value == NULL)
         continue;
 
