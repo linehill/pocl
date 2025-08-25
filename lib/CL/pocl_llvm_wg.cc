@@ -482,7 +482,11 @@ static void addStage1PassesToPipeline(cl_device_id Dev,
   addPass(Passes, "optimize-wi-gvars");
 
   addPass(Passes, "mem2reg");
+#if LLVM_MAJOR > 17
   addPass(Passes, "instcombine<no-verify-fixpoint>");
+#else
+  addPass(Passes, "instcombine");
+#endif
   addPass(Passes, "memcpyopt");
 
   if (!Dev->spmd)
@@ -577,7 +581,11 @@ static bool runKernelCompilerPasses(cl_device_id Device, llvm::Module &Mod,
 
   Error E = PM.build(Device, P1, 0, 0, P2, Optimize ? 3 : 0, 0);
   if (E) {
-    std::cerr << "LLVM: failed to create compilation pipeline";
+    std::string ErrorStr;
+    llvm::raw_string_ostream SOS(ErrorStr);
+    SOS << E;
+    SOS.flush();
+    std::cerr << "LLVM: failed to create compilation pipeline: " << ErrorStr << "\n";
     return false;
   }
 
