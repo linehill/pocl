@@ -39,17 +39,20 @@ else()
 endif()
 
 # This is expected to generate shufflevector instructions.
-add_test_pocl(NAME "subgroup/shuffle_small"
-              EXPECTED_OUTPUT "sg_shuffle_small_1_8_1_1.stdout"
-              COMMAND "run_kernel" "sg_shuffle.cl" 1 8 1 1
-              LLVM_FILECHECK "${SG_SHUFFLE_SMALL_FC}"
-              WORKITEM_HANDLER "loopvec")
+# only enable these tests if cl_khr_subgroup is enabled
+if(HOST_DEVICE_EXTENSIONS MATCHES "cl_khr_subgroup")
+  add_test_pocl(NAME "subgroup/shuffle_small"
+                EXPECTED_OUTPUT "sg_shuffle_small_1_8_1_1.stdout"
+                COMMAND "run_kernel" "sg_shuffle.cl" 1 8 1 1
+                LLVM_FILECHECK "${SG_SHUFFLE_SMALL_FC}"
+                WORKITEM_HANDLER "loopvec")
 
-add_test_pocl(NAME "subgroup/shuffle_inside_kloop"
-              EXPECTED_OUTPUT "sg_shuffle_kloop_1_16_1_1.stdout"
-              COMMAND "run_kernel" "sg_shuffle_kloop.cl" 1 16 1 1
-              LLVM_FILECHECK "sg_shuffle_kloop.fc"
-              WORKITEM_HANDLER "loopvec")
+  add_test_pocl(NAME "subgroup/shuffle_inside_kloop"
+                EXPECTED_OUTPUT "sg_shuffle_kloop_1_16_1_1.stdout"
+                COMMAND "run_kernel" "sg_shuffle_kloop.cl" 1 16 1 1
+                LLVM_FILECHECK "sg_shuffle_kloop.fc"
+                WORKITEM_HANDLER "loopvec")
+endif()
 
 add_test_pocl(NAME "workgroup/different_implicit_barrier_injection_scenarios"
               EXPECTED_OUTPUT "implicit_barriers_1_2_1_1.stdout"
