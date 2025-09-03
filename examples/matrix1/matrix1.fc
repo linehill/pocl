@@ -1,15 +1,17 @@
-# Outer loop vectorization (and unrolling) should occur in this case thanks to
-# the injection of the implicit barriers to the originally unbarriered kernel
-# loop and handling the b-loop structure with its iteration variable as
-# "pure uniform".
+Outer loop vectorization (and unrolling) should occur in this case thanks to
+the injection of the implicit barriers to the originally unbarriered kernel
+loop and handling the b-loop structure with its iteration variable as
+"pure uniform".
 
-# CHECK: load <8 x float>
+The accumulator should end up in the WI context, one accumulator is
+maintained for each WI in parallel.
 
-# The accumulator should end up in the WI context, one accumulator is
-# maintained for each WI.
-# CHECK: acc.wi_context
+CHECK: %.acc.{{.*}}wi_context.{{.*}} = alloca
+CHECK-NOT: %.{{.*}}wi_context.{{.*}} = alloca
 
-# CHECK: llvm.fmuladd.v8f32
+CHECK: load <8 x float>
 
-# CHECK: store <8 x float>
+CHECK: llvm.fmuladd.v8f32
+
+CHECK: store <8 x float>
 
