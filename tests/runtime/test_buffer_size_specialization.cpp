@@ -50,42 +50,56 @@ int main(int Argc, char *Argv[]) {
     return EXIT_FAILURE;
   }
 
-  std::vector<cl::Platform> PlatformList;
-
-  cl::Platform::get(&PlatformList);
-
-  cl_context_properties cprops[] = {
-    CL_CONTEXT_PLATFORM, (cl_context_properties)(PlatformList[0])(), 0};
-
-  cl::Context Context(CL_DEVICE_TYPE_ALL, cprops);
-
-  std::vector<cl::Device> Devices = Context.getInfo<CL_CONTEXT_DEVICES>();
-
-  if (Devices.empty()) {
-    std::cout << "No devices found." << std::endl;
-    exit(EXIT_FAILURE);
-  }
-
-  cl::Device Dev = Devices[0];
-
-  cl::Program::Sources Sources({KernelSources});
-  cl::Program Program(Context, Sources);
-  // disable optimizations to avoid removing the truncs.
-  Program.build(Dev, "-cl-opt-disable");
-  cl::Kernel VecAddKernel(Program, "vecadd");
-  cl::CommandQueue Queue(Context, Dev, 0);
-
-  std::string TestName = Argv[1];
   try {
+
+    std::vector<cl::Platform> PlatformList;
+
+    cl::Platform::get(&PlatformList);
+
+    cl_context_properties cprops[] = {
+         CL_CONTEXT_PLATFORM, (cl_context_properties)(PlatformList[0])(), 0};
+
+    cl::Context Context(CL_DEVICE_TYPE_ALL, cprops);
+
+    std::vector<cl::Device> Devices = Context.getInfo<CL_CONTEXT_DEVICES>();
+
+    if (Devices.empty()) {
+        std::cout << "No devices found." << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    cl::Device Dev = Devices[0];
+
+    cl_ulong MaxAlloc = Dev.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE>();
+    if (MaxAlloc < (size_t)UINT32_MAX + 1024) {
+        std::cout << "MaxMemAlloc: " << MaxAlloc << " is smaller than required "
+                  << (size_t)UINT32_MAX + 1024 << ", skipping test\n";
+        return 77;
+    }
+
+    std::string TestName = Argv[1];
+
+    if (TestName.find("SVM") != std::string::npos) {
+        if ((Dev.getInfo<CL_DEVICE_SVM_CAPABILITIES>() &
+             CL_DEVICE_SVM_COARSE_GRAIN_BUFFER) == 0) {
+            std::cerr << "SVM test requested, but device does not support SVM, skipping\n";
+            return 77;
+        }
+    }
+
+    cl::Program::Sources Sources({KernelSources});
+    cl::Program Program(Context, Sources);
+    // disable optimizations to avoid removing the truncs.
+    Program.build(Dev, "-cl-opt-disable");
+    cl::Kernel VecAddKernel(Program, "vecadd");
+    cl::CommandQueue Queue(Context, Dev, 0);
 
     std::cout << TestName << ":\n";
 
     cl::Buffer InputBuffer;
-    cl::Buffer InputBuffer2;
     cl::Buffer ResultBuffer;
 
     void *InputSVMBuffer = nullptr;
-    void *InputSVMBuffer2 = nullptr;
     void *ResultSVMBuffer = nullptr;
 
     size_t NumResultData;
@@ -143,6 +157,8 @@ int main(int Argc, char *Argv[]) {
       ResultSVMBuffer =
         clSVMAlloc(Context.get(), CL_MEM_READ_WRITE,
                    NumInputData, 128);
+      if (!InputSVMBuffer || !ResultSVMBuffer)
+          return 77;
 
       VecAddKernel.setArg(0, InputSVMBuffer);
       VecAddKernel.setArg(1, InputSVMBuffer);
@@ -161,6 +177,9 @@ int main(int Argc, char *Argv[]) {
         clSVMAlloc(Context.get(), CL_MEM_READ_WRITE,
                    NumInputData, 128);
 
+      if (!InputSVMBuffer || !ResultSVMBuffer)
+          return 77;
+
       VecAddKernel.setArg(0, InputSVMBuffer);
       VecAddKernel.setArg(1, InputSVMBuffer);
       VecAddKernel.setArg(2, ResultSVMBuffer);
@@ -178,6 +197,9 @@ int main(int Argc, char *Argv[]) {
         clSVMAlloc(Context.get(), CL_MEM_READ_WRITE,
                    NumInputData, 128);
 
+      if (!InputSVMBuffer || !ResultSVMBuffer)
+          return 77;
+
       VecAddKernel.setArg(0, InputSVMBuffer);
       VecAddKernel.setArg(1, InputSVMBuffer);
       VecAddKernel.setArg(2, ResultSVMBuffer);
@@ -193,21 +215,25 @@ int main(int Argc, char *Argv[]) {
 
     Queue.finish();
 
-    clSVMFree(Context.get(), InputSVMBuffer);
-    InputBuffer = nullptr;
-    clSVMFree(Context.get(), InputSVMBuffer2);
-    InputBuffer2 = nullptr;
-    clSVMFree(Context.get(), ResultSVMBuffer);
-    ResultBuffer = nullptr;
+    if (InputSVMBuffer)
+      clSVMFree(Context.get(), InputSVMBuffer);
+    if (ResultSVMBuffer)
+      clSVMFree(Context.get(), ResultSVMBuffer);
 
-    CHECK_CL_ERROR(clUnloadCompiler());
   } catch (cl::Error &err) {
     std::cerr << "ERROR: " << err.what() << "(" << err.err() << ")"
               << std::endl;
+      if (err.err() == CL_INVALID_BUFFER_SIZE ||
+          err.err() == CL_MEM_OBJECT_ALLOCATION_FAILURE ||
+          err.err() == CL_OUT_OF_RESOURCES ||
+          err.err() == CL_OUT_OF_HOST_MEMORY) {
+        std::cerr << "Memory allocation failed (out of resources), skipping test\n";
+        return 77;
+      }
     return EXIT_FAILURE;
   }
 
-
+  CHECK_CL_ERROR(clUnloadCompiler());
 
   std::cout << "OK" << std::endl;
   return EXIT_SUCCESS;

@@ -204,6 +204,17 @@ add_test_pocl(NAME "smallbuf/mixed_svm_buffers"
   LLVM_FILECHECK "smallbuf_trunc_not_added.fc"
   ONLY_FILECHECK 1)
 
+# these tests require a lot of memory (up to 8GB);
+# run them serially to avoid OOM killer
+if(ENABLE_LLVM_FILECHECKS)
+  foreach(SMALLBUF_TEST "smallbuf/large_buffers"
+          "smallbuf/small_buffers" "smallbuf/mixed_buffers"
+          "smallbuf/large_svm_buffers" "smallbuf/small_svm_buffers"
+          "smallbuf/mixed_svm_buffers")
+    set_tests_properties("${SMALLBUF_TEST}_llvm-ir-checks"
+        PROPERTIES RUN_SERIAL ON)
+  endforeach()
+endif()
 
 add_test(NAME "runtime/test_buffer_migration" COMMAND "test_buffer_migration")
 

@@ -50,24 +50,6 @@ int main(int Argc, char *Argv[]) {
     return EXIT_FAILURE;
   }
 
-  std::vector<cl::Platform> PlatformList;
-
-  cl::Platform::get(&PlatformList);
-
-  cl_context_properties cprops[] = {
-    CL_CONTEXT_PLATFORM, (cl_context_properties)(PlatformList[0])(), 0};
-
-  cl::Context Context(CL_DEVICE_TYPE_ALL, cprops);
-
-  std::vector<cl::Device> Devices = Context.getInfo<CL_CONTEXT_DEVICES>();
-
-  if (Devices.empty()) {
-    std::cout << "No devices found." << std::endl;
-    exit(EXIT_FAILURE);
-  }
-
-  cl::Device Dev = Devices[0];
-
   constexpr size_t NumData = 16;
   std::vector<int> HostBufA, HostBufB, HostBufC;
   for (size_t i = 0; i < NumData; ++i) {
@@ -76,38 +58,72 @@ int main(int Argc, char *Argv[]) {
     HostBufC.push_back(3);
   }
 
-  cl::Buffer ABuffer =
-    cl::Buffer(Context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-               sizeof(cl_int) * NumData, HostBufA.data());
-
-  cl::Buffer BBuffer =
-    cl::Buffer(Context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-               sizeof(cl_int) * NumData, HostBufB.data());
-
-  cl::Buffer CBuffer =
-    cl::Buffer(Context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-               sizeof(cl_int) * NumData, HostBufC.data());
-
-  void *ASVM =
-    clSVMAlloc(Context.get(), CL_MEM_READ_ONLY,
-               sizeof(cl_int) * NumData, 128);
-
-  void *BSVM =
-    clSVMAlloc(Context.get(), CL_MEM_READ_ONLY,
-               sizeof(cl_int) * NumData, 128);
-
-  void *CSVM =
-    clSVMAlloc(Context.get(), CL_MEM_READ_WRITE,
-               sizeof(cl_int) * NumData, 128);
-
-  cl::Program::Sources Sources({KernelSources});
-  cl::Program Program(Context, Sources);
-  Program.build(Dev);
-  cl::Kernel VecAddKernel(Program, "vecadd");
-  cl::CommandQueue Queue(Context, Dev, 0);
+  void *ASVM = nullptr;
+  void *BSVM = nullptr;
+  void *CSVM = nullptr;
 
   std::string TestName = Argv[1];
+
   try {
+    std::vector<cl::Platform> PlatformList;
+
+    cl::Platform::get(&PlatformList);
+
+    cl_context_properties cprops[] = {
+      CL_CONTEXT_PLATFORM, (cl_context_properties)(PlatformList[0])(), 0};
+
+    cl::Context Context(CL_DEVICE_TYPE_ALL, cprops);
+
+    std::vector<cl::Device> Devices = Context.getInfo<CL_CONTEXT_DEVICES>();
+
+    if (Devices.empty()) {
+        std::cout << "No devices found." << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    cl::Device Dev = Devices[0];
+
+    if (TestName.find("SVM") != std::string::npos) {
+        if ((Dev.getInfo<CL_DEVICE_SVM_CAPABILITIES>() &
+             CL_DEVICE_SVM_COARSE_GRAIN_BUFFER) == 0) {
+            std::cerr << "SVM test requested, but device does not support SVM, skipping\n";
+            return 77;
+        }
+
+        ASVM =
+            clSVMAlloc(Context.get(), CL_MEM_READ_ONLY,
+                       sizeof(cl_int) * NumData, 128);
+
+        BSVM =
+            clSVMAlloc(Context.get(), CL_MEM_READ_ONLY,
+                       sizeof(cl_int) * NumData, 128);
+
+        CSVM =
+            clSVMAlloc(Context.get(), CL_MEM_READ_WRITE,
+                       sizeof(cl_int) * NumData, 128);
+        if ((!ASVM) || (!BSVM) || (!CSVM)) {
+            std::cerr << "SVM allocation failed \n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    cl::Program::Sources Sources({KernelSources});
+    cl::Program Program(Context, Sources);
+    Program.build(Dev);
+    cl::Kernel VecAddKernel(Program, "vecadd");
+    cl::CommandQueue Queue(Context, Dev, 0);
+
+    cl::Buffer ABuffer =
+      cl::Buffer(Context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                     sizeof(cl_int) * NumData, HostBufA.data());
+
+    cl::Buffer BBuffer =
+      cl::Buffer(Context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                     sizeof(cl_int) * NumData, HostBufB.data());
+
+    cl::Buffer CBuffer =
+      cl::Buffer(Context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                     sizeof(cl_int) * NumData, HostBufC.data());
 
     std::cout << TestName << ":\n";
 
@@ -168,16 +184,20 @@ int main(int Argc, char *Argv[]) {
     Queue.enqueueReadBuffer(CBuffer, CL_TRUE, 0, sizeof(cl_int) * NumData,
                             HostBufC.data());
 
-    CHECK_CL_ERROR(clUnloadCompiler());
+    if (ASVM)
+        clSVMFree(Context.get(), ASVM);
+    if (BSVM)
+        clSVMFree(Context.get(), BSVM);
+    if (CSVM)
+        clSVMFree(Context.get(), CSVM);
+
   } catch (cl::Error &err) {
     std::cerr << "ERROR: " << err.what() << "(" << err.err() << ")"
               << std::endl;
     return EXIT_FAILURE;
   }
 
-  clSVMFree(Context.get(), ASVM);
-  clSVMFree(Context.get(), BSVM);
-  clSVMFree(Context.get(), CSVM);
+  CHECK_CL_ERROR(clUnloadCompiler());
 
   std::cout << "OK" << std::endl;
   return EXIT_SUCCESS;
