@@ -451,6 +451,9 @@ static void addStage1PassesToPipeline(cl_device_id Dev,
   // don't forget to register it in registerPassBuilderPasses
   addPass(Passes, "fix-min-legal-vec-size", PassType::Module);
   addPass(Passes, "inline-kernels");
+  // Optimize out unnecesary allocas. Specially the ones
+  // used to only store function arguments
+  addPass(Passes, "mem2reg");
   if (Dev->run_sanitize_divrem_pass)
     addPass(Passes, "sanitize-ub-of-div-rem");
 

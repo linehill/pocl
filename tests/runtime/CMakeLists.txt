@@ -47,7 +47,7 @@ set(C_PROGRAMS_TO_BUILD test_clFinish test_clGetDeviceInfo test_clGetEventInfo
   test_cl_pocl_content_size test_cl_pocl_content_size_migration
   test_deviceside_enqueue test_command_buffer test_command_buffer_images
   test_command_buffer_multi_device test_queue_creation_with_hints
-  test_remote_discovery test_dbk_color_convert)
+  test_remote_discovery test_dbk_color_convert test_alloca_removal)
 
 if(HAVE_ONNXRT)
   list(APPEND C_PROGRAMS_TO_BUILD test_dbk_onnx_inference)
@@ -203,6 +203,13 @@ add_test_pocl(NAME "smallbuf/mixed_svm_buffers"
   WORKITEM_HANDLER "loops"
   LLVM_FILECHECK "smallbuf_trunc_not_added.fc"
   ONLY_FILECHECK 1)
+
+add_test_pocl(NAME "alloca_removal"
+  COMMAND "test_alloca_removal"
+  WORKITEM_HANDLER "loopvec"
+  LLVM_FILECHECK "alloca_removal.fc"
+  ONLY_FILECHECK 1
+  ENVIRONMENT "POCL_VECTORIZER_FORCE_VECTOR_WIDTH=4")
 
 # these tests require a lot of memory (up to 8GB);
 # run them serially to avoid OOM killer
