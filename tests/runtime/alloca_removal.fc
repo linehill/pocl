@@ -1,4 +1,14 @@
-
+# The test has BFS_step_impl and BFS_step functions.
+# BFS_step_impl is always vectorized, BFS_step only calls
+# BFS_step_impl.
+#
+# We want BFS_step to be vectorized, but if the
+# allocas used to store the arguments are not removed
+# (the allocas come from inlining), the vectorizer won’t
+# be able to do it.
+#
+# The test passes if both in BFS_step_impl and BFS_step
+# the loop is vectorized.
 CHECK: vector.body:
 CHECK: vector.body:
 
