@@ -1034,7 +1034,6 @@ WorkitemHandler::createContextArrayGEP(llvm::AllocaInst *CtxArrayAlloca,
     GEPArgs.push_back(
         ConstantInt::get(Type::getInt32Ty(CtxArrayAlloca->getContext()), 0));
 
-  IRBuilder<> Builder(Before);
   llvm::GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(Builder.CreateGEP(
       CtxArrayAlloca->getAllocatedType(), CtxArrayAlloca, GEPArgs));
   assert(GEP != nullptr);

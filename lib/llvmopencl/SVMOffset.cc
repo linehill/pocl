@@ -78,7 +78,6 @@ POP_COMPILER_DIAGS
 
 #include "LLVMUtils.h"
 #include "SVMOffset.hh"
-#include "WorkitemHandlerChooser.h"
 
 #include <iostream>
 #include <set>
@@ -100,13 +99,9 @@ static cl::opt<uint64_t> SVMOffsetValue(
              "offsets)."));
 
 llvm::PreservedAnalyses SVMOffset::run(llvm::Module &M,
-                                       llvm::ModuleAnalysisManager &AM) {
-  PreservedAnalyses PAChanged = PreservedAnalyses::none();
-  PAChanged.preserve<WorkitemHandlerChooser>();
-  bool Changed = false;
+                                       llvm::ModuleAnalysisManager &) {
 
-  // std::cerr << "SVMOffset adding region offset " << SVMOffsetValue << std::endl;
-  // M.dump();
+  bool Changed = false;
 
   if (SVMOffsetValue == 0)
     return PreservedAnalyses::all();
@@ -209,9 +204,6 @@ llvm::PreservedAnalyses SVMOffset::run(llvm::Module &M,
 
         if (Load == nullptr && Store == nullptr) continue;
 
-        unsigned AddressSpace =
-          Load == nullptr ? Store->getPointerAddressSpace() : Load->getPointerAddressSpace();
-
         Value *PtrOperand =
           Load == nullptr ? Store->getPointerOperand() : Load->getPointerOperand();
 
@@ -226,7 +218,7 @@ llvm::PreservedAnalyses SVMOffset::run(llvm::Module &M,
   }
 
   // M.dump();
-  return Changed ? PAChanged : PreservedAnalyses::all();
+  return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }
 
 
