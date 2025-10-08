@@ -1435,8 +1435,17 @@ bool WorkitemLoopsImpl::fixMultiRegionVariables() {
       }
     }
   }
+
   // Finally generate the context save/restore (or rematerialization) code for
-  // the instructions requiring it.
+  // the instructions requiring it. First process alloca instructions as they
+  // have influence on rematerialization opportunities on non-alloca
+  // instructions.
+
+  std::sort(ValuesToContextSave.begin(), ValuesToContextSave.end(),
+            [=](const Instruction *Lhs, const Instruction *Rhs) -> bool {
+              return !isa<AllocaInst>(Lhs) < !isa<AllocaInst>(Rhs);
+            });
+
   for (auto &I : ValuesToContextSave) {
     LLVM_DEBUG(dbgs() << "#### Adding context/save restore for\n");
     LLVM_DEBUG(I->dump());
