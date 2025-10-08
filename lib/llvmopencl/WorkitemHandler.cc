@@ -28,6 +28,7 @@ IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
 #include <llvm/ADT/Twine.h>
 POP_COMPILER_DIAGS
 IGNORE_COMPILER_WARNING("-Wunused-parameter")
+#include <llvm/ADT/StringSet.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/Instructions.h>
@@ -345,6 +346,55 @@ ParallelRegion *WorkitemHandler::regionOfBlock(llvm::BasicBlock *BB) {
   return nullptr;
 }
 
+/// Returns true if the pointer 'Ptr' is derived from a context array.
+static bool pointsToContextArray(llvm::Value *Ptr, unsigned Depth = 0) {
+  if (Depth++ > 10)
+    return false;
+
+  if (auto *AI = dyn_cast<AllocaInst>(Ptr)) {
+    // FIXME: this might bite back. Right now, we distinguish context arrays
+    // from other allocas as the other allocas are pushed out of the entry block
+    // by the barrier canonicalization!
+    return AI->getParent()->isEntryBlock();
+  }
+
+  if (auto *GEP = dyn_cast<GetElementPtrInst>(Ptr))
+    return pointsToContextArray(GEP->getPointerOperand(), Depth);
+
+  if (isa<IntToPtrInst>(Ptr) || isa<PtrToIntInst>(Ptr))
+    return pointsToContextArray(cast<CastInst>(Ptr)->getOperand(0), Depth);
+
+  // TODO: casts between private and generic address spaces.
+
+  return false;
+}
+
+/// Return true if the 'Ptr' is a builtin variable safe for rematerialization.
+static bool isRematerializableBuiltinVar(llvm::Value *Ptr) {
+  // Some builtin variables are not safe to rematerialize - for example,
+  // _global_id_* variables in linear WI-loops. We could improve
+  // rematerialization of _global_id_* but we need to either 1) know the WI-loop
+  // type to be generated before hand or 2) have the WI-loop generator to be
+  // aware of new builtin variable uses.
+
+  static const llvm::StringSet RematerializableBuiltinVars({
+      LLID_G_NAME,
+      LS_G_NAME(0),
+      LS_G_NAME(1),
+      LS_G_NAME(2),
+      GROUP_ID_G_NAME(0),
+      GROUP_ID_G_NAME(1),
+      GROUP_ID_G_NAME(2),
+      SG_S_NAME,
+  });
+
+  auto *GV = dyn_cast<GlobalVariable>(Ptr);
+  if (!GV || !GV->hasName())
+    return false;
+
+  return RematerializableBuiltinVars.contains(GV->getName());
+}
+
 /// Tries to rematerialize the given value-defining instruction.
 ///
 /// Rematerialization in this context means recomputing the value produced
@@ -366,7 +416,7 @@ llvm::Value *WorkitemHandler::tryToRematerialize(llvm::Instruction *Before,
   bool *CanDoIt, int *Depth) {
 
   auto DbgRemat = [=](const std::string &Reason) {
-    LLVM_DEBUG(dbgs() << Reason);
+    LLVM_DEBUG(dbgs() << Reason << " ");
     LLVM_DEBUG(Def->dump());
   };
 
@@ -422,6 +472,24 @@ llvm::Value *WorkitemHandler::tryToRematerialize(llvm::Instruction *Before,
     // rematerialization. But other than that we do not yet handle recursive
     // alloca references. Should be an easy and valuable low hanging fruit.
     UNABLE_TO_REMAT("accesses another alloca that we cannot remat");
+  } else if (auto *LD = dyn_cast<LoadInst>(Def)) {
+    // Check the load can cross a barrier - that includes but not limited to:
+    //
+    // 1) Context variable array loads.
+    //
+    // 2) Some loads of builtin variables - e.g. _local_linear_id but not
+    //    _global_id_x without knowing the kind of WI-loop to be created.
+    //
+    // 3) Other loads that do not alias with the stores in the target PR or in
+    //    in the way to it - e.g. loads from a global buffer witch the target PR
+    //    writes into.
+    auto *Ptr = LD->getPointerOperand();
+    bool CanRemat = pointsToContextArray(Ptr, *Depth);        // (1)
+    CanRemat = CanRemat || isRematerializableBuiltinVar(Ptr); // (2)
+    // TODO: (3)
+
+    if (!CanRemat)
+      UNABLE_TO_REMAT("potentially unsafe load to rematerialize");
   }
 
   llvm::Instruction *Inst = dyn_cast<Instruction>(Def);
@@ -495,7 +563,8 @@ void WorkitemHandler::addContextSaveRestore(llvm::Instruction *Def, llvm::LoopIn
       continue;
 
     ParallelRegion *PRegion = regionOfBlock(User->getParent());
-    if (StoreInst *ST = dyn_cast<StoreInst>(User)) {
+
+    if (StoreInst *ST = dyn_cast<StoreInst>(User); ST && isa<AllocaInst>(Def)) {
       // Stores of undefined values need not to be counted as actual stores
       // since what we read from that location after that is undefined,
       // thus could be as well the defined value of the another store.
