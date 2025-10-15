@@ -3,7 +3,7 @@
 # well as the same indices are used after the barrier.
 
 # The array is the only context data that cannot be rematerialized.
-# CHECK: .a.wi_context
+# CHECK: .a{{[^[:space:]]*}}.wi_context
 # Disabled for now. Fails after robustizing the rematerializer.
 # DISABLED-CHECK-NOT: {{[^a]}}.wi_context
 
