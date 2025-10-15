@@ -314,18 +314,20 @@ pocl_cpu_init_common (cl_device_id device)
   pocl_init_default_device_infos (device, HOST_DEVICE_EXTENSIONS);
 
 #ifdef HOST_CPU_ENABLE_SPIRV
-  device->supported_spirv_extensions = "+SPV_KHR_no_integer_wrap_decoration"
-                                       ",+SPV_KHR_expect_assume"
-                                       ",+SPV_INTEL_fp_fast_math_mode"
-                                       ",+SPV_EXT_shader_atomic_float_add"
-                                       ",+SPV_INTEL_unstructured_loop_controls"
-                                       ",+SPV_INTEL_arbitrary_precision_integers"
-                                       ",+SPV_INTEL_memory_access_aliasing"
+  device->supported_spirv_extensions =
+      "+SPV_KHR_no_integer_wrap_decoration"
+      ",+SPV_KHR_expect_assume"
+      ",+SPV_INTEL_fp_fast_math_mode"
+      ",+SPV_EXT_shader_atomic_float_add"
+      ",+SPV_INTEL_unstructured_loop_controls"
+      ",+SPV_INTEL_arbitrary_precision_integers"
+      ",+SPV_INTEL_memory_access_aliasing"
 #ifndef ENABLE_CONFORMANCE
-                                       ",+SPV_EXT_shader_atomic_float_min_max"
-                                       ",+SPV_INTEL_subgroups"
+      ",+SPV_EXT_shader_atomic_float_min_max"
+      ",+SPV_INTEL_subgroups"
 #endif
-                                       ",+SPV_INTEL_inline_assembly";
+      ",+SPV_INTEL_inline_assembly"
+      ",+SPV_INTEL_optnone";
 
 #if LLVM_MAJOR >= 20
   device->supported_spir_v_versions
