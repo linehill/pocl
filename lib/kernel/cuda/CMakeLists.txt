@@ -43,7 +43,7 @@ foreach(FILE
   rsqrt.cl
   printf.c
   wait_group_events.cl
-  barrier.ll nvvm_functions.ll subgroup.ll
+  workgroup_barrier.ll nvvm_functions.ll subgroup.ll
   subgroup_core.cl
   )
   list(REMOVE_ITEM KERNEL_SOURCES "${FILE}")
