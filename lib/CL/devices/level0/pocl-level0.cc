@@ -37,6 +37,7 @@
 #include "pocl_hash.h"
 #include "pocl_llvm.h"
 #include "pocl_local_size.h"
+#include "pocl_mem_management.h"
 #include "pocl_run_command.h"
 #include "pocl_tensor_util.h"
 #include "pocl_timing.h"
