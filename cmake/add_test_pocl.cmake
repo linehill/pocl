@@ -146,6 +146,7 @@ function(add_test_pocl)
         list(APPEND POCL_TEST_ARGLIST "${POCL_TEST_WORKING_DIRECTORY}")
       endif()
       list(APPEND POCL_TEST_ARGLIST "COMMAND" "${CMAKE_COMMAND}" "-Dtest_cmd=${RUN_CMD}")
+      list(APPEND POCL_TEST_ARGLIST "-DSKIP_RETURN_CODE=77")
       list(APPEND POCL_TEST_ARGLIST "-P" "${CMAKE_SOURCE_DIR}/cmake/run_test.cmake")
 
       add_test(${POCL_TEST_ARGLIST})

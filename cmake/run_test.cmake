@@ -29,9 +29,15 @@ execute_process(
 )
 endif()
 
-
 if( test_not_successful )
-  message( SEND_ERROR "FAIL: Test exited with nonzero code (${test_not_successful}): ${test_cmd_separated}\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}" )
+  # A work-around for tests only returning a exit code for skipping
+  # testing. In CMake 3.29 we could use 'cmake_language(EXIT
+  # ${test_not_successful})' instead.
+  if(DEFINED SKIP_RETURN_CODE AND test_not_successful EQUAL SKIP_RETURN_CODE)
+    message(SEND_ERROR "SKIP: test returned a skip exit code.\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}")
+  else()
+    message(SEND_ERROR "FAIL: Test exited with nonzero code (${test_not_successful}): ${test_cmd_separated}\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}")
+  endif()
 else()
   message("${stdout}")
   message("${stderr}")
