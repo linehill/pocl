@@ -32,10 +32,18 @@ add_compile_options(${OPENCL_CFLAGS})
 add_executable("run_kernel" "run_kernel.c")
 target_link_libraries("run_kernel" ${POCLU_LINK_OPTIONS})
 
-if(TESTED_CPU_UARCH MATCHES "meteorlake")
-  set(SG_SHUFFLE_SMALL_FC "sg_shuffle_small_gather.fc")
-else()
+if((LLVM_VERSION VERSION_GREATER_EQUAL 21.0) AND
+    (${TESTED_CPU_UARCH} MATCHES "(broadwell|znver3)"))
+  # Check the kernel emits a vector load instead of a (masked) gather.
   set(SG_SHUFFLE_SMALL_FC "sg_shuffle_small.fc")
+else()
+  # So far, the vector load is known to be emitted for few(?)
+  # architectures by PoCL's pass pipeline.  However, dumping the
+  # kernel bitcode right after the workgroup pass and passing it to
+  # `clang -O2` emits code with vector load instead of gather
+  # instruction (on an Alderlake machine at least). Maybe PoCL's
+  # pipeline needs tweaking?
+  set(SG_SHUFFLE_SMALL_FC "sg_shuffle_small_gather.fc")
 endif()
 
 # This is expected to generate shufflevector instructions.
