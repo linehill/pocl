@@ -1544,11 +1544,7 @@ SubCFGFormation::run(llvm::Function &F, llvm::FunctionAnalysisManager &AM) {
   if (!isKernelToProcess(F))
     return PreservedAnalyses::all();
 
-  WorkitemHandlerType WIH = getWorkitemHandler();
-  if (WIH != WorkitemHandlerType::CBS)
-    return PreservedAnalyses::all();
-
-  Initialize(cast<pocl::Kernel>(&F));
+  initialize(cast<pocl::Kernel>(&F), WorkitemHandlerType::CBS);
 
 #ifdef DEBUG_SUBCFG_FORMATION
   llvm::errs() << "[SubCFG] Form SubCFGs in " << F.getName() << "\n";

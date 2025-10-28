@@ -24,7 +24,8 @@
 #include "Barrier.h"
 #include "DebugHelpers.h"
 #include "SubgroupBarrier.h"
-#include "WorkitemHandlerChooser.h"
+#include "WorkitemHandler.h"
+
 #include "llvm/IR/IRBuilder.h"
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/Verifier.h>
@@ -41,7 +42,8 @@ using namespace llvm;
 class FiberImpl : public pocl::WorkitemHandler {
 
 public:
-  FiberImpl(llvm::DominatorTree &DT, VariableUniformityAnalysisResult &VUA, llvm::LoopInfo &LI)
+  FiberImpl(llvm::DominatorTree &DT,
+            VariableUniformityAnalysisResult &VUA, llvm::LoopInfo &LI)
       : WorkitemHandler(), DT(DT), VUA(VUA), LI(LI) {}
 
   virtual bool runOnFunction(llvm::Function &F);
@@ -56,8 +58,6 @@ protected:
   llvm::Value *getLinearWIIndexInRegion(llvm::Instruction *Instr) override;
 
 private:
-  WorkitemHandlerType WIH;
-
   llvm::Module *M;
   llvm::Function *F;
   llvm::DominatorTree &DT;
@@ -164,8 +164,6 @@ void FiberImpl::preprocessBarriers() {
 void FiberImpl::handleWIContextVariables() {
 
   InstructionVec ValuesToContextSave;
-
-  WorkitemHandlerType WIH = getWorkitemHandler();
 
   // Identify variables to save.
   for (auto &BB : *F) {
@@ -720,9 +718,7 @@ bool FiberImpl::runOnFunction(llvm::Function &Func) {
   M = Func.getParent();
   F = &Func;
 
-  WIH = getWorkitemHandler();
-
-  Initialize(llvm::cast<Kernel>(&Func));
+  initialize(llvm::cast<Kernel>(&Func), WorkitemHandlerType::FIBER);
 
 #ifdef DEBUG_FIBER
   std::cerr << "Before fiber:\n";

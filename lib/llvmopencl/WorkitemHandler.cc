@@ -90,12 +90,10 @@ constexpr const char *POCL_WORK_GROUP_ALLOCA_FUNC_NAME =
 ///
 /// Should be invoked from the work-item handlers to initialize the internal
 /// per-kernel data.
-void WorkitemHandler::Initialize(Kernel *K_) {
-
+void WorkitemHandler::initialize(Kernel *K_, WorkitemHandlerType TheWIH) {
   K = K_;
   M = K->getParent();
-
-  WIH = getWorkitemHandler();
+  WIH = TheWIH;
 
   LocalMemAllocaFuncDecl =
       K->getParent()->getFunction(POCL_LOCAL_MEM_ALLOCA_FUNC_NAME);

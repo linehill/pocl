@@ -55,6 +55,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
+#include <llvm/Analysis/PostDominators.h>
 
 #include "LLVMUtils.h"
 #include "UnreachablesToReturns.h"
@@ -325,7 +326,9 @@ ConvertUnreachablesToReturns::run(llvm::Function &F,
 
   // for LOOPS, remove the blocks with unreachable inst.
   // for CBS, replace unreachable with ret void
-  WorkitemHandlerType WIH = getWorkitemHandler();
+  auto &PDT = AM.getResult<llvm::PostDominatorTreeAnalysis>(F);
+  auto &LI = AM.getResult<llvm::LoopAnalysis>(F);
+  WorkitemHandlerType WIH = getWorkitemHandler(F, PDT, LI);
 
   bool Changed = (WIH == WorkitemHandlerType::LOOPS)
                      ? deleteBlocksWithUnreachable(F)

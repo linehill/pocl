@@ -30,6 +30,8 @@
 #include "Kernel.h"
 #include "VariableUniformityAnalysis.h"
 #include "VariableUniformityAnalysisResult.hh"
+#include "WorkitemHandlerChooser.h"
+
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/PassManager.h>
@@ -40,17 +42,15 @@
 
 namespace pocl {
 
-enum class WorkitemHandlerType;
-
 // Common base class for work-group function generators that includes
 // utility functionality.
 class WorkitemHandler {
 public:
   // Should be called when starting to process a new kernel.
-  void Initialize(pocl::Kernel *K);
+  void initialize(pocl::Kernel *K, WorkitemHandlerType WIH);
 
 protected:
-  WorkitemHandlerType WIH;
+  WorkitemHandlerType WIH = WorkitemHandlerType::INVALID;
 
   using StrInstructionMap = std::map<std::string, llvm::AllocaInst *>;
   using InstructionVec = std::vector<llvm::Instruction *>;

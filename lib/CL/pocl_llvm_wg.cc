@@ -473,14 +473,6 @@ static void addStage1PassesToPipeline(cl_device_id Dev,
   // both of these must be done AFTER inlining, see note above
   addPass(Passes, "automatic-locals", PassType::Module);
 
-  // Handle UnreachableInsts by converting them to returns or just deleting
-  // them. Julia expects graceful handling of UIs with printouts before them. We
-  // should convert the UIs in the input here otherwise optimizers will remove
-  // them.
-
-  if (!Dev->spmd)
-    addPass(Passes, "unreachables-to-returns");
-
   // must come AFTER flatten-globals & always-inline
   addPass(Passes, "optimize-wi-gvars");
 
@@ -491,9 +483,6 @@ static void addStage1PassesToPipeline(cl_device_id Dev,
   addPass(Passes, "instcombine");
 #endif
   addPass(Passes, "memcpyopt");
-
-  if (!Dev->spmd)
-    addPass(Passes, "unreachables-to-returns");
 }
 
 // add the second part of the PoCL passes (after 1st, up to 2nd optimization in old PM)
@@ -514,10 +503,12 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     // addPass(Passes, "simplifycfg");
     addPass(Passes, "loop-simplify");
 
-    // ...we have to call UTR again here because some optimizations in LLVM
-    // might generate UIs.
-    if (!Dev->spmd)
-      addPass(Passes, "unreachables-to-returns");
+    // Handle UnreachableInsts by converting them to returns or just deleting
+    // them. Julia expects graceful handling of UIs with printouts before
+    // them. We should convert the UIs in the input here otherwise optimizers
+    // will remove them.
+    addPass(Passes, "unreachables-to-returns");
+
     // TODO: We might want to run reg2mem (which should do what the old
     // phistoallocas did) in case of SPIR-V inputs which can be optimized
     // to some extent and produce PHIs.

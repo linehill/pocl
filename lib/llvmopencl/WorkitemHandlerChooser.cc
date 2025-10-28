@@ -29,6 +29,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 
 #include "LLVMUtils.h"
 #include "WorkitemHandlerChooser.h"
+#include "WorkitemLoops.h"
 POP_COMPILER_DIAGS
 
 #include <iostream>
@@ -37,7 +38,47 @@ namespace pocl {
 
 using namespace llvm;
 
-WorkitemHandlerType getWorkitemHandler() {
+static llvm::StringRef asString(WorkitemHandlerType WIH) {
+  switch (WIH) {
+  default:
+    assert(!"Missing WIH type to string mapping!");
+    LLVM_FALLTHROUGH;
+  case WorkitemHandlerType::INVALID:
+    return "invalid";
+
+  case WorkitemHandlerType::LOOPS:
+    return "loopvec";
+  case WorkitemHandlerType::CBS:
+    return "cbs";
+  case WorkitemHandlerType::FIBER:
+    return "fiber";
+  }
+}
+
+// This is a counterpart for asString(WorkitemHandlerType). The behavior is
+// undefined if 'Value' is not something returned by it.
+WorkitemHandlerType parseFromString(llvm::StringRef Value) {
+  static const llvm::StringMap<WorkitemHandlerType> Map({
+      {"invalid", WorkitemHandlerType::INVALID},
+      {"loopvec", WorkitemHandlerType::LOOPS},
+      {"cbs", WorkitemHandlerType::CBS},
+      {"fiber", WorkitemHandlerType::FIBER},
+  });
+
+  assert(Map.contains(Value));
+  return Map.at(Value);
+}
+
+static const char *PoclWGMethodAttrName = "pocl-wg-method";
+
+WorkitemHandlerType
+getWorkitemHandler(Function &F, llvm::PostDominatorTree &PDT, LoopInfo &LI) {
+
+  // The work-group method decision is made sticky because PoCL passes may make
+  // transfomations that are incompatible with other WG methods.
+  if (F.hasFnAttribute(PoclWGMethodAttrName))
+    return parseFromString(
+        F.getFnAttribute(PoclWGMethodAttrName).getValueAsString());
 
   WorkitemHandlerType Result = WorkitemHandlerType::INVALID;
 
@@ -52,8 +93,6 @@ WorkitemHandlerType getWorkitemHandler() {
     else if (method == "fiber")
       Result = WorkitemHandlerType::FIBER;
     else if (method != "auto") {
-      std::cerr << "Unknown work group generation method. Using 'auto'."
-                << std::endl;
       method = "auto";
     }
   }
@@ -62,6 +101,17 @@ WorkitemHandlerType getWorkitemHandler() {
     // To be replaced with heuristics in DeSPMD.
     Result = WorkitemHandlerType::LOOPS;
   }
+
+  if (Result == WorkitemHandlerType::LOOPS &&
+      !wiloops::canHandleKernel(F, PDT, LI)) {
+    Result = WorkitemHandlerType::FIBER;
+  }
+
+  auto WGMethodAttr =
+      Attribute::get(F.getContext(), PoclWGMethodAttrName, asString(Result));
+
+  F.setAttributes(
+      F.getAttributes().addFnAttribute(F.getContext(), WGMethodAttr));
 
   return Result;
 }

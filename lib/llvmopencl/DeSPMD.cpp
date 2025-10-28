@@ -133,7 +133,7 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
 
   bool Changed = false;
 
-  WorkitemHandlerType WIH = getWorkitemHandler();
+  WorkitemHandlerType WIH = getWorkitemHandler(F, PDT, LI);
 
 #ifdef RENAME_UNNAMED_BBS
   renameUnnamedBlocks(F);

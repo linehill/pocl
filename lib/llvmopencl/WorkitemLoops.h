@@ -31,15 +31,19 @@ class DominatorTreeAnalysis;
 class Function;
 class LoopAnalysis;
 class PostDominatorTreeAnalysis;
-class VariableUniformityAnalysisResult;
 } // namespace llvm
 
 namespace pocl {
+class VariableUniformityAnalysisResult;
 
 bool addWorkItemLoops(llvm::Function &F, llvm::DominatorTree &DT,
                       llvm::PostDominatorTree &PDT, llvm::LoopInfo &LI,
                       VariableUniformityAnalysisResult &VUA);
 
+namespace wiloops {
+bool canHandleKernel(llvm::Function &K, llvm::PostDominatorTree &PDT,
+                     llvm::LoopInfo &LI);
+}
 } // namespace pocl
 
 #endif

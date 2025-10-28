@@ -26,7 +26,10 @@
 
 #include "config.h"
 
-#include "WorkitemHandler.h"
+namespace llvm {
+class PostDominatorTree;
+class LoopInfo;
+} // namespace llvm
 
 namespace pocl {
 
@@ -36,7 +39,9 @@ enum class WorkitemHandlerType { LOOPS, CBS, FIBER, INVALID };
 ///
 /// This is controlled by the POCL_WORK_GROUP_METHOD environment variable.
 /// The "auto" selector is a WiP in the new organization of passes.
-WorkitemHandlerType getWorkitemHandler();
+WorkitemHandlerType getWorkitemHandler(llvm::Function &F,
+                                       llvm::PostDominatorTree &PDT,
+                                       llvm::LoopInfo &LI);
 
 } // namespace pocl
 

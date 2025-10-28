@@ -54,6 +54,7 @@ set(PROGRAMS_TO_BUILD test_barrier_between_for_loops test_early_return
   test_mem_host_ptr_issue test_issue_1962 test_issue_2005
   test_cond_wg_reduce_add_in_loop
   test_cts_test_convert_double16_rtz_ulong16
+  test_loop_with_continue
 )
 
 if (MSVC)
@@ -297,6 +298,10 @@ add_test_pocl(NAME "regression/test_cts_test_convert_double16_rtz_ulong16"
 add_test_pocl(NAME "regression/test_issue_1525" LABELS "mingw_fail;win_fail"
   COMMAND "test_issue_1525"
   LLVM_FILECHECKS "test_issue_1525.fc"
+  WORKITEM_HANDLER "loopvec")
+
+add_test_pocl(NAME "regression/test_loop_with_continue"
+  COMMAND "test_loop_with_continue"
   WORKITEM_HANDLER "loopvec")
 
 # Label tests that also work with TCE

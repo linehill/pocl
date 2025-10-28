@@ -53,7 +53,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "VariableUniformityAnalysisResult.hh"
 #include "Workgroup.h"
 #include "WorkgroupBarrier.h"
-#include "WorkitemHandlerChooser.h"
+#include "WorkitemHandler.h"
 #include "WorkitemLoops.h"
 #include "pocl_runtime_config.h"
 
@@ -105,8 +105,6 @@ private:
   using StrInstructionMap = std::map<std::string, llvm::AllocaInst *>;
 
   int StaticSubGSize;
-
-  WorkitemHandlerType WIH;
 
   llvm::DominatorTree &DT;
   llvm::LoopInfo &LI;
@@ -501,9 +499,7 @@ bool WorkitemLoopsImpl::runOnFunction(Function &Func) {
   M = Func.getParent();
   F = &Func;
 
-  WIH = getWorkitemHandler();
-
-  Initialize(cast<Kernel>(&Func));
+  initialize(cast<Kernel>(&Func), WorkitemHandlerType::LOOPS);
 
   LLVM_DEBUG(dbgs() << "Before WILoops:\n");
   LLVM_DEBUG(Func.dump());
@@ -1525,9 +1521,9 @@ bool addWorkItemLoops(llvm::Function &F, llvm::DominatorTree &DT,
   return WIL.runOnFunction(F);
 }
 
-#if 0
-bool WorkitemLoops::canHandleKernel(llvm::Function &K,
-                                    llvm::FunctionAnalysisManager &AM) {
+namespace wiloops {
+bool canHandleKernel(llvm::Function &K, llvm::PostDominatorTree &PDT,
+                     llvm::LoopInfo &LI) {
 
   // The below cases should be now manageable. TODO: update the check for the
   // unhandled case(s).
@@ -1536,7 +1532,6 @@ bool WorkitemLoops::canHandleKernel(llvm::Function &K,
   // It would require additional complexity that is unlikely worth it since
   // the vectorizer won't produce efficient code for such loops anyhow.
   // Tested by tricky_for.cl.
-  LoopInfo &LI = AM.getResult<llvm::LoopAnalysis>(K);
   for (auto *L : LI) {
     if (!Barrier::isLoopWithBarrier(*L))
       continue;
@@ -1545,6 +1540,15 @@ bool WorkitemLoops::canHandleKernel(llvm::Function &K,
     if (L->getExitingBlock() == nullptr) {
       LLVM_DEBUG(
           dbgs() << "Multiple breaks inside a barrier loop, won't handle.\n");
+      return false;
+    }
+
+    // Some loops with multiple back-edges form invalid parallel regions
+    // currently.
+    if (L->getLoopLatch()) {
+      LLVM_DEBUG(
+          dbgs()
+          << "Multiple back-edges inside a barrier loop, won't handle.\n");
       return false;
     }
   }
@@ -1557,8 +1561,6 @@ bool WorkitemLoops::canHandleKernel(llvm::Function &K,
   // conditional with something else than the loop condition. An optimization
   // would be to allow detected uniform conditions and isolate the if part
   // to a uniform region with a separate parallel region in both branches.
-
-  llvm::PostDominatorTree &PDT = AM.getResult<PostDominatorTreeAnalysis>(K);
   for (Function::iterator FI = K.begin(), FE = K.end(); FI != FE; ++FI) {
     BasicBlock *BB = &*FI;
 
@@ -1602,6 +1604,6 @@ bool WorkitemLoops::canHandleKernel(llvm::Function &K,
   }
   return true;
 }
-#endif
 
+} // namespace wiloops
 } // namespace pocl
