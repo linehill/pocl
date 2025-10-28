@@ -962,6 +962,11 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
 
   K->getParallelRegions(LI, &OriginalParallelRegions, VUA);
 
+#ifndef NDEBUG
+  for (auto *PR : OriginalParallelRegions)
+    PR->verify(/*AbortOnFailure=*/true);
+#endif
+
   bool Changed = false;
 
   Changed = handleLocalMemAllocas() || Changed;

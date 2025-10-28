@@ -165,6 +165,8 @@ class Kernel;
 
     static int getNextID() { return idGen; }
 
+    bool verify(bool AbortOnFailure = false);
+
   private:
     BBContainer BBs_;
 
@@ -172,7 +174,6 @@ class Kernel;
     /// ids.
     std::map<std::string, llvm::Instruction *> IDLoadInstrs;
 
-    bool Verify();
     /// The indices of entry and exit, not pointers, for finding the BBs in the
     /// replicated PRs too.
     std::size_t exitIndex_;

@@ -345,8 +345,9 @@ ParallelRegion *ParallelRegion::Create(const SmallPtrSet<BasicBlock *, 8> &BBs,
   return NewRegion;
 }
 
+/// Returns true if the paraller region is well-defined.
 bool
-ParallelRegion::Verify()
+ParallelRegion::verify([[maybe_unused]] bool AbortOnFailure)
 {
   // Parallel region conditions:
   // 1) Single entry, in entry block.
@@ -372,11 +373,11 @@ ParallelRegion::Verify()
           dumpCFG(*(*i)->getParent(),
                   (*i)->getParent()->getName().str() + ".dot", nullptr, &prvec,
                   &highlights);
-          assert(0 && "Incoming edges to non-entry block!");
+          assert(!AbortOnFailure && "Incoming edges to non-entry block!");
           return false;
         } else if (!Barrier::hasBarrier(*ii)) {
           (*i)->getParent()->viewCFG();
-          assert (0 && "Entry has edges from non-barrier blocks!");
+          assert(!AbortOnFailure && "Entry has edges from non-barrier blocks!");
           return false;
         }
         ++entry_edges;
@@ -384,7 +385,7 @@ ParallelRegion::Verify()
     }
 
     // if (entry_edges != 1) {
-    //   assert(0 && "Parallel regions must be single entry!");
+    //   assert(!AbortOnFailure && "Parallel regions must be single entry!");
     //   return false;
     // }
     if (exitBB()->getTerminator()->getNumSuccessors() != 1) {
@@ -401,14 +402,14 @@ ParallelRegion::Verify()
               &regions, &highlights);
 #endif
 
-      assert(0 && "Multiple outgoing edges from exit block!");
+      assert(!AbortOnFailure && "Multiple outgoing edges from exit block!");
       return false;
     }
 
     for (BasicBlock::iterator ii = (*i)->begin(), ee = (*i)->end();
            ii != ee; ++ii) {
       if (isa<Barrier> (ii)) {
-        assert(0 && "Barrier found inside parallel region!");
+        assert(!AbortOnFailure && "Barrier found inside parallel region!");
         return false;
       }
     }
