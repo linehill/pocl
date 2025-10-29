@@ -135,87 +135,87 @@ add_test_pocl(NAME "runtime/test_user_event" COMMAND  "test_user_event" WORKITEM
 add_test_pocl(NAME "autorestrict/disjoint_buffers"
   COMMAND "test_automatic_noalias DisjointBuffers"
   WORKITEM_HANDLER "loops"
-  LLVM_FILECHECK "autorestrict_noalias_set.fc"
-  ONLY_FILECHECK 1)
+  LLVM_FILECHECKS "autorestrict_noalias_set.fc"
+  ONLY_FILECHECKS 1)
 
 add_test_pocl(NAME "autorestrict/inplace_buffers"
   COMMAND "test_automatic_noalias InplaceBuffers"
   WORKITEM_HANDLER "loops"
-  LLVM_FILECHECK "autorestrict_noalias_not_set.fc"
-  ONLY_FILECHECK 1)
+  LLVM_FILECHECKS "autorestrict_noalias_not_set.fc"
+  ONLY_FILECHECKS 1)
 
 add_test_pocl(NAME "autorestrict/disjoint_coarse_svm"
   COMMAND "test_automatic_noalias DisjointCoarseSVM"
   WORKITEM_HANDLER "loops"
-  LLVM_FILECHECK "autorestrict_noalias_set.fc"
-  ONLY_FILECHECK 1)
+  LLVM_FILECHECKS "autorestrict_noalias_set.fc"
+  ONLY_FILECHECKS 1)
 
 add_test_pocl(NAME "autorestrict/inplace_coarse_svm"
   COMMAND "test_automatic_noalias InplaceCoarseSVM"
   WORKITEM_HANDLER "loops"
-  LLVM_FILECHECK "autorestrict_noalias_not_set.fc"
-  ONLY_FILECHECK 1)
+  LLVM_FILECHECKS "autorestrict_noalias_not_set.fc"
+  ONLY_FILECHECKS 1)
 
 add_test_pocl(NAME "autorestrict/inplace_coarse_svm_with_indirect"
   COMMAND "test_automatic_noalias DisjointCoarseSVMWithIndirect"
   WORKITEM_HANDLER "loops"
-  LLVM_FILECHECK "autorestrict_noalias_not_set.fc"
-  ONLY_FILECHECK 1)
+  LLVM_FILECHECKS "autorestrict_noalias_not_set.fc"
+  ONLY_FILECHECKS 1)
 
 add_test_pocl(NAME "autorestrict/inplace_coarse_svm_with_fgsystem"
   COMMAND "test_automatic_noalias DisjointCoarseSVMWithFGSystem"
   WORKITEM_HANDLER "loops"
-  LLVM_FILECHECK "autorestrict_noalias_not_set.fc"
-  ONLY_FILECHECK 1)
+  LLVM_FILECHECKS "autorestrict_noalias_not_set.fc"
+  ONLY_FILECHECKS 1)
 
 add_test_pocl(NAME "smallbuf/large_buffers"
   COMMAND "test_buffer_size_specialization LargeBuffers"
   WORKITEM_HANDLER "loops"
-  LLVM_FILECHECK "smallbuf_trunc_not_added.fc"
-  ONLY_FILECHECK 1)
+  LLVM_FILECHECKS "smallbuf_trunc_not_added.fc"
+  ONLY_FILECHECKS 1)
 
 add_test_pocl(NAME "smallbuf/small_buffers"
   COMMAND "test_buffer_size_specialization SmallBuffers"
   WORKITEM_HANDLER "loops"
-  LLVM_FILECHECK "smallbuf_trunc_added.fc"
-  ONLY_FILECHECK 1)
+  LLVM_FILECHECKS "smallbuf_trunc_added.fc"
+  ONLY_FILECHECKS 1)
 
 add_test_pocl(NAME "smallbuf/mixed_buffers"
   COMMAND "test_buffer_size_specialization MixedBuffers"
   WORKITEM_HANDLER "loops"
-  LLVM_FILECHECK "smallbuf_trunc_not_added.fc"
-  ONLY_FILECHECK 1)
+  LLVM_FILECHECKS "smallbuf_trunc_not_added.fc"
+  ONLY_FILECHECKS 1)
 
 add_test_pocl(NAME "smallbuf/large_svm_buffers"
   COMMAND "test_buffer_size_specialization LargeSVMBuffers"
   WORKITEM_HANDLER "loops"
-  LLVM_FILECHECK "smallbuf_trunc_not_added.fc"
-  ONLY_FILECHECK 1)
+  LLVM_FILECHECKS "smallbuf_trunc_not_added.fc"
+  ONLY_FILECHECKS 1)
 
 add_test_pocl(NAME "smallbuf/small_svm_buffers"
   COMMAND "test_buffer_size_specialization SmallSVMBuffers"
   WORKITEM_HANDLER "loops"
-  LLVM_FILECHECK "smallbuf_trunc_added.fc"
-  ONLY_FILECHECK 1)
+  LLVM_FILECHECKS "smallbuf_trunc_added.fc"
+  ONLY_FILECHECKS 1)
 
 add_test_pocl(NAME "smallbuf/mixed_svm_buffers"
   COMMAND "test_buffer_size_specialization MixedSVMBuffers"
   WORKITEM_HANDLER "loops"
-  LLVM_FILECHECK "smallbuf_trunc_not_added.fc"
-  ONLY_FILECHECK 1)
+  LLVM_FILECHECKS "smallbuf_trunc_not_added.fc"
+  ONLY_FILECHECKS 1)
 
 add_test_pocl(NAME "alloca_removal"
   COMMAND "test_alloca_removal"
   WORKITEM_HANDLER "loopvec"
-  LLVM_FILECHECK "alloca_removal.fc"
-  ONLY_FILECHECK 1
+  LLVM_FILECHECKS "alloca_removal.fc"
+  ONLY_FILECHECKS 1
   ENVIRONMENT "POCL_VECTORIZER_FORCE_VECTOR_WIDTH=4")
 
 add_test_pocl(NAME "alloca_removal1"
   COMMAND "test_alloca_removal1"
   WORKITEM_HANDLER "loopvec"
-  LLVM_FILECHECK "alloca_removal1.fc"
-  ONLY_FILECHECK 1
+  LLVM_FILECHECKS "alloca_removal1.fc"
+  ONLY_FILECHECKS 1
   ENVIRONMENT "POCL_VECTORIZER_FORCE_VECTOR_WIDTH=4")
 
 # these tests require a lot of memory (up to 8GB);

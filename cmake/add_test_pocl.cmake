@@ -32,13 +32,15 @@ include(CMakeParseArguments)
 # 2) handles the exit status problem (test properties WILL_FAIL does not work if
 #    the test exits with !0 exit status)
 #
-# If LLVM_FILECHECK is set to an existing FileCheck file, an additional test
-# will be added that runs the test with the LLVM IR tester script using the
-# loopvec method.
+# If LLVM_FILECHECKS list, containing FileCheck files, is set,
+# additional tests will be added that runs the test with the LLVM IR
+# tester script using the loopvec method. Only one successfull file-check
+# on any FileCheck file is needed to pass the IR check.
 #
-# If ONLY_FILECHECK is set to 1, the test is only added as an LLVM IR filecheck
-# which runs the program and validates the parallel.bc IR. Otherwrise, if LLVM_FILECHECK
-# is given, the execution test is added also separately.
+# If ONLY_FILECHECKS is set to 1, the test is only added as an LLVM IR
+# filecheck which runs the program and validates the parallel.bc
+# IR. Otherwise, if LLVM_FILECHECKS is given, the execution test is
+# added also separately.
 #
 # LABELS can be used to add labels as a semicolon separated list.
 # By default no labels are added and the test is expected to pass with host CPUs.
@@ -50,8 +52,9 @@ include(CMakeParseArguments)
 function(add_test_pocl)
 
   set(options SORT_OUTPUT)
-  set(oneValueArgs EXPECTED_OUTPUT NAME WORKING_DIRECTORY LLVM_FILECHECK ONLY_FILECHECK ENVIRONMENT)
-  set(multiValueArgs COMMAND WORKITEM_HANDLER LABELS)
+  set(oneValueArgs EXPECTED_OUTPUT NAME WORKING_DIRECTORY
+    ONLY_FILECHECKS ENVIRONMENT ONLY_FILECHECK LLVM_FILECHECK)
+  set(multiValueArgs COMMAND WORKITEM_HANDLER LABELS LLVM_FILECHECKS)
   cmake_parse_arguments(POCL_TEST "${options}" "${oneValueArgs}"
                         "${multiValueArgs}" ${ARGN})
   if(POCL_TEST_WORKITEM_HANDLER)
@@ -61,6 +64,15 @@ function(add_test_pocl)
   endif()
 
   list(LENGTH VARIANTS VARIANTS_COUNT)
+
+  # For an (unspeficied) transition period, catch mistakes of using the old
+  # parameters.
+  if(POCL_TEST_LLVM_FILECHECK)
+   message(FATAL_ERROR "LLVM_FILECHECK has been renamed to LLVM_FILECHECKS")
+  endif()
+  if(POCL_TEST_ONLY_FILECHECK)
+   message(FATAL_ERROR "ONLY_FILECHECK has been renamed to ONLY_FILECHECKS")
+  endif()
 
   foreach(VARIANT ${VARIANTS})
     if(${VARIANTS_COUNT} GREATER 1)
@@ -114,7 +126,7 @@ function(add_test_pocl)
     endif()
     list(APPEND POCL_TEST_ARGLIST "-P" "${CMAKE_SOURCE_DIR}/cmake/run_test.cmake")
 
-    if(NOT POCL_TEST_ONLY_FILECHECK)
+    if(NOT POCL_TEST_ONLY_FILECHECKS)
       add_test(${POCL_TEST_ARGLIST})
 
       if(NOT ENABLE_ANYSAN)
@@ -136,8 +148,12 @@ function(add_test_pocl)
         LABELS "${POCL_TEST_LABELS}")
     endif()
 
-    if(ENABLE_LLVM_FILECHECKS AND POCL_TEST_LLVM_FILECHECK)
-      set(RUN_CMD "${CMAKE_SOURCE_DIR}/tools/scripts/run-and-check-llvm-ir####${TARGET_LLVM_FILECHECK}####${TARGET_LLVM_DIS}####${CMAKE_CURRENT_SOURCE_DIR}/${POCL_TEST_LLVM_FILECHECK}####${RUN_CMD}")
+    if(ENABLE_LLVM_FILECHECKS AND POCL_TEST_LLVM_FILECHECKS)
+      set(FC_RUN_CMD "${CMAKE_SOURCE_DIR}/tools/scripts/run-and-check-llvm-ir####${TARGET_LLVM_FILECHECK}####${TARGET_LLVM_DIS}####${CMAKE_CURRENT_SOURCE_DIR}/${POCL_TEST_LLVM_FILECHECK}####${RUN_CMD}")
+      foreach(FC IN LISTS POCL_TEST_LLVM_FILECHECKS)
+        set(FC_RUN_CMD "${FC_RUN_CMD}####${CMAKE_CURRENT_SOURCE_DIR}/${FC}")
+      endforeach()
+      set(RUN_CMD "${FC_RUN_CMD}####--####${RUN_CMD}")
 
       set(POCL_TEST_IR_CHECK_NAME "${POCL_VARIANT_TEST_NAME}_llvm-ir-checks")
       set(POCL_TEST_ARGLIST "NAME" ${POCL_TEST_IR_CHECK_NAME})

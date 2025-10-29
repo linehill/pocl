@@ -296,7 +296,7 @@ add_test_pocl(NAME "regression/test_cts_test_convert_double16_rtz_ulong16"
 # fails on windows/MinGW with "access violation"
 add_test_pocl(NAME "regression/test_issue_1525" LABELS "mingw_fail;win_fail"
   COMMAND "test_issue_1525"
-  LLVM_FILECHECK "test_issue_1525.fc"
+  LLVM_FILECHECKS "test_issue_1525.fc"
   WORKITEM_HANDLER "loopvec")
 
 # Label tests that also work with TCE

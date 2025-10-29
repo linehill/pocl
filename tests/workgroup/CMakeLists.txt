@@ -35,7 +35,7 @@ target_link_libraries("run_kernel" ${POCLU_LINK_OPTIONS})
 if((LLVM_VERSION VERSION_GREATER_EQUAL 21.0) AND
     (${TESTED_CPU_UARCH} MATCHES "(broadwell|znver3)"))
   # Check the kernel emits a vector load instead of a (masked) gather.
-  set(SG_SHUFFLE_SMALL_FC "sg_shuffle_small.fc")
+  list(APPEND SG_SHUFFLE_SMALL_FC_LIST sg_shuffle_small.fc)
 else()
   # So far, the vector load is known to be emitted for few(?)
   # architectures by PoCL's pass pipeline.  However, dumping the
@@ -43,7 +43,8 @@ else()
   # `clang -O2` emits code with vector load instead of gather
   # instruction (on an Alderlake machine at least). Maybe PoCL's
   # pipeline needs tweaking?
-  set(SG_SHUFFLE_SMALL_FC "sg_shuffle_small_gather.fc")
+  list(APPEND SG_SHUFFLE_SMALL_FC_LIST
+    sg_shuffle_small_gather.fc sg_shuffle_small.fc sg_shuffle_small_vstore.fc)
 endif()
 
 # This is expected to generate shufflevector instructions.
@@ -52,13 +53,13 @@ if(HOST_DEVICE_EXTENSIONS MATCHES "cl_khr_subgroup")
   add_test_pocl(NAME "subgroup/shuffle_small"
                 EXPECTED_OUTPUT "sg_shuffle_small_1_8_1_1.stdout"
                 COMMAND "run_kernel" "sg_shuffle.cl" 1 8 1 1
-                LLVM_FILECHECK "${SG_SHUFFLE_SMALL_FC}"
+                LLVM_FILECHECKS "${SG_SHUFFLE_SMALL_FC_LIST}"
                 WORKITEM_HANDLER "loopvec")
 
   add_test_pocl(NAME "subgroup/shuffle_inside_kloop"
                 EXPECTED_OUTPUT "sg_shuffle_kloop_1_16_1_1.stdout"
                 COMMAND "run_kernel" "sg_shuffle_kloop.cl" 1 16 1 1
-                LLVM_FILECHECK "sg_shuffle_kloop.fc"
+                LLVM_FILECHECKS "sg_shuffle_kloop.fc"
                 WORKITEM_HANDLER "loopvec")
 endif()
 
@@ -103,7 +104,7 @@ add_test_pocl(NAME "workgroup/cond_barriers_in_for"
 add_test_pocl(NAME "workgroup/outerlooppar_multiple_exits"
               EXPECTED_OUTPUT "outerlooppar_multiple_exits_1_4_1_1.stdout"
               COMMAND "run_kernel" "outerlooppar_multiple_exits.cl" 1 4 1 1
-              LLVM_FILECHECK "outerlooppar_multiple_exits.fc"
+              LLVM_FILECHECKS "outerlooppar_multiple_exits.fc"
               WORKITEM_HANDLER "loopvec")
 
 #add_test_pocl(NAME "workgroup/cond_barrier_in_var_for_cbs"
@@ -247,13 +248,13 @@ add_test_pocl(NAME "workgroup/forcing_horizontal_parallelization_to_some_outer_l
 add_test_pocl(NAME "workgroup/reduce"
               EXPECTED_OUTPUT "reduce_2_512_1_1.stdout"
               COMMAND "run_kernel" "reduce.cl" 2 512 1 1
-              LLVM_FILECHECK "reduce.fc"
+              LLVM_FILECHECKS "reduce.fc"
               WORKITEM_HANDLER "loopvec")
 
 add_test_pocl(NAME "workgroup/reduce_intra_kernel"
               EXPECTED_OUTPUT "reduce_2_512_1_1.stdout"
               COMMAND "run_kernel" "reduce_intra_kernel.cl" 2 512 1 1
-              LLVM_FILECHECK "reduce_intra.fc"
+              LLVM_FILECHECKS "reduce_intra.fc"
               # The intra FP reduce only vectorizes with relaxed math.
               ENVIRONMENT "POCL_EXTRA_BUILD_FLAGS=-cl-fast-relaxed-math"
               WORKITEM_HANDLER "loopvec")

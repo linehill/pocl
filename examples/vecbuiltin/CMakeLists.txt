@@ -39,7 +39,8 @@ add_executable("vecbuiltin" vecbuiltin.c vecbuiltin_exec.c vecbuiltin.cl)
 target_link_libraries("vecbuiltin" ${POCLU_LINK_OPTIONS})
 add_symlink_to_built_opencl_dynlib("vecbuiltin")
 
-add_test_pocl(NAME "examples/vecbuiltin" COMMAND "vecbuiltin" LLVM_FILECHECK "vecbuiltin.fc" WORKITEM_HANDLER "loopvec")
+add_test_pocl(NAME "examples/vecbuiltin" COMMAND "vecbuiltin"
+  LLVM_FILECHECKS "vecbuiltin.fc" WORKITEM_HANDLER "loopvec")
 
 set_tests_properties(
   "examples/vecbuiltin"
