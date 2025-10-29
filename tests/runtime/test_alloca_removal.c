@@ -35,7 +35,7 @@ const char *kernelSource =
 "    int no_of_edges; \n"
 "} Node; \n"
 "\n"
-"__kernel void BFS_step_impl( const __global Node* __restrict__ g_graph_nodes, \n"
+"__kernel void __attribute((always_inline)) BFS_step_impl( const __global Node* __restrict__ g_graph_nodes, \n"
 "                             const __global int* __restrict__ g_graph_edges, \n"
 "                             __global char* __restrict__ g_graph_mask, \n"
 "                             __global char* __restrict__ g_updating_graph_mask, \n"
@@ -65,6 +65,7 @@ const char *kernelSource =
 "                        __global char* __restrict__ g_graph_visited, \n"
 "                        __global int* __restrict__ g_cost, \n"
 "                        const int no_of_nodes) { \n"
+"    if (no_of_nodes == 0) return; \n"
 "    BFS_step_impl(g_graph_nodes, \n"
 "                  g_graph_edges, \n"
 "                  g_graph_mask, \n"
@@ -75,23 +76,6 @@ const char *kernelSource =
 "} \n";
 
 int main() {
-    // Grafo: 0->1,2 ; 1->3 ; 2->3
-    int no_of_nodes = 4;
-    Node graph_nodes[4];
-    int edges[] = {1,2, 3, 3}; // 0->1,2; 1->3; 2->3
-
-    // offsets
-    graph_nodes[0].starting = 0; graph_nodes[0].no_of_edges = 2;
-    graph_nodes[1].starting = 2; graph_nodes[1].no_of_edges = 1;
-    graph_nodes[2].starting = 3; graph_nodes[2].no_of_edges = 1;
-    graph_nodes[3].starting = 4; graph_nodes[3].no_of_edges = 0;
-
-    // BFS masks y visited
-    char graph_mask[4] = {1,0,0,0};   // nivel inicial = {0}
-    char updating_mask[4] = {0};
-    char visited[4] = {1,0,0,0};
-    int cost[4] = {0,-1,-1,-1};
-
     // OpenCL boilerplate
     cl_platform_id platform; cl_device_id device;
     cl_context context; cl_command_queue queue;
@@ -110,20 +94,20 @@ int main() {
     CHECK_OPENCL_ERROR_IN("clCreateCommandQueue");
 
     // Buffers
-    cl_mem d_nodes = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                                    sizeof(graph_nodes), graph_nodes, NULL);
-    cl_mem d_edges = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                                    sizeof(edges), edges, NULL);
-    cl_mem d_mask = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                                   sizeof(graph_mask), graph_mask, NULL);
-    cl_mem d_updating = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                                       sizeof(updating_mask), updating_mask, NULL);
-    cl_mem d_visited = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                                      sizeof(visited), visited, NULL);
-    cl_mem d_cost = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                                   sizeof(cost), cost, NULL);
+    cl_mem d_nodes = clCreateBuffer(context, CL_MEM_READ_ONLY, 1, NULL, &err);
+    CHECK_OPENCL_ERROR_IN("clCreateBuffer");
+    cl_mem d_edges = clCreateBuffer(context, CL_MEM_READ_ONLY, 1, NULL, &err);
+    CHECK_OPENCL_ERROR_IN("clCreateBuffer");
+    cl_mem d_mask = clCreateBuffer(context, CL_MEM_READ_WRITE, 1, NULL, &err);
+    CHECK_OPENCL_ERROR_IN("clCreateBuffer");
+    cl_mem d_updating = clCreateBuffer(context, CL_MEM_READ_WRITE, 1, NULL, &err);
+    CHECK_OPENCL_ERROR_IN("clCreateBuffer");
+    cl_mem d_visited = clCreateBuffer(context, CL_MEM_READ_WRITE, 1, NULL, &err);
+    CHECK_OPENCL_ERROR_IN("clCreateBuffer");
+    cl_mem d_cost = clCreateBuffer(context, CL_MEM_READ_WRITE, 1, NULL, &err);
+    CHECK_OPENCL_ERROR_IN("clCreateBuffer");
 
-    // Compilar kernel
+    // Compile kernel
     program = clCreateProgramWithSource(context, 1, &kernelSource, NULL, &err);
     CHECK_OPENCL_ERROR_IN("clCreateProgramWithSource");
     err = clBuildProgram(program, 1, &device, NULL, NULL, NULL);
@@ -145,28 +129,17 @@ int main() {
     CHECK_OPENCL_ERROR_IN("clSetKernelArg");
     err = clSetKernelArg(kernel, 5, sizeof(cl_mem), &d_cost);
     CHECK_OPENCL_ERROR_IN("clSetKernelArg");
+    // Early kernel exit. We only want to save the LLVM IR for
+    // FileCheck
+    int no_of_nodes = 0;
     err = clSetKernelArg(kernel, 6, sizeof(int), &no_of_nodes);
     CHECK_OPENCL_ERROR_IN("clSetKernelArg");
 
-    size_t globalSize = no_of_nodes;
+    size_t globalSize = 1;
     err = clEnqueueNDRangeKernel(queue, kernel, 1, NULL, &globalSize, NULL, 0, NULL, NULL);
     CHECK_OPENCL_ERROR_IN("clEnqueueNDRangeKernel");
     clFinish(queue);
 
-    // Copiar resultados
-    clEnqueueReadBuffer(queue, d_cost, CL_TRUE, 0, sizeof(cost), cost, 0, NULL, NULL);
-    clEnqueueReadBuffer(queue, d_updating, CL_TRUE, 0, sizeof(updating_mask), updating_mask, 0, NULL, NULL);
-
-    // Mostrar resultados
-    printf("Costos después de una iteración:\n");
-    for (int i = 0; i < no_of_nodes; i++) {
-        printf("Nodo %d: %d (update=%d)\n", i, cost[i], updating_mask[i]);
-    }
-
-    // Cleanup
-    clReleaseMemObject(d_nodes); clReleaseMemObject(d_edges);
-    clReleaseMemObject(d_mask); clReleaseMemObject(d_updating);
-    clReleaseMemObject(d_visited); clReleaseMemObject(d_cost);
     clReleaseKernel(kernel); clReleaseProgram(program);
     clReleaseCommandQueue(queue); clReleaseContext(context);
     return 0;

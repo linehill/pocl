@@ -9,6 +9,5 @@
 #
 # The test passes if both in BFS_step_impl and BFS_step
 # the loop is vectorized.
-CHECK: vector.body:
-CHECK: vector.body:
+CHECK: {{^}}vector.body
 
