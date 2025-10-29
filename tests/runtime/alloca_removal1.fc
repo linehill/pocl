@@ -1,0 +1,14 @@
+# In ff57d94581beef31ba3139ec5fe31699d0829dd3
+# we vectorize 1 loop. With mem2reg after
+# InlineKernels pass we vectorize 9
+CHECK: {{^}}vector.body
+CHECK: {{^}}vector.body
+CHECK: {{^}}vector.body
+CHECK: {{^}}vector.body
+CHECK: {{^}}vector.body
+CHECK: {{^}}vector.body
+CHECK: {{^}}vector.body
+CHECK: {{^}}vector.body
+CHECK: {{^}}vector.body
+
+
