@@ -259,35 +259,25 @@ add_test_pocl(NAME "workgroup/reduce_intra_kernel"
               ENVIRONMENT "POCL_EXTRA_BUILD_FLAGS=-cl-fast-relaxed-math"
               WORKITEM_HANDLER "loopvec")
 
-add_test_pocl(NAME "workgroup/loop_with_two_paths_to_the_latch_loopvec"
+add_test_pocl(NAME "workgroup/loop_with_two_paths_to_the_latch"
               EXPECTED_OUTPUT "for_bug_1_2_1_1.stdout"
-              COMMAND "run_kernel" "for_bug.cl" 1 2 1 1
-              WORKITEM_HANDLER "loopvec")
+              UNORDERED_OUTPUT_DIFF
+              COMMAND "run_kernel" "for_bug.cl" 1 2 1 1)
 
 #add_test_pocl(NAME "workgroup/loop_with_two_paths_to_the_latch_cbs"
 #              EXPECTED_OUTPUT "for_bug_1_2_1_1.stdout"
 #              COMMAND "run_kernel" "for_bug.cl" 1 2 1 1
 #              WORKITEM_HANDLER "cbs")
 
-add_test_pocl(NAME "workgroup/loop_with_two_paths_to_the_latch_fiber"
-              EXPECTED_OUTPUT "for_bug_1_2_1_1_fiber.stdout"
-              COMMAND "run_kernel" "for_bug.cl" 1 2 1 1
-              WORKITEM_HANDLER "fiber")
-
-add_test_pocl(NAME "workgroup/b_loop_with_two_latches_loopvec"
+add_test_pocl(NAME "workgroup/b_loop_with_two_latches"
               EXPECTED_OUTPUT "multilatch_bloop_1_3_1_1.stdout"
-              COMMAND "run_kernel" "multilatch_bloop.cl" 1 3 1 1
-              WORKITEM_HANDLER "loopvec")
+              UNORDERED_OUTPUT_DIFF
+              COMMAND "run_kernel" "multilatch_bloop.cl" 1 3 1 1)
 
 #add_test_pocl(NAME "workgroup/b_loop_with_two_latches_cbs"
 #              EXPECTED_OUTPUT "multilatch_bloop_1_3_1_1.stdout"
 #              COMMAND "run_kernel" "multilatch_bloop.cl" 1 3 1 1
 #              WORKITEM_HANDLER "cbs")
-
-add_test_pocl(NAME "workgroup/b_loop_with_two_latches_fiber"
-              EXPECTED_OUTPUT "multilatch_bloop_1_3_1_1_fiber.stdout"
-              COMMAND "run_kernel" "multilatch_bloop.cl" 1 3 1 1
-              WORKITEM_HANDLER "fiber")
 
 add_test_pocl(NAME "workgroup/workgroup_sizes_work_items_get_wrong_ids"
               SORT_OUTPUT

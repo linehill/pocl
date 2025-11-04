@@ -49,9 +49,19 @@ include(CMakeParseArguments)
 #
 # WORKITEM_HANDLER can be set to a list of WG handlers to test with. Otherwise,
 # "loopvec" and "cbs" are tested.
+#
+# EXPECTED_OUTPUT: Path to a file. If the path is not absolute, the
+# file will be searched relatively to the CMAKE_CURRENT_SOURCE_DIR.
+# When set, the test will check that the output of the test command matches
+# to the contents of the given file.
+#
+# UNORDERED_OUTPUT_DIFF: Meaningful if EXPECTED_OUTPUT is set. This option
+# changes the output checking so that the check passes if the output lines
+# of the test command appear in the EXPECTED_OUTPUT file (including the
+# duplicate lines).
 function(add_test_pocl)
 
-  set(options SORT_OUTPUT)
+  set(options SORT_OUTPUT UNORDERED_OUTPUT_DIFF)
   set(oneValueArgs EXPECTED_OUTPUT NAME WORKING_DIRECTORY
     ONLY_FILECHECKS ENVIRONMENT ONLY_FILECHECK LLVM_FILECHECK)
   set(multiValueArgs COMMAND WORKITEM_HANDLER LABELS LLVM_FILECHECKS)
@@ -124,6 +134,10 @@ function(add_test_pocl)
     if(POCL_TEST_SORT_OUTPUT)
       list(APPEND POCL_TEST_ARGLIST "-Dsort_output=1")
     endif()
+    if(POCL_TEST_UNORDERED_OUTPUT_DIFF)
+      list(APPEND POCL_TEST_ARGLIST "-Dunordered_diff=1")
+    endif()
+
     list(APPEND POCL_TEST_ARGLIST "-P" "${CMAKE_SOURCE_DIR}/cmake/run_test.cmake")
 
     if(NOT POCL_TEST_ONLY_FILECHECKS)

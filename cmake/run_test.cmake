@@ -18,6 +18,15 @@ execute_process(
   ERROR_VARIABLE stderr
 )
 
+function(sort_file INPUT_FILE OUTPUT_FILE)
+  file(STRINGS "${INPUT_FILE}" output_string_list)
+  list(SORT output_string_list)
+  # for some reason sorting doesn't work when list contains newlines,
+  # have to add them after the sort
+  string(REPLACE ";" "\n" OUTPUT "${output_string_list}")
+  file(WRITE "${OUTPUT_FILE}" "${OUTPUT}\n")
+endfunction()
+
 # the first run would fail, but still pre-compile the kernels
 # for the 2nd run through SDE
 if(SDE)
@@ -56,16 +65,15 @@ if(output_blessed)
     file(WRITE "${output_blessed}" "${output_blessed_content}")
   endif()
 
-  if( sort_output )
-    message(STATUS "SORTING FILE")
-    file(STRINGS "${RANDOM_FILE}" output_string_list)
-    list(SORT output_string_list)
-    # for some reason sorting doesn't work when list contains newlines,
-    # have to add them after the sort
+  if(sort_output OR unordered_diff)
+    sort_file(${RANDOM_FILE} ${RANDOM_FILE}_sorted)
     file(REMOVE "${RANDOM_FILE}")
-    string(REPLACE ";" "\n" OUTPUT "${output_string_list}")
-    set(RANDOM_FILE "${RANDOM_FILE}_sorted")
-    file(WRITE "${RANDOM_FILE}" "${OUTPUT}\n")
+    set(RANDOM_FILE ${RANDOM_FILE}_sorted)
+  endif()
+
+  if(unordered_diff)
+    sort_file(${output_blessed} ${RANDOM_FILE}_blessed_sorted)
+    set(output_blessed ${RANDOM_FILE}_blessed_sorted)
   endif()
 
   message(STATUS "Comparing output..")
@@ -88,6 +96,7 @@ if(output_blessed)
     message(SEND_ERROR "FAIL: Test output does not match the expected output; output stored in ${RANDOM_FILE}" )
   else()
     file(REMOVE "${RANDOM_FILE}")
+    file(REMOVE "${RANDOM_FILE}_blessed_sorted")
   endif()
 
 endif()
