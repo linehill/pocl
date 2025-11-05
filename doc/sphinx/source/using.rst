@@ -488,8 +488,9 @@ pocl.
               kernel and the work group size. Currently always defaults
               to **loopvec**.
 
- * **cbs**    -- Use continuation-based synchronization to execute work-items
-              on non-SPMD devices.
+ * **cbs**    -- [DEPRECATED]. Use continuation-based synchronization to
+              execute work-items on non-SPMD devices.
+
               CBS is expected to work for kernels that 'loops' does not support.
               For most other kernels it is expected to perform slightly worse.
               Also enables the LLVM LoopVectorizer.
@@ -498,12 +499,16 @@ pocl.
               compares to the other approaches can be found in
               [this thesis](https://joameyer.de/hipsycl/Thesis_JoachimMeyer.pdf).
 
- * **loops**  -- Create parallel for-loops that execute the work items.
-              Automatically falls back to **cbs** for kernels with barrier usage
-              that would lead to very complex control flow structures.
+ * **fiber**  -- Use scheduling method similar to coroutines.
 
- * **loopvec** -- Create parallel work-item for-loops with 'loops' and execute
-               the standard LLVM vectorizers.
+ * **loopvec** -- Create parallel for-loops that execute the work items.
+                  These loops are attempted to be vectorized by the standard
+                  LLVM vectorizers. Automatically falls back to **fiber** for
+                  kernels with barrier usage that would lead to very complex
+                  control flow structures.
+
+ * **loops**  -- Alias for **loopvec**.
+
 
 - **POCL_WORK_GROUP_SPECIALIZATION**
 
