@@ -71,7 +71,11 @@ export POCL_CACHE_DIR=$(mktemp -d /tmp/pocl-lit-test-XXXXXXXX)
 export POCL_LEAVE_KERNEL_COMPILER_TEMP_FILES=1
 
 # Modify the test name to be path friendly.
-TEST_NAME=${TEST_NAME////-} # replace all '/' to '-'.
+# replace '/' with '_' and remove '-' as it could result
+# in TEST_NAME interpreted as option to basename below
+TEST_NAME=${TEST_NAME////_} # replace all '/' to '_'.
+TEST_NAME=${TEST_NAME//-} # delete all '-'
+
 
 $APP_CMD
 RET=$?
@@ -95,6 +99,9 @@ done
 CHECK_OUTPUT_LIST=()
 for CHECK_FILE in ${CHECK_FILE_LIST[@]}; do
     CHECK_FILE_BASENAME=$(basename $CHECK_FILE)
+    if [ -z "$CHECK_FILE_BASENAME" ]; then
+      CHECK_FILE_BASENAME="unknown_$RANDOM"
+    fi
     CHECK_OUTPUT=${PWD}/${TEST_NAME}-${CHECK_FILE_BASENAME}.log
 
     echo "; check-file: '$CHECK_FILE'" > $CHECK_OUTPUT
