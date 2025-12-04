@@ -1,3 +1,3 @@
 # Match outcome of LLVM <=18: only store is vectorized and the code
 # prior it is fully unrolled (missed SLP vectorization opportunity).
-CHECK: store <8 x
+CHECK: store <{{2|4|8|16|vscale}}

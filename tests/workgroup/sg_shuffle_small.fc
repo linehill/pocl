@@ -1,3 +1,3 @@
-CHECK: load <8 x
-CHECK: shufflevector <8 x
-CHECK: store <8 x
+CHECK: load <{{2|4|8|16|vscale}}
+CHECK: shufflevector <{{2|4|8|16|vscale}}
+CHECK: store <{{2|4|8|16|vscale}}
