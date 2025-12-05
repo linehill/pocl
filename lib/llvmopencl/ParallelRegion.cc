@@ -125,14 +125,14 @@ void ParallelRegion::chainAfter(ParallelRegion *Region) {
     Term = Tail->getTerminator();
   }
 #ifdef LLVM_BUILD_MODE_DEBUG
-    if (t->getNumSuccessors() != 1) {
+    if (Term->getNumSuccessors() != 1) {
       std::cout << "!!! trying to chain region" << std::endl;
       this->dumpNames();
       std::cout << "!!! after region" << std::endl;
-      region->dumpNames();
-      t->getParent()->dump();
+      Region->dumpNames();
+      Term->getParent()->dump();
 
-      assert (t->getNumSuccessors() == 1);
+      assert (Term->getNumSuccessors() == 1);
     }
 #endif
 
