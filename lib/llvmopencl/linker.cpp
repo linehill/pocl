@@ -51,6 +51,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/IR/VFABIDemangler.h>
 #include <llvm/PassInfo.h>
 #include <llvm/PassRegistry.h>
 #include <llvm/Transforms/IPO/AlwaysInliner.h>
@@ -633,6 +634,66 @@ static void handleDeviceSidePrintf(
   }
 }
 
+static void addVectorFunctionVariantAttributes(
+    llvm::Module *Program, const llvm::Module *Lib, 
+    llvm::StringSet<>& DeclaredFunctions, ValueToValueMapTy &vvm,
+    cl_device_id ClDev) {
+
+  static struct VectorVariantSet
+  {
+    const char *Parameters;
+    const char *Variants[5];
+  } VariantSets[] = {
+    {
+      "v",
+      {"_Z7_cl_erff", "_Z7_cl_erfDv2_f", "_Z7_cl_erfDv4_f", "_Z7_cl_erfDv8_f",
+       "_Z7_cl_erfDv16_f"}
+    }
+  };
+
+  for (auto Set : VariantSets) {
+    std::vector<std::string> Mappings;
+
+    for (const char* Variant : Set.Variants) {
+      // TODO: Ensure the declarations exist in Program, then add to
+      // DeclaredFunctions.
+      Function *VariantFunc = Program->getFunction(Variant);
+      if (!VariantFunc)
+      {
+        // TODO add declaration
+        DeclaredFunctions.insert(Variant);
+      }
+    }
+
+    for (size_t i = 1; i < sizeof(Set.Variants)/sizeof(Set.Variants[0]); ++i) {
+      size_t width = 1 << i;
+      std::string MappingName = "_ZGV_LLVM_";
+      MappingName += "N" + std::to_string(width);
+      MappingName += Set.Parameters;
+      MappingName += "_";
+      MappingName += Set.Variants[0];
+      MappingName += "(";
+      MappingName += Set.Variants[i];
+      MappingName += ")";
+      Mappings.push_back(MappingName);
+    }
+
+    for (const char* Variant : Set.Variants) {
+      Function *CalledVariant = Program->getFunction(Variant);
+      for (auto U : CalledVariant->users()) {
+        CallInst *CI = dyn_cast<CallInst>(U);
+        if (CI == nullptr)
+          continue;
+        if (CI->getCalledFunction() == nullptr)
+          continue;
+        if (CI->getCalledFunction() != CalledVariant)
+          continue;
+        llvm::VFABI::setVectorVariantNames(CI, Mappings);
+      }
+    }
+  }
+}
+
 static void replaceIntrinsics(llvm::Module *Program, const llvm::Module *Lib,
                               ValueToValueMapTy &vvm, cl_device_id ClDev) {
   llvm_intrin_replace_fn IntrinRepl = ClDev->llvm_intrin_replace;
@@ -726,6 +787,8 @@ int link(llvm::Module *Program, const llvm::Module *Lib, std::string &Log,
       DeclaredFunctions.insert(F->getName());
     }
   }
+
+  addVectorFunctionVariantAttributes(Program, Lib, DeclaredFunctions, vvm, ClDev);
 
   // Copy all the globals from lib to program.
   // It probably is faster to just copy them all, than to inspect
