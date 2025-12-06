@@ -35,6 +35,7 @@ if [ ! -d $SOURCE_DIR ] || [ ! -d $BUILD_DIR ]; then
 fi
 
 RSYNC_DEST=${REMOTE_USER}@${REMOTE_ADDRESS}
+ssh ${RSYNC_DEST} "mkdir -p ${SOURCE_DIR} && mkdir -p $BUILD_DIR"
 
 for DDIR in cmake include tests examples tools; do
   rsync -a --delete ${SOURCE_DIR}/$DDIR/ ${RSYNC_DEST}:${SOURCE_DIR}/$DDIR/
