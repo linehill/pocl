@@ -51,6 +51,8 @@ LLVM_DIS=$2
 TEST_NAME=$3
 shift 3
 
+echo "USING FILECHECK: $LLVM_FILECHECK  LLVM_DIS: $LLVM_DIS  TEST NAME: $TEST_NAME"
+
 CHECK_FILE_LIST=()
 while [ "$1" !=  "--" ]; do
     CHECK_FILE_LIST+=("$1")
@@ -75,7 +77,6 @@ export POCL_LEAVE_KERNEL_COMPILER_TEMP_FILES=1
 # in TEST_NAME interpreted as option to basename below
 TEST_NAME=${TEST_NAME////_} # replace all '/' to '_'.
 TEST_NAME=${TEST_NAME//-} # delete all '-'
-
 
 $APP_CMD
 RET=$?

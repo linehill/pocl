@@ -163,7 +163,7 @@ function(add_test_pocl)
     endif()
 
     if(ENABLE_LLVM_FILECHECKS AND POCL_TEST_LLVM_FILECHECKS)
-      set(FC_RUN_CMD "${CMAKE_SOURCE_DIR}/tools/scripts/run-and-check-llvm-ir####${TARGET_LLVM_FILECHECK}####${TARGET_LLVM_DIS}####${CMAKE_CURRENT_SOURCE_DIR}/${POCL_TEST_LLVM_FILECHECK}####${RUN_CMD}")
+      set(FC_RUN_CMD "${CMAKE_SOURCE_DIR}/tools/scripts/run-and-check-llvm-ir####${TARGET_LLVM_FILECHECK}####${TARGET_LLVM_DIS}####${POCL_TEST_NAME}")
       foreach(FC IN LISTS POCL_TEST_LLVM_FILECHECKS)
         set(FC_RUN_CMD "${FC_RUN_CMD}####${CMAKE_CURRENT_SOURCE_DIR}/${FC}")
       endforeach()
