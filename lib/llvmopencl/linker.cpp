@@ -246,6 +246,7 @@ find_called_functions(llvm::Function *F,
 
   assert(F->hasName());
   std::string FName = F->getName().str();
+  llvm::Module* Mod = F->getParent();
 
   for (auto &I : instructions(F)) {
 
@@ -253,33 +254,64 @@ find_called_functions(llvm::Function *F,
     if (CI == nullptr)
       continue;
 
-    llvm::Function *Callee = CI->getCalledFunction();
-    // this happens with e.g. inline asm calls
-    if (Callee == nullptr) {
-      DB_PRINT("search: %s callee NULL\n", FName.c_str());
-      continue;
+    llvm::SmallVector<llvm::Function *> CalleeVariants;
+    CalleeVariants.push_back(CI->getCalledFunction());
+
+    llvm::SmallVector<std::string> VectorVariantNames;
+    llvm::VFABI::getVectorVariantNames(*CI, VectorVariantNames);
+    for (std::string VectorVariantName : VectorVariantNames)
+    {
+      // The vector variant names look something like
+      // _ZGV_LLVM_N2v__Z7_cl_erff(_Z7_cl_erfDv2_f)
+      // If the parentheses exist, they specify the real name of the function.
+      // Otherwise, it's the part before the parens that starts with _ZGV.
+      std::string FuncName;
+      std::string::size_type start = VectorVariantName.find('(');
+      std::string::size_type end = VectorVariantName.find(')');
+      if (start != std::string::npos && end != std::string::npos && end > start) {
+        FuncName = VectorVariantName.substr(start+1, end-1-start);
+      } else {
+        FuncName = VectorVariantName;
+      }
+
+      llvm::Function* CalleeVariant = Mod->getFunction(FuncName);
+      if (CalleeVariant == nullptr) {
+        DB_PRINT("search: %s callee variant NULL\n", FuncName.c_str());
+        continue;
+      }
+
+      CalleeVariants.push_back(CalleeVariant);
     }
 
-    assert(Callee->hasName());
-    std::string CName = Callee->getName().str();
+    for (llvm::Function* Callee : CalleeVariants)
+    {
+      // this happens with e.g. inline asm calls
+      if (Callee == nullptr) {
+        DB_PRINT("search: %s callee NULL\n", FName.c_str());
+        continue;
+      }
 
-    if (CallStack.contains(Callee)) {
-      DB_PRINT("Recursion detected: %s\n", CName.c_str());
-      return Callee;
-    }
-    DB_PRINT("Function %s calls %s\n", FName.c_str(), CName.c_str());
+      assert(Callee->hasName());
+      std::string CName = Callee->getName().str();
 
-    auto It = std::find(CalledFuncList.begin(), CalledFuncList.end(), Callee);
-    if (It != CalledFuncList.end()) {
-      DB_PRINT("already contained in CalledList: %s\n", CName.c_str());
-      continue;
-    } else {
-      DB_PRINT("function %s not seen before, recursing into it\n",
-               CName.c_str());
-      if (auto *R = find_called_functions(Callee, CalledFuncList, CallStack))
-        return R;
-      DB_PRINT("inserting %s into CalledList\n", CName.c_str());
-      CalledFuncList.push_back(Callee);
+      if (CallStack.contains(Callee)) {
+        DB_PRINT("Recursion detected: %s\n", CName.c_str());
+        return Callee;
+      }
+      DB_PRINT("Function %s calls %s\n", FName.c_str(), CName.c_str());
+
+      auto It = std::find(CalledFuncList.begin(), CalledFuncList.end(), Callee);
+      if (It != CalledFuncList.end()) {
+        DB_PRINT("already contained in CalledList: %s\n", CName.c_str());
+        continue;
+      } else {
+        DB_PRINT("function %s not seen before, recursing into it\n",
+                 CName.c_str());
+        if (auto *R = find_called_functions(Callee, CalledFuncList, CallStack))
+          return R;
+        DB_PRINT("inserting %s into CalledList\n", CName.c_str());
+        CalledFuncList.push_back(Callee);
+      }
     }
   }
 
