@@ -647,21 +647,23 @@ static void ensureVectorFunctionVariantDeclaration(
     VectorFunctionVariant Variant, llvm::Module *Program,
     const llvm::Module *Lib,
     llvm::StringSet<>& DeclaredFunctions) {
-  // TODO: Ensure the declarations exist in Program, then add to
-  // DeclaredFunctions.
   Function *VariantFunc = Program->getFunction(Variant.ImplFunction);
-  if (!VariantFunc)
+  const Function *LibFunc = Lib->getFunction(Variant.ImplFunction);
+  if (!VariantFunc && LibFunc)
   {
-    DB_PRINT("Adding declaration for %s\n", Variant.ImplFunction);
-    // TODO add declaration
-    DeclaredFunctions.insert(Variant.ImplFunction);
+    POCL_MSG_PRINT_LLVM("Adding declaration for %s\n", Variant.ImplFunction);
+    Function* FuncDecl =
+        Function::Create(cast<FunctionType>(LibFunc->getValueType()),
+                         LibFunc->getLinkage(), LibFunc->getName(), Program);
+    FuncDecl->copyAttributesFrom(LibFunc);
+    DeclaredFunctions.insert(LibFunc->getName());
   }
 }
 
 static void addVectorFunctionVariantAttributes(
     llvm::Module *Program, const llvm::Module *Lib,
     llvm::StringSet<>& DeclaredFunctions) {
-  static struct VectorVariantSet
+  static const struct VectorVariantSet
   {
     // The first variant should be the scalar one.
     VectorFunctionVariant Variants[5];
@@ -675,13 +677,13 @@ static void addVectorFunctionVariantAttributes(
     }}
   };
 
-  for (auto Set : VariantSets) {
+  for (const auto& Set : VariantSets) {
     bool FunctionIsUsed = false;
     bool VariantFoundInLib = true;
     for (auto Variant : Set.Variants) {
       if (Program->getFunction(Variant.ImplFunction) != nullptr)
         FunctionIsUsed = true;
-      if (Lib->getFunction(Variant.ImplFunction) != nullptr)
+      if (Lib->getFunction(Variant.ImplFunction) == nullptr)
       {
         DB_PRINT("Vector function variant %s does not exist in lib\n", Variant.ImplFunction);
         VariantFoundInLib = false;
