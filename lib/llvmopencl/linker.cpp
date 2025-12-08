@@ -634,57 +634,94 @@ static void handleDeviceSidePrintf(
   }
 }
 
-static void addVectorFunctionVariantAttributes(
-    llvm::Module *Program, const llvm::Module *Lib, 
-    llvm::StringSet<>& DeclaredFunctions, ValueToValueMapTy &vvm,
-    cl_device_id ClDev) {
+struct VectorFunctionVariant
+{
+  // <mask><vlen><parameters>
+  // See vector-function-abi-variant from LLVM langref documentation for what
+  // these are.
+  const char *Kind;
+  const char *ImplFunction;
+};
 
+static void ensureVectorFunctionVariantDeclaration(
+    VectorFunctionVariant Variant, llvm::Module *Program,
+    const llvm::Module *Lib,
+    llvm::StringSet<>& DeclaredFunctions) {
+  // TODO: Ensure the declarations exist in Program, then add to
+  // DeclaredFunctions.
+  Function *VariantFunc = Program->getFunction(Variant.ImplFunction);
+  if (!VariantFunc)
+  {
+    DB_PRINT("Adding declaration for %s\n", Variant.ImplFunction);
+    // TODO add declaration
+    DeclaredFunctions.insert(Variant.ImplFunction);
+  }
+}
+
+static void addVectorFunctionVariantAttributes(
+    llvm::Module *Program, const llvm::Module *Lib,
+    llvm::StringSet<>& DeclaredFunctions) {
   static struct VectorVariantSet
   {
-    const char *Parameters;
-    const char *Variants[5];
+    // The first variant should be the scalar one.
+    VectorFunctionVariant Variants[5];
   } VariantSets[] = {
-    {
-      "v",
-      {"_Z7_cl_erff", "_Z7_cl_erfDv2_f", "_Z7_cl_erfDv4_f", "_Z7_cl_erfDv8_f",
-       "_Z7_cl_erfDv16_f"}
-    }
+    {{
+      {"N1u", "_Z7_cl_erff"},
+      {"N2v", "_Z7_cl_erfDv2_f"},
+      {"N4v", "_Z7_cl_erfDv4_f"},
+      {"N8v", "_Z7_cl_erfDv8_f"},
+      {"N16v", "_Z7_cl_erfDv16_f"}
+    }}
   };
 
   for (auto Set : VariantSets) {
-    std::vector<std::string> Mappings;
-
-    for (const char* Variant : Set.Variants) {
-      // TODO: Ensure the declarations exist in Program, then add to
-      // DeclaredFunctions.
-      Function *VariantFunc = Program->getFunction(Variant);
-      if (!VariantFunc)
+    bool FunctionIsUsed = false;
+    bool VariantFoundInLib = true;
+    for (auto Variant : Set.Variants) {
+      if (Program->getFunction(Variant.ImplFunction) != nullptr)
+        FunctionIsUsed = true;
+      if (Lib->getFunction(Variant.ImplFunction) != nullptr)
       {
-        // TODO add declaration
-        DeclaredFunctions.insert(Variant);
+        DB_PRINT("Vector function variant %s does not exist in lib\n", Variant.ImplFunction);
+        VariantFoundInLib = false;
       }
     }
 
+    // Only declare vectorized variants of builtins when they are actually being
+    // used and are available.
+    if (!FunctionIsUsed || !VariantFoundInLib)
+      continue;
+
+    for (auto Variant : Set.Variants) {
+      ensureVectorFunctionVariantDeclaration(Variant, Program, Lib, DeclaredFunctions);
+    }
+
+    std::vector<std::string> Mappings;
+
+    // Construct the vector function variant mappings to be used for all call
+    // annotations. The scalar version is omitted here.
     for (size_t i = 1; i < sizeof(Set.Variants)/sizeof(Set.Variants[0]); ++i) {
       size_t width = 1 << i;
       std::string MappingName = "_ZGV_LLVM_";
-      MappingName += "N" + std::to_string(width);
-      MappingName += Set.Parameters;
+      MappingName += Set.Variants[i].Kind;
       MappingName += "_";
-      MappingName += Set.Variants[0];
+      MappingName += Set.Variants[0].ImplFunction;
       MappingName += "(";
-      MappingName += Set.Variants[i];
+      MappingName += Set.Variants[i].ImplFunction;
       MappingName += ")";
       Mappings.push_back(MappingName);
     }
 
-    for (const char* Variant : Set.Variants) {
-      Function *CalledVariant = Program->getFunction(Variant);
+    for (auto Variant : Set.Variants) {
+      Function *CalledVariant = Program->getFunction(Variant.ImplFunction);
+
+      if (CalledVariant == nullptr)
+        continue;
+
       for (auto U : CalledVariant->users()) {
         CallInst *CI = dyn_cast<CallInst>(U);
         if (CI == nullptr)
-          continue;
-        if (CI->getCalledFunction() == nullptr)
           continue;
         if (CI->getCalledFunction() != CalledVariant)
           continue;
@@ -788,7 +825,7 @@ int link(llvm::Module *Program, const llvm::Module *Lib, std::string &Log,
     }
   }
 
-  addVectorFunctionVariantAttributes(Program, Lib, DeclaredFunctions, vvm, ClDev);
+  addVectorFunctionVariantAttributes(Program, Lib, DeclaredFunctions);
 
   // Copy all the globals from lib to program.
   // It probably is faster to just copy them all, than to inspect
