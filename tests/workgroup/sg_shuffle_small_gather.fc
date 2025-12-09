@@ -1,3 +1,4 @@
 # A version that uses a gather load to implement the shuffle.
-CHECK: call <{{2|4|8|16|vscale}}
-CHECK-SAME: @llvm.masked.gather.v
+CHECK-LABEL: vector.body
+#CHECK: gather = call <{{2|4|8|16|vscale}}
+CHECK: @llvm.masked.gather.{{v|nxv}}
