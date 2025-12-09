@@ -9,9 +9,9 @@ maintained for each WI in parallel.
 CHECK: %.acc.{{.*}}wi_context.{{.*}} = alloca
 CHECK-NOT: %.{{.*}}wi_context.{{.*}} = alloca
 
-CHECK: load <8 x float>
+CHECK: load <{{[0-9]+|vscale x [0-9]+}}
 
-CHECK: llvm.fmuladd.v8f32
+CHECK: {{llvm.fmuladd.v[0-9]+f32|llvm.fmuladd.nxv[0-9]+f32}}
 
-CHECK: store <8 x float>
+CHECK: store <{{[0-9]+|vscale x [0-9]+}}
 
