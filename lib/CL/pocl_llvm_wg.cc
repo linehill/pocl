@@ -516,6 +516,7 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
     // Run loop-simplify to make more of the loops manageable by WILoops.
     addAnalysis(Passes, "scalar-evolution");
     addPass(Passes, "loop-simplify");
+    addPass(Passes, "instsimplify");
     addPass(Passes, "despmd");
   } else {
     // Attempt to move all allocas to the entry block to avoid the need for
