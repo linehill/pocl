@@ -693,6 +693,7 @@ bool FiberImpl::processFunction(llvm::Function &F) {
       allocateStorage(EntryBlockBuilder, "_sg_barrier_counter", WGSize);
 
   llvm::Function *SchedulerInit = M->getFunction("__pocl_fiber_sched_init");
+  assert(SchedulerInit && "Cannot find __pocl_fiber_sched_init in LLVM IR!");
 
   // Will initialise the data structure on fiber-scheduler side.
   EntryBlockBuilder.CreateCall(SchedulerInit,

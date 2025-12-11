@@ -313,6 +313,9 @@ set(TCE_TESTS "regression/barrier_between_two_for_loops_loopvec"
 # it seems to have worked with LLVM up to 16/17; fails again with PR #1613
 list(REMOVE_ITEM TCE_TESTS "regression/barrier_between_two_for_loops_loopvec" )
 
+# fallbacks to FIBER which is unimplemented for TCE
+list(REMOVE_ITEM TCE_TESTS "regression/for-loop_with_computation_after_the_brexit_loopvec")
+
 set_property(TEST ${TCE_TESTS} APPEND PROPERTY LABELS "tce")
 
 set(VARIANTS "loopvec;fiber")

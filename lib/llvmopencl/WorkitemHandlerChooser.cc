@@ -32,6 +32,8 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "WorkitemLoops.h"
 POP_COMPILER_DIAGS
 
+#include "pocl_llvm_api.h"
+
 #include <iostream>
 
 namespace pocl {
@@ -105,6 +107,16 @@ getWorkitemHandler(Function &F, llvm::PostDominatorTree &PDT, LoopInfo &LI) {
   if (Result == WorkitemHandlerType::LOOPS &&
       !wiloops::canHandleKernel(F, PDT, LI)) {
     Result = WorkitemHandlerType::FIBER;
+  }
+
+  // check that the device supports FIBER method
+  if (Result == WorkitemHandlerType::FIBER) {
+    std::string DevAuxFunctions;
+    Module *M = F.getParent();
+    bool FoundMetadata =
+        getModuleStringMetadata(*M, "device_aux_functions", DevAuxFunctions);
+    if (DevAuxFunctions.find("__pocl_fiber_sched_init") == std::string::npos)
+      Result = WorkitemHandlerType::LOOPS;
   }
 
   auto WGMethodAttr =
