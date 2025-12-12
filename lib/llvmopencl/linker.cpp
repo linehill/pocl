@@ -50,8 +50,8 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
-#include <llvm/IR/Verifier.h>
 #include <llvm/IR/VFABIDemangler.h>
+#include <llvm/IR/Verifier.h>
 #include <llvm/PassInfo.h>
 #include <llvm/PassRegistry.h>
 #include <llvm/Transforms/IPO/AlwaysInliner.h>
@@ -246,7 +246,7 @@ find_called_functions(llvm::Function *F,
 
   assert(F->hasName());
   std::string FName = F->getName().str();
-  llvm::Module* Mod = F->getParent();
+  llvm::Module *Mod = F->getParent();
 
   for (auto &I : instructions(F)) {
 
@@ -259,22 +259,22 @@ find_called_functions(llvm::Function *F,
 
     llvm::SmallVector<std::string> VectorVariantNames;
     llvm::VFABI::getVectorVariantNames(*CI, VectorVariantNames);
-    for (std::string VectorVariantName : VectorVariantNames)
-    {
+    for (std::string VectorVariantName : VectorVariantNames) {
       // The vector variant names look something like
       // _ZGV_LLVM_N2v__Z7_cl_erff(_Z7_cl_erfDv2_f)
       // If the parentheses exist, they specify the real name of the function.
       // Otherwise, it's the part before the parens that starts with _ZGV.
       std::string FuncName;
-      std::string::size_type start = VectorVariantName.find('(');
-      std::string::size_type end = VectorVariantName.find(')');
-      if (start != std::string::npos && end != std::string::npos && end > start) {
-        FuncName = VectorVariantName.substr(start+1, end-1-start);
+      std::string::size_type Start = VectorVariantName.find('(');
+      std::string::size_type End = VectorVariantName.find(')');
+      if (Start != std::string::npos && End != std::string::npos &&
+          End > Start) {
+        FuncName = VectorVariantName.substr(Start + 1, End - 1 - Start);
       } else {
         FuncName = VectorVariantName;
       }
 
-      llvm::Function* CalleeVariant = Mod->getFunction(FuncName);
+      llvm::Function *CalleeVariant = Mod->getFunction(FuncName);
       if (CalleeVariant == nullptr) {
         DB_PRINT("search: %s callee variant NULL\n", FuncName.c_str());
         continue;
@@ -283,8 +283,7 @@ find_called_functions(llvm::Function *F,
       CalleeVariants.push_back(CalleeVariant);
     }
 
-    for (llvm::Function* Callee : CalleeVariants)
-    {
+    for (llvm::Function *Callee : CalleeVariants) {
       // this happens with e.g. inline asm calls
       if (Callee == nullptr) {
         DB_PRINT("search: %s callee NULL\n", FName.c_str());
@@ -666,8 +665,7 @@ static void handleDeviceSidePrintf(
   }
 }
 
-struct VectorFunctionVariant
-{
+struct VectorFunctionVariant {
   // <mask><vlen><parameters>
   // See vector-function-abi-variant from LLVM langref documentation for what
   // these are.
@@ -675,49 +673,60 @@ struct VectorFunctionVariant
   const char *ImplFunction;
 };
 
+// Makes sure that the given vectorized function variant is declared and
+// marked as used. This is necessary so that the functions referenced in
+// `vector-function-abi-variant` exist all the way up to the vectorization
+// passes.
 static void ensureVectorFunctionVariantDeclaration(
     VectorFunctionVariant Variant, llvm::Module *Program,
-    const llvm::Module *Lib,
-    llvm::StringSet<>& DeclaredFunctions) {
+    const llvm::Module *Lib, llvm::StringSet<> &DeclaredFunctions) {
   Function *VariantFunc = Program->getFunction(Variant.ImplFunction);
   const Function *LibFunc = Lib->getFunction(Variant.ImplFunction);
-  if (!VariantFunc && LibFunc)
-  {
+  if (!VariantFunc && LibFunc) {
     POCL_MSG_PRINT_LLVM("Adding declaration for %s\n", Variant.ImplFunction);
-    Function* FuncDecl =
+    Function *FuncDecl =
         Function::Create(cast<FunctionType>(LibFunc->getValueType()),
                          LibFunc->getLinkage(), LibFunc->getName(), Program);
     FuncDecl->copyAttributesFrom(LibFunc);
     DeclaredFunctions.insert(LibFunc->getName());
+
+    // We also need to explicitly mark these functions as used, otherwise
+    // GlobalDCE removes them before any vectorization pass gets to use them.
+    auto ArrayType =
+        ArrayType::get(PointerType::get(FuncDecl->getType(), 0), 1);
+    Constant *FuncArray[] = {FuncDecl};
+    auto Array = ConstantArray::get(ArrayType, ArrayRef(FuncArray));
+    new GlobalVariable(*Program, ArrayType, false,
+                       GlobalValue::AppendingLinkage, Array,
+                       "llvm.compiler.used");
   }
 }
 
-static void addVectorFunctionVariantAttributes(
-    llvm::Module *Program, const llvm::Module *Lib,
-    llvm::StringSet<>& DeclaredFunctions) {
-  static const struct VectorVariantSet
-  {
+// Adds the `vector-function-abi-variant` attributes to every call to functions
+// that can use it. This attribute allows autovectorizers to pick up
+// pre-vectorized variants of the same function.
+static void
+addVectorFunctionVariantAttributes(llvm::Module *Program,
+                                   const llvm::Module *Lib,
+                                   llvm::StringSet<> &DeclaredFunctions) {
+  static const struct VectorVariantSet {
     // The first variant should be the scalar one.
     VectorFunctionVariant Variants[5];
-  } VariantSets[] = {
-    {{
-      {"N1u", "_Z7_cl_erff"},
-      {"N2v", "_Z7_cl_erfDv2_f"},
-      {"N4v", "_Z7_cl_erfDv4_f"},
-      {"N8v", "_Z7_cl_erfDv8_f"},
-      {"N16v", "_Z7_cl_erfDv16_f"}
-    }}
-  };
+  } VariantSets[] = {{{{"N1u", "_Z7_cl_erff"},
+                       {"N2v", "_Z7_cl_erfDv2_f"},
+                       {"N4v", "_Z7_cl_erfDv4_f"},
+                       {"N8v", "_Z7_cl_erfDv8_f"},
+                       {"N16v", "_Z7_cl_erfDv16_f"}}}};
 
-  for (const auto& Set : VariantSets) {
+  for (const auto &Set : VariantSets) {
     bool FunctionIsUsed = false;
     bool VariantFoundInLib = true;
     for (auto Variant : Set.Variants) {
       if (Program->getFunction(Variant.ImplFunction) != nullptr)
         FunctionIsUsed = true;
-      if (Lib->getFunction(Variant.ImplFunction) == nullptr)
-      {
-        DB_PRINT("Vector function variant %s does not exist in lib\n", Variant.ImplFunction);
+      if (Lib->getFunction(Variant.ImplFunction) == nullptr) {
+        DB_PRINT("Vector function variant %s does not exist in lib\n",
+                 Variant.ImplFunction);
         VariantFoundInLib = false;
       }
     }
@@ -728,14 +737,16 @@ static void addVectorFunctionVariantAttributes(
       continue;
 
     for (auto Variant : Set.Variants) {
-      ensureVectorFunctionVariantDeclaration(Variant, Program, Lib, DeclaredFunctions);
+      ensureVectorFunctionVariantDeclaration(Variant, Program, Lib,
+                                             DeclaredFunctions);
     }
 
     std::vector<std::string> Mappings;
 
     // Construct the vector function variant mappings to be used for all call
     // annotations. The scalar version is omitted here.
-    for (size_t i = 1; i < sizeof(Set.Variants)/sizeof(Set.Variants[0]); ++i) {
+    for (size_t i = 1; i < sizeof(Set.Variants) / sizeof(Set.Variants[0]);
+         ++i) {
       size_t width = 1 << i;
       std::string MappingName = "_ZGV_LLVM_";
       MappingName += Set.Variants[i].Kind;
