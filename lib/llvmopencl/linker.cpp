@@ -665,25 +665,28 @@ static void handleDeviceSidePrintf(
   }
 }
 
-struct VectorFunctionVariant {
-  // <mask><vlen><parameters>
-  // See vector-function-abi-variant from LLVM langref documentation for what
-  // these are.
-  const char *Kind;
-  const char *ImplFunction;
+struct VectorizableFuncInfo {
+  const char *Params;
+  bool Masked;
 };
+
+// This is a list of built-in functions that need to be manually annotated with
+// vectorized variants. You should use this for OpenCL builtins which are not
+// covered by veclib, i.e. aren't LLVM builtins.
+static const std::map<std::string, VectorizableFuncInfo> VectorizableFuncs = {
+    {"_cl_erf(float)", {"v", false}}, {"_cl_erf(double)", {"v", false}}};
 
 // Makes sure that the given vectorized function variant is declared and
 // marked as used. This is necessary so that the functions referenced in
 // `vector-function-abi-variant` exist all the way up to the vectorization
 // passes.
 static void ensureVectorFunctionVariantDeclaration(
-    VectorFunctionVariant Variant, llvm::Module *Program,
-    const llvm::Module *Lib, llvm::StringSet<> &DeclaredFunctions) {
-  Function *VariantFunc = Program->getFunction(Variant.ImplFunction);
-  const Function *LibFunc = Lib->getFunction(Variant.ImplFunction);
+    const std::string &FuncName, llvm::Module *Program, const llvm::Module *Lib,
+    llvm::StringSet<> &DeclaredFunctions) {
+  Function *VariantFunc = Program->getFunction(FuncName);
+  const Function *LibFunc = Lib->getFunction(FuncName);
   if (!VariantFunc && LibFunc) {
-    POCL_MSG_PRINT_LLVM("Adding declaration for %s\n", Variant.ImplFunction);
+    POCL_MSG_PRINT_LLVM("Adding declaration for %s\n", FuncName.c_str());
     Function *FuncDecl =
         Function::Create(cast<FunctionType>(LibFunc->getValueType()),
                          LibFunc->getLinkage(), LibFunc->getName(), Program);
@@ -709,57 +712,81 @@ static void
 addVectorFunctionVariantAttributes(llvm::Module *Program,
                                    const llvm::Module *Lib,
                                    llvm::StringSet<> &DeclaredFunctions) {
-  static const struct VectorVariantSet {
-    // The first variant should be the scalar one.
-    VectorFunctionVariant Variants[5];
-  } VariantSets[] = {{{{"N1u", "_Z7_cl_erff"},
-                       {"N2v", "_Z7_cl_erfDv2_f"},
-                       {"N4v", "_Z7_cl_erfDv4_f"},
-                       {"N8v", "_Z7_cl_erfDv8_f"},
-                       {"N16v", "_Z7_cl_erfDv16_f"}}}};
+  using VectorVariantSet2 = std::map<int, std::string>;
+  std::map<std::string, VectorVariantSet2> FoundVectorVariants;
 
-  for (const auto &Set : VariantSets) {
-    bool FunctionIsUsed = false;
-    bool VariantFoundInLib = true;
-    for (auto Variant : Set.Variants) {
-      if (Program->getFunction(Variant.ImplFunction) != nullptr)
-        FunctionIsUsed = true;
-      if (Lib->getFunction(Variant.ImplFunction) == nullptr) {
-        DB_PRINT("Vector function variant %s does not exist in lib\n",
-                 Variant.ImplFunction);
-        VariantFoundInLib = false;
-      }
+  // Find all functions that may partake in vectorization, either scalar or
+  // vector variants.
+  for (const auto &Func : Lib->functions()) {
+    std::string MangledName = Func.getName().str();
+    std::string DemangledName = tryDemangleWithoutAddressSpaces(MangledName);
+
+    // We construct the scalar name to act as the category name for all
+    // variants of the same function. We do this by removing all vector[N]
+    // notation from the demangled name.
+    std::string ScalarName = DemangledName;
+    int Width = 1;
+
+    for (;;) {
+      std::string::size_type offset = ScalarName.find(" vector[");
+      if (offset == std::string::npos)
+        break;
+      Width = atoi(ScalarName.c_str() + offset + 8);
+      ScalarName.erase(offset, ScalarName.find(']', offset) + 1 - offset);
     }
 
-    // Only declare vectorized variants of builtins when they are actually being
-    // used and are available.
-    if (!FunctionIsUsed || !VariantFoundInLib)
+    if (VectorizableFuncs.count(ScalarName)) {
+      // Add this variant to the list.
+      FoundVectorVariants[ScalarName][Width] = MangledName;
+    }
+  }
+
+  // Using the found vector function variant families, check which ones are
+  // called and annotate those calls with vector-function-abi-variant
+  // attributes.
+  for (const auto &[ScalarName, Variants] : FoundVectorVariants) {
+    bool FunctionIsUsed = false;
+    for (const auto &[Width, Name] : Variants) {
+      if (Program->getFunction(Name) != nullptr)
+        FunctionIsUsed = true;
+    }
+
+    // Only construct vector variant mappings if the vectorizable function is
+    // actually being used.
+    if (!FunctionIsUsed)
       continue;
 
-    for (auto Variant : Set.Variants) {
-      ensureVectorFunctionVariantDeclaration(Variant, Program, Lib,
-                                             DeclaredFunctions);
-    }
-
+    const VectorizableFuncInfo &info = VectorizableFuncs.at(ScalarName);
     std::vector<std::string> Mappings;
 
     // Construct the vector function variant mappings to be used for all call
     // annotations. The scalar version is omitted here.
-    for (size_t i = 1; i < sizeof(Set.Variants) / sizeof(Set.Variants[0]);
-         ++i) {
-      size_t width = 1 << i;
+    for (const auto &[Width, Name] : Variants) {
+      // No need to list the scalar version.
+      if (Width == 1)
+        continue;
+
+      // Ensure the function is declared in the program.
+      ensureVectorFunctionVariantDeclaration(Name, Program, Lib,
+                                             DeclaredFunctions);
+
+      // Construct mapping name, see vector-function-abi-variant from
+      // LLVM langref for how this works.
       std::string MappingName = "_ZGV_LLVM_";
-      MappingName += Set.Variants[i].Kind;
+      MappingName += info.Masked ? 'M' : 'N';
+      MappingName += std::to_string(Width);
+      MappingName += info.Params;
       MappingName += "_";
-      MappingName += Set.Variants[0].ImplFunction;
+      MappingName += Variants.at(1);
       MappingName += "(";
-      MappingName += Set.Variants[i].ImplFunction;
+      MappingName += Name;
       MappingName += ")";
       Mappings.push_back(MappingName);
     }
 
-    for (auto Variant : Set.Variants) {
-      Function *CalledVariant = Program->getFunction(Variant.ImplFunction);
+    // Finally, go over calls and annotate them.
+    for (const auto &[Width, Name] : Variants) {
+      Function *CalledVariant = Program->getFunction(Name);
 
       if (CalledVariant == nullptr)
         continue;
