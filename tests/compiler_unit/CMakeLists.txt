@@ -81,3 +81,7 @@ add_llvm_check(SPIRV_NAME smallbuf-strength-reduces-64b-mul
 
 add_llvm_check(OPENCLC_NAME force-vector-width ENVIRONMENT "POCL_VECTORIZER_FORCE_VECTOR_WIDTH=4")
 add_llvm_check(OPENCLC_NAME prefer-vector-width ENVIRONMENT "POCL_VECTORIZER_PREFER_VECTOR_WIDTH=512")
+
+if(${TESTED_CPU_UARCH} MATCHES "(spacemit-x60|znver1)")
+  add_llvm_check(OPENCLC_NAME vector-function-abi-variants)
+endif()
