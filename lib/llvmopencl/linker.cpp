@@ -43,6 +43,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/ADT/SmallSet.h>
 #include <llvm/ADT/StringExtras.h>
 #include <llvm/ADT/StringSet.h>
+#include <llvm/Demangle/Demangle.h>
 #include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalValue.h>
@@ -674,7 +675,22 @@ struct VectorizableFuncInfo {
 // vectorized variants. You should use this for OpenCL builtins which are not
 // covered by veclib, i.e. aren't LLVM builtins.
 static const std::map<std::string, VectorizableFuncInfo> VectorizableFuncs = {
-    {"_cl_erf(float)", {"v", false}}, {"_cl_erf(double)", {"v", false}}};
+    {"_cl_atan2(float, float)", {"vv", false}},
+    {"_cl_atan2(double, double)", {"vv", false}},
+    {"_cl_cbrt(float)", {"v", false}}, {"_cl_cbrt(double)", {"v", false}},
+    {"_cl_erfc(float)", {"v", false}}, {"_cl_erfc(double)", {"v", false}},
+    {"_cl_erf(float)", {"v", false}}, {"_cl_erf(double)", {"v", false}},
+    {"_cl_expm1(float)", {"v", false}}, {"_cl_expm1(double)", {"v", false}},
+    {"_cl_lgamma(float)", {"v", false}}, {"_cl_lgamma(double)", {"v", false}},
+    {"_cl_powr(float, float)", {"vv", false}},
+    {"_cl_powr(double, double)", {"vv", false}},
+    {"_cl_remainder(float, float)", {"vv", false}},
+    {"_cl_remainder(double, double)", {"vv", false}},
+    {"_cl_rootn(float, int)", {"vv", false}},
+    {"_cl_rootn(double, int)", {"vv", false}},
+    {"_cl_tgamma(float)", {"v", false}},
+    {"_cl_tgamma(double)", {"v", false}},
+};
 
 // Makes sure that the given vectorized function variant is declared and
 // marked as used. This is necessary so that the functions referenced in
@@ -714,7 +730,7 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
   // vector variants.
   for (const auto &Func : Lib->functions()) {
     std::string MangledName = Func.getName().str();
-    std::string DemangledName = tryDemangleWithoutAddressSpaces(MangledName);
+    std::string DemangledName = demangle(MangledName);
 
     // We construct the scalar name to act as the category name for all
     // variants of the same function. We do this by removing all vector[N]
@@ -732,6 +748,7 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
 
     if (VectorizableFuncs.count(ScalarName)) {
       // Add this variant to the list.
+      //POCL_MSG_PRINT_LLVM("Found func: %s (%s)\n", ScalarName.c_str(), MangledName.c_str());
       FoundVectorVariants[ScalarName][Width] = MangledName;
     }
   }
