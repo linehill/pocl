@@ -682,7 +682,8 @@ static const std::map<std::string, VectorizableFuncInfo> VectorizableFuncs = {
 // passes.
 static void ensureVectorFunctionVariantDeclaration(
     const std::string &FuncName, llvm::Module *Program, const llvm::Module *Lib,
-    llvm::StringSet<> &DeclaredFunctions) {
+    llvm::StringSet<> &DeclaredFunctions,
+    std::vector<Constant *> &CompilerUsed) {
   Function *VariantFunc = Program->getFunction(FuncName);
   const Function *LibFunc = Lib->getFunction(FuncName);
   if (!VariantFunc && LibFunc) {
@@ -695,13 +696,7 @@ static void ensureVectorFunctionVariantDeclaration(
 
     // We also need to explicitly mark these functions as used, otherwise
     // GlobalDCE removes them before any vectorization pass gets to use them.
-    auto ArrayType =
-        ArrayType::get(PointerType::get(FuncDecl->getType(), 0), 1);
-    Constant *FuncArray[] = {FuncDecl};
-    auto Array = ConstantArray::get(ArrayType, ArrayRef(FuncArray));
-    new GlobalVariable(*Program, ArrayType, false,
-                       GlobalValue::AppendingLinkage, Array,
-                       "llvm.compiler.used");
+    CompilerUsed.push_back(FuncDecl);
   }
 }
 
@@ -741,6 +736,8 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
     }
   }
 
+  std::vector<Constant *> CompilerUsed;
+
   // Using the found vector function variant families, check which ones are
   // called and annotate those calls with vector-function-abi-variant
   // attributes.
@@ -768,7 +765,7 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
 
       // Ensure the function is declared in the program.
       ensureVectorFunctionVariantDeclaration(Name, Program, Lib,
-                                             DeclaredFunctions);
+                                             DeclaredFunctions, CompilerUsed);
 
       // Construct mapping name, see vector-function-abi-variant from
       // LLVM langref for how this works.
@@ -800,6 +797,17 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
         llvm::VFABI::setVectorVariantNames(CI, Mappings);
       }
     }
+  }
+
+  // Finally, mark the vector variants as used, so that they don't get removed
+  // before autovectorization runs.
+  if (!CompilerUsed.empty()) {
+    auto ArrayType = ArrayType::get(PointerType::get(Program->getContext(), 0),
+                                    CompilerUsed.size());
+    auto Array = ConstantArray::get(ArrayType, CompilerUsed);
+    new GlobalVariable(*Program, ArrayType, false,
+                       GlobalValue::AppendingLinkage, Array,
+                       "llvm.compiler.used");
   }
 }
 
