@@ -677,15 +677,27 @@ struct VectorizableFuncInfo {
 static const std::map<std::string, VectorizableFuncInfo> VectorizableFuncs = {
     {"_cl_atan2(float, float)", {"vv", false}},
     {"_cl_atan2(double, double)", {"vv", false}},
-    {"_cl_cbrt(float)", {"v", false}}, {"_cl_cbrt(double)", {"v", false}},
-    {"_cl_erfc(float)", {"v", false}}, {"_cl_erfc(double)", {"v", false}},
-    {"_cl_erf(float)", {"v", false}}, {"_cl_erf(double)", {"v", false}},
-    {"_cl_expm1(float)", {"v", false}}, {"_cl_expm1(double)", {"v", false}},
-    {"_cl_lgamma(float)", {"v", false}}, {"_cl_lgamma(double)", {"v", false}},
+    {"_cl_cbrt(float)", {"v", false}},
+    {"_cl_cbrt(double)", {"v", false}},
+    {"_cl_erfc(float)", {"v", false}},
+    {"_cl_erfc(double)", {"v", false}},
+    {"_cl_erf(float)", {"v", false}},
+    {"_cl_erf(double)", {"v", false}},
+    {"_cl_expm1(float)", {"v", false}},
+    {"_cl_expm1(double)", {"v", false}},
+    {"_cl_lgamma(float)", {"v", false}},
+    {"_cl_lgamma(double)", {"v", false}},
+    // Commented out due to the pointer parameter not vectorizing properly.
+    //{"_cl_lgamma_r(float, int CLgeneric*)", {"vl4", false}},
+    //{"_cl_lgamma_r(double, int CLgeneric*)", {"vl4", false}},
+    {"_cl_native_powr(float, float)", {"vv", false}},
+    {"_cl_native_powr(double, double)", {"vv", false}},
     {"_cl_powr(float, float)", {"vv", false}},
     {"_cl_powr(double, double)", {"vv", false}},
     {"_cl_remainder(float, float)", {"vv", false}},
     {"_cl_remainder(double, double)", {"vv", false}},
+    //{"_cl_remquo(float, float, int CLgeneric*)", {"vvl4", false}},
+    //{"_cl_remquo(double, double, int CLgeneric*)", {"vvl4", false}},
     {"_cl_rootn(float, int)", {"vv", false}},
     {"_cl_rootn(double, int)", {"vv", false}},
     {"_cl_tgamma(float)", {"v", false}},
@@ -748,7 +760,6 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
 
     if (VectorizableFuncs.count(ScalarName)) {
       // Add this variant to the list.
-      //POCL_MSG_PRINT_LLVM("Found func: %s (%s)\n", ScalarName.c_str(), MangledName.c_str());
       FoundVectorVariants[ScalarName][Width] = MangledName;
     }
   }
@@ -812,6 +823,9 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
         if (CI->getCalledFunction() != CalledVariant)
           continue;
         llvm::VFABI::setVectorVariantNames(CI, Mappings);
+        // We need to ensure that the scalar variant doesn't get inlined before
+        // vectorization runs.
+        CI->addFnAttr(llvm::Attribute::NoInline);
       }
     }
   }

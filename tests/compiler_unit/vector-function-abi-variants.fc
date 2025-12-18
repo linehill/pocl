@@ -1,3 +1,13 @@
 CHECK: @_pocl_kernel_test_vector_variant_workgroup
 CHECK: vector.body:
-CHECK: <8 x float> @_Z7_cl_erfDv8_f(<8 x float> %wide.load)
+CHECK: <8 x float> @_Z9_cl_atan2Dv8_fS_
+CHECK: <8 x float> @_Z8_cl_cbrtDv8_f
+CHECK: <8 x float> @_Z8_cl_erfcDv8_f
+CHECK: <8 x float> @_Z7_cl_erfDv8_f
+CHECK: <8 x float> @_Z9_cl_expm1Dv8_f
+CHECK: <8 x float> @_Z10_cl_lgammaDv8_f
+CHECK: <8 x float> @_Z15_cl_native_powrDv8_fS_
+CHECK: <8 x float> @_Z8_cl_powrDv8_fS_
+CHECK: <8 x float> @_Z13_cl_remainderDv8_fS_
+CHECK: <8 x float> @_Z9_cl_rootnDv8_fDv8_i
+CHECK: <8 x float> @_Z10_cl_tgammaDv8_f
