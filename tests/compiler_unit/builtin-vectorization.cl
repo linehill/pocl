@@ -1,4 +1,4 @@
-kernel void test_vector_variant(__global const float *a, __global float *b,
+kernel void test_vectorization(__global const float *a, __global float *b,
                                 __global int *c) {
   size_t i = get_global_id(0);
   float f = 0;

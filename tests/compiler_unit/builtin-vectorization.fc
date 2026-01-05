@@ -1,4 +1,4 @@
-CHECK: @_pocl_kernel_test_vector_variant_workgroup
+CHECK: @_pocl_kernel_test_vectorization_workgroup
 CHECK: vector.body:
 CHECK: <8 x float> @_Z9_cl_atan2Dv8_fS_
 CHECK: <8 x float> @_Z8_cl_cbrtDv8_f
