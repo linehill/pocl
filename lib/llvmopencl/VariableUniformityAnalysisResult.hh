@@ -82,6 +82,11 @@ public:
   bool invalidate(llvm::Function &F, const llvm::PreservedAnalyses PA,
                   llvm::AnalysisManager<llvm::Function>::Invalidator &Inv);
 
+  void reset(llvm::Function &F) {
+    uniformityCache_[&F].clear();
+    LoopUniformityCache_[&F].clear();
+  }
+
   void dump(llvm::Function *F);
   void dump();
 

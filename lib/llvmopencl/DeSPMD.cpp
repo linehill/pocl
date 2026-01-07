@@ -50,6 +50,7 @@
 #include "LoopBarriers.h"
 #include "PHIsToAllocas.h"
 #include "SubgroupBarrier.h"
+#include "UniformizeDivergentExits.h"
 #include "WorkgroupBarrier.h"
 #include "WorkitemHandlerChooser.h"
 #include "WorkitemLoops.h"
@@ -135,7 +136,7 @@ static bool convertSGBarriersToWGBarriers(llvm::Function &F,
 /// variables are present and invariant_wiloop_bounds metadata is not set, the
 /// work-item loops must use them for correctness reasons.
 ///
-/// For each dimension there are two bound variable: one for lower bound
+/// For each dimension there are two bound variables: one for lower bound
 /// (inclusive) and other for upper bound (exclusive). The names of the
 /// variables are obtainable through WILOOP_LOWER_BOUND_NAME() and
 /// WILOOP_UPPER_BOUND_NAME() macros.
@@ -214,6 +215,15 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
 
   pocl::VariableUniformityAnalysisResult VUA;
   VUA.runOnFunction(F, LI, PDT);
+
+  if (WIH == WorkitemHandlerType::LOOPS) {
+    if (pocl::UniformizeDivergentExits(F, PDT, VUA)) {
+      Changed = true;
+      VUA.reset(F);
+      REFRESH_LOOP_INFO();
+      VUA.runOnFunction(F, LI, PDT);
+    }
+  }
 
   Changed = canonicalizeBarriers(F, LI, DT) || Changed;
   REFRESH_LOOP_INFO();

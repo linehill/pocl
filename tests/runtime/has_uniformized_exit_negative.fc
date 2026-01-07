@@ -1,0 +1,1 @@
+CHECK-NOT: !{!"has_uniformized_exit", i8 1}

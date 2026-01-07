@@ -26,13 +26,14 @@ IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
 #include <llvm/ADT/Twine.h>
 POP_COMPILER_DIAGS
 IGNORE_COMPILER_WARNING("-Wunused-parameter")
+#include <llvm/ADT/SmallSet.h>
 #include <llvm/Demangle/Demangle.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Metadata.h>
 #include <llvm/IR/Module.h>
-#include <llvm/ADT/SmallSet.h>
 #include <llvm/IR/ReplaceConstant.h>
 
 // include all passes & analysis
@@ -55,6 +56,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "LLVMUtils.h"
 #include "LoopBarriers.h"
 #include "MinLegalVecSize.hh"
+#include "OptimizeBuiltins.h"
 #include "OptimizeWorkItemGVars.h"
 #include "PHIsToAllocas.h"
 #include "ParallelRegion.h"
@@ -732,6 +734,7 @@ void registerPassBuilderPasses(llvm::PassBuilder &PB) {
   IsolateRegions::registerWithPB(PB);
   FixMinVecSize::registerWithPB(PB);
   OptimizeWorkItemGVars::registerWithPB(PB);
+  OptimizeBuiltins::registerWithPB(PB);
   SubCFGFormation::registerWithPB(PB);
   Workgroup::registerWithPB(PB);
   PoCLCFGPrinter::registerWithPB(PB);
@@ -926,6 +929,21 @@ static GlobalVariable *getOrCreateWILoopBoundGV(Module *M, StringRef Name) {
                             Poison, Name);
 }
 
+// Set Range metadata with range [Min, Max] to the given instruction.
+void setRangeMetadata(llvm::Instruction *Instr, size_t Min, size_t Max) {
+  assert(Min != Max + 1 && "Empty/full range!");
+
+  MDBuilder MDB(Instr->getContext());
+  size_t BitWidth = Instr->getType()->getIntegerBitWidth();
+
+  assert(isUIntN(BitWidth, Min) && "Min value doesn't fit into RangeMD!");
+  assert(isUIntN(BitWidth, Max + 1) && "Max+1 value doesn't fit into RangeMD!");
+
+  MDNode *Range =
+      MDB.createRange(APInt(BitWidth, Min), APInt(BitWidth, Max + 1));
+  Instr->setMetadata(LLVMContext::MD_range, Range);
+}
+
 /// Get or create lower work-item loop bound global variable.
 GlobalVariable *getOrCreateWILoopLowerBoundGV(Module *M, unsigned Dim) {
   return getOrCreateWILoopBoundGV(M, WILOOP_LOWER_BOUND_NAME(Dim));
@@ -941,7 +959,7 @@ GlobalVariable *getOrCreateWILoopUpperBoundGV(Module *M, unsigned Dim) {
 Value *getWorkgroupLocalSize(Module *M, unsigned Dim,
                              BasicBlock::iterator InsPt) {
   assert(M);
-  assert(Dim >= 0 && Dim <= 3);
+  assert(Dim < 3);
 
   auto *ST = SizeT(M);
   bool WGDynamicLocalSize = true;
@@ -1015,6 +1033,74 @@ bool hasCallTo(Function *F, StringRef CalleeName) {
   }
 
   return false;
+}
+
+/// Creates a call to a function with a function type corresponding to
+/// 'size_t(int)' in OpenCL C.
+static Value *createWorkItemFnCall(Module *M, const char *Name, Value *ArgV,
+                                   BasicBlock::iterator InsPt) {
+  assert(Name);
+  auto *ArgT = IntegerType::get(M->getContext(), 32);
+  auto *RetT = SizeT(M);
+
+  FunctionType *FTy = FunctionType::get(RetT, {ArgT}, /*isVarArg=*/false);
+  auto FC = M->getOrInsertFunction(Name, FTy);
+  assert(FC.getFunctionType() == FTy && "Function type mismatch!");
+
+  IRBuilder<> B(InsPt->getParent(), InsPt);
+  return B.CreateCall(FC, {ArgV}, Name);
+}
+
+static Value *createWorkItemFnCall(Module *M, const char *Name, unsigned Dim,
+                                   BasicBlock::iterator InsPt) {
+  assert(Dim <= 3);
+  auto *ArgT = IntegerType::get(M->getContext(), 32);
+  auto *ArgV = ConstantInt::get(ArgT, Dim, /*IsSigned=*/false);
+  return createWorkItemFnCall(M, Name, ArgV, InsPt);
+}
+
+Value *createGetGroupID(Module *M, unsigned Dim, BasicBlock::iterator InsPt) {
+  return createWorkItemFnCall(M, GROUP_ID_BUILTIN_NAME, Dim, InsPt);
+}
+
+Value *createGetLocalSize(Module *M, unsigned Dim, BasicBlock::iterator InsPt) {
+  return createWorkItemFnCall(M, LS_BUILTIN_NAME, Dim, InsPt);
+}
+
+/// Emit code for computing value of 'get_group_id(Dim) * get_local_size(Dim)'
+Value *createBaseGlobalID(Module *M, unsigned Dim, BasicBlock::iterator InsPt) {
+
+  IRBuilder<> B(InsPt->getParent(), InsPt);
+  auto *GroupID = createGetGroupID(M, Dim, InsPt);
+  auto *LocalSize = createGetLocalSize(M, Dim, InsPt);
+  auto Name = Twine("gid.base.") + Twine(Dim);
+  return B.CreateMul(GroupID, LocalSize, Name, /*NUW=*/true);
+}
+
+llvm::Value *createGlobalID(llvm::Module *M, Value *Dim,
+                            llvm::BasicBlock::iterator InsPt) {
+  IRBuilder<> B(InsPt->getParent(), InsPt);
+  return createWorkItemFnCall(M, GID_BUILTIN_NAME, Dim, InsPt);
+}
+
+/// Same as Value::getNameOrAsOperand() but available with non-debug LLVM before
+/// LLVM 21.
+///
+/// This method return the name assigned to the V or its SSA number.
+std::string getNameOrAsOperand(Value *V) {
+#if LLVM_MAJOR >= 21
+  // Before LLVM-21 this method is guarded by NDEBUG.
+  return V->getNameOrAsOperand();
+#else
+  // Copied from Value::getNameOrAsOperand().
+  if (!V->getName().empty())
+    return std::string(V->getName());
+
+  std::string BBName;
+  raw_string_ostream OS(BBName);
+  V->printAsOperand(OS, false);
+  return OS.str();
+#endif
 }
 
 } // namespace pocl

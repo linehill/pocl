@@ -56,7 +56,7 @@ endif()
 set(CXX_PROGRAMS_TO_BUILD test_device_address test_svm test_large_buf
   test_subbuffers test_compile_n_link test_dbk_matmul test_tensor_view
   test_dbk_convert test_dbk_set_rows test_automatic_noalias
-  test_buffer_size_specialization)
+  test_buffer_size_specialization test_divergent_exits)
 
 add_compile_options(${OPENCL_CFLAGS} -I${CMAKE_SOURCE_DIR}/include)
 
@@ -217,6 +217,79 @@ add_test_pocl(NAME "alloca_removal1"
   LLVM_FILECHECKS "alloca_removal1.fc"
   ONLY_FILECHECKS 1
   ENVIRONMENT "POCL_VECTORIZER_FORCE_VECTOR_WIDTH=4")
+
+add_test_pocl(
+  NAME "runtime/test_divergent_exit_case0"
+  COMMAND test_divergent_exits 0
+  WORKITEM_HANDLER "loopvec"
+  LLVM_FILECHECKS has_uniformized_exit_positive.fc)
+
+add_test_pocl(
+  NAME "runtime/test_divergent_exit_case1a"
+  COMMAND test_divergent_exits 1
+  WORKITEM_HANDLER "loopvec"
+  LLVM_FILECHECKS has_uniformized_exit_positive.fc
+  ENVIRONMENT "POCL_SMALL_GRID_THRESHOLD=2147483647")
+
+add_test_pocl(
+  NAME "runtime/test_divergent_exit_case1b"
+  COMMAND test_divergent_exits 1
+  WORKITEM_HANDLER "loopvec"
+  LLVM_FILECHECKS has_uniformized_exit_negative.fc
+  ENVIRONMENT "POCL_SMALL_GRID_THRESHOLD=4294967295")
+
+add_test_pocl(
+  NAME "runtime/test_divergent_exit_case2a"
+  COMMAND test_divergent_exits 2
+  WORKITEM_HANDLER "loopvec"
+  LLVM_FILECHECKS has_uniformized_exit_positive.fc
+  ENVIRONMENT "POCL_SMALL_GRID_THRESHOLD=4294967295")
+
+add_test_pocl(
+  NAME "runtime/test_divergent_exit_case3"
+  COMMAND test_divergent_exits 3
+  WORKITEM_HANDLER "loopvec"
+  LLVM_FILECHECKS has_uniformized_exit_negative.fc
+  ENVIRONMENT "POCL_SMALL_GRID_THRESHOLD=4294967295")
+
+add_test_pocl(
+  NAME "runtime/test_divergent_exit_case4"
+  COMMAND test_divergent_exits 4
+  WORKITEM_HANDLER "loopvec"
+  LLVM_FILECHECKS has_uniformized_exit_positive.fc
+  ENVIRONMENT "POCL_SMALL_GRID_THRESHOLD=65535")
+
+add_test_pocl(
+  NAME "runtime/test_divergent_exit_case5"
+  COMMAND test_divergent_exits 5
+  WORKITEM_HANDLER "loopvec"
+  LLVM_FILECHECKS has_uniformized_exit_positive.fc
+  ENVIRONMENT "POCL_SMALL_GRID_THRESHOLD=2147483647")
+
+add_test_pocl(
+  NAME "runtime/test_divergent_exit_case6"
+  COMMAND test_divergent_exits 6
+  WORKITEM_HANDLER "loopvec")
+
+add_test_pocl(
+  NAME "runtime/test_divergent_exit_case7"
+  COMMAND test_divergent_exits 7
+  WORKITEM_HANDLER "loopvec"
+  LLVM_FILECHECKS has_uniformized_exit_positive.fc
+  ENVIRONMENT "POCL_SMALL_GRID_THRESHOLD=2147483647")
+
+add_test_pocl(
+  NAME "runtime/test_divergent_exit_case8"
+  COMMAND test_divergent_exits 8
+  WORKITEM_HANDLER "loopvec"
+  LLVM_FILECHECKS has_uniformized_exit_positive.fc)
+
+add_test_pocl(
+  NAME "runtime/test_divergent_exit_case9"
+  COMMAND test_divergent_exits 9
+  WORKITEM_HANDLER "loopvec"
+  # Negative result is actually a missed oppportunity.
+  LLVM_FILECHECKS has_uniformized_exit_negative.fc)
 
 # these tests require a lot of memory (up to 8GB);
 # run them serially to avoid OOM killer
