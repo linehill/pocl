@@ -31,6 +31,7 @@
 #include <iostream>
 #include <set>
 
+#include "config.h"
 #include "CompilerWarnings.h"
 IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
 #include <llvm/ADT/Twine.h>
