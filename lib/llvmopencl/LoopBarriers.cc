@@ -277,7 +277,7 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
   llvm::Function *K = L.getLoopPreheader()->getParent();
 
   std::set<llvm::BasicBlock *> Highlights;
-  /*   dumpCFG(*K, K->getName().str() + "_before_loopbbarriers_on_bloop_" +
+  /*   dumpCFG(*K, "_before_loopbbarriers_on_bloop_" +
                     L.getName().str() + ".dot");
 
     LLVM_DEBUG(dbgs() << "Loop: " << L.getName().str() << "\n"); */
@@ -389,7 +389,7 @@ static bool processLoopWithBarriers(Loop &L, llvm::DominatorTree &DT,
         if (Latch != nullptr) {
           // Single latch case.
           /*  dumpCFG(*K,
-                   K->getName().str() + "_after_loopbbarriers_on_bloop_" +
+                   "_after_loopbbarriers_on_bloop_" +
                        L.getName().str() + ".dot",
                    nullptr, nullptr, &Highlights); */
           return true;

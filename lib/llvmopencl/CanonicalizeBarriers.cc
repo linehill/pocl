@@ -76,7 +76,7 @@ bool canonicalizeBarriers(Function &F, llvm::LoopInfo &LI,
   LLVM_DEBUG(F.dump());
   LLVM_DEBUG(llvm::verifyFunction(F));
 
-  dumpCFG(F, F.getName().str() + "_before_canon.dot");
+  dumpCFG(F, "_before_canon.dot");
 
   bool Changed = false;
 
@@ -254,7 +254,7 @@ bool canonicalizeBarriers(Function &F, llvm::LoopInfo &LI,
     LLVM_DEBUG(dbgs() << "After CanonicalizeBarriers:\n");
     LLVM_DEBUG(F.dump(););
     LLVM_DEBUG(llvm::verifyFunction(F););
-    dumpCFG(F, F.getName().str() + "_after_canon.dot", nullptr, nullptr);
+    dumpCFG(F, "_after_canon.dot", nullptr, nullptr);
   }
 
   return Changed;

@@ -120,8 +120,7 @@ private:
 void FiberImpl::preprocessBarriers() {
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-  dumpCFG(*F, F->getName().str() + "_fiber_before_preprocessing_barriers.dot",
-          nullptr, nullptr);
+  dumpCFG(*F, "_fiber_before_preprocessing_barriers.dot", nullptr, nullptr);
 #endif
 
   std::vector<llvm::BasicBlock *> BarriersToPreprocess;
@@ -151,8 +150,7 @@ void FiberImpl::preprocessBarriers() {
   }
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-  dumpCFG(*F, F->getName().str() + "_fiber_after_preprocessing_barriers.dot",
-          nullptr, nullptr);
+  dumpCFG(*F, "_fiber_after_preprocessing_barriers.dot", nullptr, nullptr);
 #endif
 }
 
@@ -729,7 +727,7 @@ bool FiberImpl::runOnFunction(llvm::Function &Func) {
 #endif
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-  dumpCFG(*F, F->getName().str() + "_before_fiber.dot", nullptr, nullptr);
+  dumpCFG(*F, "_before_fiber.dot", nullptr, nullptr);
 #endif
 
   bool Changed = processFunction(Func);
@@ -749,7 +747,7 @@ bool FiberImpl::runOnFunction(llvm::Function &Func) {
 #endif
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-  dumpCFG(*F, F->getName().str() + "_after_fiber.dot", nullptr, nullptr);
+  dumpCFG(*F, "_after_fiber.dot", nullptr, nullptr);
 #endif
 
   return Changed;

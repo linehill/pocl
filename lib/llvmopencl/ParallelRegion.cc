@@ -372,9 +372,8 @@ ParallelRegion::verify([[maybe_unused]] bool AbortOnFailure)
           std::set<llvm::BasicBlock*> highlights;
           highlights.insert(entryBB());
           highlights.insert(*i);
-          dumpCFG(*(*i)->getParent(),
-                  (*i)->getParent()->getName().str() + ".dot", nullptr, &prvec,
-                  &highlights);
+          dumpCFG(*(*i)->getParent(), "ParllelRegion_verify.dot", nullptr,
+                  &prvec, &highlights);
           assert(!AbortOnFailure && "Incoming edges to non-entry block!");
           return false;
         } else if (!Barrier::hasBarrier(*ii)) {
@@ -400,7 +399,7 @@ ParallelRegion::verify([[maybe_unused]] bool AbortOnFailure)
       highlights.insert(exitBB());
       exitBB()->dump();
       dumpNames();
-      dumpCFG(*(*i)->getParent(), "broken.dot", nullptr,
+      dumpCFG(*(*i)->getParent(), "ParallelRegion_verify_broken.dot", nullptr,
               &regions, &highlights);
 #endif
 

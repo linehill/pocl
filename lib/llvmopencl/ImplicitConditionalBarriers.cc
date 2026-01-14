@@ -90,8 +90,7 @@ bool addImplicitBranchBarriers(llvm::Function &F, llvm::LoopInfo &LI,
     return false;
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-  dumpCFG(F, F.getName().str() + "_before_implicit_cond_barriers.dot", nullptr,
-          nullptr);
+  dumpCFG(F, "_before_implicit_cond_barriers.dot", nullptr, nullptr);
 #endif
 
   typedef std::vector<BasicBlock*> BarrierBlockIndex;
@@ -179,14 +178,12 @@ bool addImplicitBranchBarriers(llvm::Function &F, llvm::LoopInfo &LI,
   }
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-  dumpCFG(F, F.getName().str() + "_after_implicit_cond_barriers.dot", nullptr,
-          nullptr);
+  dumpCFG(F, "_after_implicit_cond_barriers.dot", nullptr, nullptr);
 #endif
   if (Changed) {
     LLVM_DEBUG(dbgs() << "After ImplicitConditionalBarriers\n");
     LLVM_DEBUG(F.dump());
-    LLVM_DEBUG(dumpCFG(F, F.getName().str() + "_after_cond_barriers.dot",
-                       nullptr, nullptr));
+    LLVM_DEBUG(dumpCFG(F, "_after_cond_barriers.dot", nullptr, nullptr));
   }
   return Changed;
 }

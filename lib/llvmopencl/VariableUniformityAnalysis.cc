@@ -264,7 +264,7 @@ bool VariableUniformityAnalysisResult::runOnFunction(
     if (isUniform(&F, &BB))
       UniformBBs.insert(&BB);
   }
-  dumpCFG(F, F.getName().str() + "_vua.dot", nullptr, nullptr, &UniformBBs);
+  dumpCFG(F, "_vua.dot", nullptr, nullptr, &UniformBBs);
   F.dump();
 #endif
 

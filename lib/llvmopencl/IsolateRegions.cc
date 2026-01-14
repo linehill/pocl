@@ -57,9 +57,9 @@ static void addDummyBefore(Region &R, llvm::BasicBlock *BB);
 static void addDummyAfter(Region &R, llvm::BasicBlock *BB);
 
 /* Ensure Single-Entry Single-Exit Regions are isolated from the
-   exit node so they won't get split illegally with tail replication. 
+   exit node so they won't get split illegally with tail replication.
 
-   This might happen in case an if .. else .. structure is just 
+   This might happen in case an if .. else .. structure is just
    before an exit from kernel. Both branches are split even though
    we would like to replicate the structure as a whole to retain
    semantics. This adds dummy basic blocks to all Regions just for
@@ -71,8 +71,8 @@ static void addDummyAfter(Region &R, llvm::BasicBlock *BB);
 
    digraph G {
       BAR1 -> A;
-      A -> X; 
-      BAR1 -> X; 
+      A -> X;
+      BAR1 -> X;
       X -> BAR2;
    }
 
@@ -90,12 +90,12 @@ static void addDummyAfter(Region &R, llvm::BasicBlock *BB);
    digraph G {
       BAR1 -> r_entry;
       r_entry -> A;
-      A -> X; 
-      r_entry -> X; 
+      A -> X;
+      r_entry -> X;
       X -> BAR2;
    }
 
-   
+
 */
 
 static bool isolateRegions(Region &R) {
@@ -140,7 +140,7 @@ static bool isolateRegions(Region &R) {
 
 #ifdef DEBUG_ISOLATE_REGIONS
   Function *F = Exit->getParent();
-  dumpCFG(*F, F->getName().str() + "_after_isolateregs.dot");
+  dumpCFG(*F, "_after_isolateregs.dot");
 #endif
 
   return changed;
@@ -200,7 +200,7 @@ llvm::PreservedAnalyses IsolateRegions::run(llvm::Function &F,
   findRegionsDepthFirst(RI.getTopLevelRegion(), Regions);
 
 #ifdef DEBUG_ISOLATE_REGIONS
-  dumpCFG(F, F.getName().str() + "_before_isolateregs.dot", &Regions);
+  dumpCFG(F, "_before_isolateregs.dot", &Regions);
 #endif
 
   unsigned NumRegions = Regions.size();
@@ -216,7 +216,7 @@ llvm::PreservedAnalyses IsolateRegions::run(llvm::Function &F,
   }
 
 #ifdef DEBUG_ISOLATE_REGIONS
-  dumpCFG(F, F.getName().str() + "_after_isolateregs.dot", &Regions);
+  dumpCFG(F, "_after_isolateregs.dot", &Regions);
 #endif
 
   return ChangedAny ? PAChanged : PreservedAnalyses::all();
