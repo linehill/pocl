@@ -887,7 +887,7 @@ int copyKernelFromBitcode(const char* Name, llvm::Module *ParallelBC,
     GlobalVariable *FltUsed = new GlobalVariable(
         /*Module=*/*ParallelBC,
         /*Type=*/Int32Ty,
-        /*isConstant=*/true,
+        /*isConstant=*/false,
         /*Linkage=*/GlobalValue::CommonLinkage, // GlobalValue::ExternalLinkage
         /*Initializer=*/Initializer,
         /*Name=*/"_fltused");

@@ -2,7 +2,7 @@
 ; handle based on which we know it's the special SG barrier function.
 declare void @pocl.subgroup_barrier() convergent
 
-define void @"?sub_group_barrier@@$$J0YAXI@Z"(i32 %flags) convergent {
+define void @"?subgroup_barrier@@$$J0YAXI@Z"(i32 %flags) convergent {
 entry:
   call void @pocl.subgroup_barrier()
   ret void

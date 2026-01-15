@@ -314,7 +314,7 @@ void FiberImpl::handleBarrierReached(llvm::IRBuilder<> *Builder,
                                      llvm::BasicBlock *BBlock) {
 
   llvm::Value *ZeroIndex =
-      llvm::ConstantInt::get(llvm::Type::getInt64Ty(M->getContext()), INT_ZERO);
+      llvm::ConstantInt::get(Int64Type, INT_ZERO);
 
   // Fiber-scheduler functions for registering barriers.
   llvm::Function *WGBarrierReached =

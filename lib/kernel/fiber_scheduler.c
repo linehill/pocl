@@ -27,39 +27,39 @@
    Passed in from the kernel. */
 typedef struct
 {
-  unsigned long local_size_x;
-  unsigned long local_size_y;
-  unsigned long local_size_z;
-  unsigned long subgroup_size;
+  uint64_t local_size_x;
+  uint64_t local_size_y;
+  uint64_t local_size_z;
+  uint64_t subgroup_size;
   /* Number of subgroups in workgroup */
-  unsigned long n_subgroups;
+  uint64_t n_subgroups;
   /* Number of workitems waiting at barrier */
-  unsigned long waiting_count;
+  uint64_t waiting_count;
   /* Number of subgroup barriers that are active. Active subgroup barrier
      means one of more workitems in a subgroup has reached subgroup barrier. */
-  unsigned long sg_barriers_active;
+  uint64_t sg_barriers_active;
   /* Workitem counter for each subgroup. Counts the number of workitems that
      have reached a barrier (workgroup or subgroup barrier). */
-  unsigned long *sg_wi_counter;
+  uint64_t *sg_wi_counter;
   /* Subgroup barrier counter for each subgroup. This holds the information
      whether subgroup is at sugbroup barrier. Can only have values 0 and 1. */
-  unsigned long *sg_barrier_counter;
+  uint64_t *sg_barrier_counter;
 } wgState;
 
 void __pocl_fiber_sched_init (wgState *wg_state,
-                              unsigned long *sg_wi_counter,
-                              unsigned long *sg_barrier_counter);
+                              uint64_t *sg_wi_counter,
+                              uint64_t *sg_barrier_counter);
 
-long __pocl_fiber_schedule_work_item (wgState *wg_state);
+uint64_t __pocl_fiber_schedule_work_item (wgState *wg_state);
 
-void __pocl_fiber_wg_barrier_reached (long local_id_x,
-                                      long local_id_y,
-                                      long local_id_z,
+void __pocl_fiber_wg_barrier_eached (uint64_t local_id_x,
+                                      uint64_t local_id_y,
+                                      uint64_t local_id_z,
                                       wgState *wg_state);
 
-void __pocl_fiber_sg_barrier_reached (long local_id_x,
-                                      long local_id_y,
-                                      long local_id_z,
+void __pocl_fiber_sg_barrier_reached (uint64_t local_id_x,
+                                      uint64_t local_id_y,
+                                      uint64_t local_id_z,
                                       wgState *wg_state);
 
 static void resolve_barriers (wgState *wg_state);
@@ -103,8 +103,8 @@ static void print_barrier_status (wgState *wg_state);
  */
 void
 __pocl_fiber_sched_init (wgState *wg_state,
-                         unsigned long *sg_wi_counter,
-                         unsigned long *sg_barrier_counter)
+                         uint64_t *sg_wi_counter,
+                         uint64_t *sg_barrier_counter)
 {
   wg_state->n_subgroups = (wg_state->local_size_x * wg_state->local_size_y
                            * wg_state->local_size_z)
@@ -136,16 +136,16 @@ __pocl_fiber_sched_init (wgState *wg_state,
  * @param wg_state The work-group data structure.
  * @return The linear ID of the workitem within the work-group.
  */
-long
+uint64_t
 __pocl_fiber_schedule_work_item (wgState *wg_state)
 {
   /* First check if barriers can be resolved. */
   resolve_barriers (wg_state);
 
-  long next_wi = 0;
+  uint64_t next_wi = 0;
 
   /* Go through all subgroups */
-  for (int i = 0; i < wg_state->n_subgroups; i++)
+  for (uint64_t i = 0; i < wg_state->n_subgroups; i++)
     {
 
       /* Choose the first sub-group that has work-items which have not
@@ -177,24 +177,24 @@ __pocl_fiber_schedule_work_item (wgState *wg_state)
  * @param wg_state The work-group data structure.
  */
 void
-__pocl_fiber_wg_barrier_reached (long local_id_x,
-                                 long local_id_y,
-                                 long local_id_z,
+__pocl_fiber_wg_barrier_reached (uint64_t local_id_x,
+                                 uint64_t local_id_y,
+                                 uint64_t local_id_z,
                                  wgState *wg_state)
 {
   /* Need to linearize the ID as counters are stored in that way. */
-  unsigned int linearId
+  uint64_t linearId
     = ((local_id_z * wg_state->local_size_y * wg_state->local_size_x)
        + (local_id_y * wg_state->local_size_x) + local_id_x);
 
   /* Subgroup id for incrementing the counter of the desired subgroup. */
-  unsigned int sg_id = linearId / wg_state->subgroup_size;
+  uint64_t sg_id = linearId / wg_state->subgroup_size;
 
   wg_state->waiting_count++;
   wg_state->sg_wi_counter[sg_id]++;
 
 #ifdef DEBUG_FIBER_SCHEDULER
-  unsigned int sg_local_id = linearId % wg_state->subgroup_size;
+  uint64_t sg_local_id = linearId % wg_state->subgroup_size;
   printf ("wg-barrier reached\n");
   printf ("LinearID: %d\tlocal_id_x: %d\tlocal_id_y: %d\tlocal_id_z: %d\t"
           "sg_id: %d\t sg_local_id: %d\n",
@@ -214,19 +214,19 @@ __pocl_fiber_wg_barrier_reached (long local_id_x,
  * @param wg_state The work-group data structure.
  */
 void
-__pocl_fiber_sg_barrier_reached (long local_id_x,
-                                 long local_id_y,
-                                 long local_id_z,
+__pocl_fiber_sg_barrier_reached (uint64_t local_id_x,
+                                 uint64_t local_id_y,
+                                 uint64_t local_id_z,
                                  wgState *wg_state)
 {
   /* Linearize wg id */
-  unsigned int linearId
+  uint64_t linearId
     = ((local_id_z * wg_state->local_size_y * wg_state->local_size_x)
        + (local_id_y * wg_state->local_size_x) + local_id_x);
 
   /* Calculate subgroup related IDs. */
-  int sg_id = linearId / wg_state->subgroup_size;
-  int sg_local_id = linearId % wg_state->subgroup_size;
+  uint64_t sg_id = linearId / wg_state->subgroup_size;
+  uint64_t sg_local_id = linearId % wg_state->subgroup_size;
 
   /* Only increase the sg barrier counter when the first wi of
      the subgroup comes in. */
@@ -272,12 +272,12 @@ resolve_barriers (wgState *wg_state)
   printf ("waiting_count: %d\tsg_barriers_active: %d\t",
           wg_state->waiting_count, wg_state->sg_barriers_active);
 
-  for (int i = 0; i < wg_state->n_subgroups; i++)
+  for (uint64_t i = 0; i < wg_state->n_subgroups; i++)
     {
       printf ("sg_wi_counter[%d]: %d\t", i, wg_state->sg_wi_counter[i]);
     }
   printf ("\n");
-  for (int i = 0; i < wg_state->n_subgroups; i++)
+  for (uint64_t i = 0; i < wg_state->n_subgroups; i++)
     {
       printf ("sg_barrier_status[%d]: %d\t", i,
               wg_state->sg_barrier_counter[i]);
@@ -295,7 +295,7 @@ resolve_barriers (wgState *wg_state)
         {
 
           /* Zero counters and waiting count. */
-          for (int i = 0; i < wg_state->n_subgroups; i++)
+          for (uint64_t i = 0; i < wg_state->n_subgroups; i++)
             {
               wg_state->sg_wi_counter[i] = 0;
             }
@@ -308,7 +308,7 @@ resolve_barriers (wgState *wg_state)
     {
 
       /* Have to check the status of each subgroup */
-      for (int i = 0; i < wg_state->n_subgroups; i++)
+      for (uint64_t i = 0; i < wg_state->n_subgroups; i++)
         {
 
           /* Subgroup barrier is 'active' for subgroup i and all work-items of
@@ -335,12 +335,12 @@ resolve_barriers (wgState *wg_state)
   printf ("waiting_count: %d\tsg_barriers_active: %d\t",
           wg_state->waiting_count, wg_state->sg_barriers_active);
 
-  for (int i = 0; i < wg_state->n_subgroups; i++)
+  for (uint64_t i = 0; i < wg_state->n_subgroups; i++)
     {
       printf ("sg_wi_counter[%d]: %d\t", i, wg_state->sg_wi_counter[i]);
     }
   printf ("\n");
-  for (int i = 0; i < wg_state->n_subgroups; i++)
+  for (uint64_t i = 0; i < wg_state->n_subgroups; i++)
     {
       printf ("sg_barrier_status[%d]: %d\t", i,
               wg_state->sg_barrier_counter[i]);
@@ -359,7 +359,7 @@ resolve_barriers (wgState *wg_state)
 static void
 print_barrier_status (wgState *wg_state)
 {
-  for (int i = 0; i < wg_state->n_subgroups; i++)
+  for (uint64_t i = 0; i < wg_state->n_subgroups; i++)
     {
 
       printf (" %d ", wg_state->sg_wi_counter[i]);
