@@ -419,6 +419,8 @@ else()
   set(KERNEL_SOURCES ${SOURCES_GENERIC})
 endif()
 
+list(APPEND KERNEL_SOURCES test_probes.cl)
+
 if(HOST_DEVICE_CL_VERSION_MAJOR GREATER_EQUAL 2)
 if(MIPS)
   message(STATUS "OpenCL 2.0 atomics are currently broken on MIPS")

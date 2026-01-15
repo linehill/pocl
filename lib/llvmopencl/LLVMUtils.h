@@ -181,6 +181,18 @@ llvm::Metadata *createConstantIntMD(llvm::LLVMContext &C, int32_t Val);
 
 void markFunctionAlwaysInline(llvm::Function *F);
 
+llvm::GlobalVariable *getOrCreateWILoopLowerBoundGV(llvm::Module *M,
+                                                    unsigned Dim);
+llvm::GlobalVariable *getOrCreateWILoopUpperBoundGV(llvm::Module *M,
+                                                    unsigned Dim);
+
+llvm::Value *getWorkgroupLocalSize(llvm::Module *M, unsigned Dim,
+                                   llvm::BasicBlock::iterator InsPt);
+
+bool hasInvariantWILoopBounds(llvm::Function *F);
+
+bool hasCallTo(llvm::Function *F, llvm::StringRef Callee);
+
 /**
  * \brief Clones a DISubprogram with changed function name and scope.
  *

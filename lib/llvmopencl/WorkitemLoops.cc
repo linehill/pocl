@@ -257,6 +257,28 @@ WorkitemLoopsImpl::addDynamicSizeLoadCode(llvm::IRBuilder<> &Builder, int Dim) {
   return DynSizeLoad;
 }
 
+static Value *getWILoopLowerBound(llvm::IRBuilder<> &B, int Dim) {
+  // Note: When static local sizes are present, they are used to initialize
+  // loop-bound variables at kernel entry and propagated by optimizations.
+
+  auto *M = B.GetInsertBlock()->getParent()->getParent();
+  auto *BoundGV = getOrCreateWILoopLowerBoundGV(M, Dim);
+
+  return B.CreateLoad(BoundGV->getValueType(), BoundGV,
+                      Twine("wiloop.lbound.") + Twine(Dim));
+}
+
+static Value *getWILoopUpperBound(llvm::IRBuilder<> &B, int Dim) {
+  // Note: When static local sizes are present, they are used to initialize
+  // loop-bound variables at kernel entry and propagated by optimizations.
+
+  auto *M = B.GetInsertBlock()->getParent()->getParent();
+  auto *BoundGV = getOrCreateWILoopUpperBoundGV(M, Dim);
+
+  return B.CreateLoad(BoundGV->getValueType(), BoundGV,
+                      Twine("wiloop.ubound.") + Twine(Dim));
+}
+
 /// Collects initial loop iterator store instructions for the kernel loops.
 ///
 /// For each loop that contains SG barriers, trace and store the the initial
@@ -562,6 +584,7 @@ WorkitemLoopsImpl::createLinearSGLoopAround(ParallelRegion &Region,
   llvm::BasicBlock *LoopBodyEntryBB = EntryBB;
   llvm::LLVMContext &C = LoopBodyEntryBB->getContext();
   llvm::Function *F = LoopBodyEntryBB->getParent();
+  assert(hasInvariantWILoopBounds(F) && "UNSUPPORTED: dynamic WI-loop bounds");
 
   std::string Prefix = "SG-pregion_";
 
@@ -672,6 +695,10 @@ WorkitemLoopsImpl::createLoopAround(ParallelRegion &Region,
 
   bool SGRegion = Region.isSGRegion();
 
+  if (SGRegion)
+    assert(hasInvariantWILoopBounds(F) &&
+           "UNSUPPORTED: dynamic WI-loop bounds");
+
   Value *LocalIdVar = LocalIdGlobals[Dim];
 
   size_t LocalSizes[] = {WGLocalSizeX, WGLocalSizeY, WGLocalSizeZ};
@@ -765,7 +792,8 @@ WorkitemLoopsImpl::createLoopAround(ParallelRegion &Region,
 
     // The WI-loops variant:
   } else {
-    Builder.CreateStore(ConstantInt::get(ST, 0), LocalIdVar);
+    auto *LBound = getWILoopLowerBound(Builder, Dim);
+    Builder.CreateStore(LBound, LocalIdVar);
     // Initialize the global id counter with the base.
     // GlobalVariable *GlobalId = GlobalIdIterators[Dim];
     Builder.CreateStore(GlobalIdOrigin, GlobalId);
@@ -797,14 +825,9 @@ WorkitemLoopsImpl::createLoopAround(ParallelRegion &Region,
     }
     // WI-Loops looping strategy.
   } else {
-    if (!WGDynamicLocalSize) {
-      CmpResult = Builder.CreateICmpULT(Builder.CreateLoad(ST, LocalIdVar),
-                                        ConstantInt::get(ST, LocalSizeForDim));
-    } else {
-      llvm::Value *DynLocalSize = addDynamicSizeLoadCode(Builder, Dim);
-      CmpResult = Builder.CreateICmpULT(Builder.CreateLoad(ST, LocalIdVar),
-                                        DynLocalSize);
-    }
+    auto *UBound = getWILoopUpperBound(Builder, Dim);
+    CmpResult =
+        Builder.CreateICmpULT(Builder.CreateLoad(ST, LocalIdVar), UBound);
   }
 
   Instruction *LoopBranch;
@@ -1076,6 +1099,9 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
     // the fallback. Only difference is whether we have to unpack the 3D
     // indices, which makes vectorization impossible.
     if (PRegion->isSGRegion()) {
+      assert(hasInvariantWILoopBounds(&F) &&
+             "UNSUPPORTED: dynamic WI-loop bounds");
+
       // Case (1) - The most optimal, vectorizable. Can be with static or
       // dynamic wg sizes.
       if (!PRegion->HasLocalIDReferences()) {
@@ -1145,6 +1171,8 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
   // Create the outer sg-loops, that loop the hierarchical regions one subgroup
   // at a time.
   for (const auto &SRegion : SuperRegions) {
+    assert(hasInvariantWILoopBounds(&F) &&
+           "UNSUPPORTED: dynamic WI-loop bounds");
 
     llvm::BasicBlock *EntryBarr = SRegion.first;
     llvm::BasicBlock *ExitBarr = SRegion.second;

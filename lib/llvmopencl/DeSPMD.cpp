@@ -35,6 +35,7 @@
 #include "DeSPMD.h"
 
 #include "llvm/Analysis/PostDominators.h"
+#include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 // TODO: Move the needed definitions from these PoCL modules to this file.
 // LLVM prefers self-contained files for passes (even if they grow large).
@@ -43,6 +44,7 @@
 #include "Fiber.h"
 #include "ImplicitConditionalBarriers.h"
 #include "ImplicitLoopBarriers.h"
+#include "KernelCompilerUtils.h"
 #include "LLVMUtils.h"
 #include "LoopBarriers.h"
 #include "PHIsToAllocas.h"
@@ -50,6 +52,7 @@
 #include "WorkgroupBarrier.h"
 #include "WorkitemHandlerChooser.h"
 #include "WorkitemLoops.h"
+#include "pocl_llvm_api.h"
 
 // TODO: recheck if we can reuse an existing analysis from LLVM:
 #include "VariableUniformityAnalysis.h"
@@ -121,6 +124,51 @@ static bool convertSGBarriersToWGBarriers(llvm::Function &F,
   return true;
 }
 
+/// Insert and initialize magic global variables for work-item loop bounds if
+/// applicable
+///
+/// These variables define the work-item ranges in each dimension the work-item
+/// loops iterate over and the bound may be adjusted during the kernel
+/// execution. The insertion is applicable for WorkitemHandlerType::LOOPS method
+/// which don't requiring linear work-item loops. When the work-item loop bound
+/// variables are present and invariant_wiloop_bounds metadata is not set, the
+/// work-item loops must use them for correctness reasons.
+///
+/// For each dimension there are two bound variable: one for lower bound
+/// (inclusive) and other for upper bound (exclusive).
+static bool setupKernelEntryWILoopBounds(llvm::Function &F,
+                                         WorkitemHandlerType WIH) {
+  if (WIH != WorkitemHandlerType::LOOPS)
+    return false;
+
+  auto *M = F.getParent();
+  auto *Entry = &F.getEntryBlock();
+  if (!isPureUniformBlock(Entry)) {
+    SplitBlock(Entry, Entry->getFirstInsertionPt());
+    Entry = &F.getEntryBlock();
+    markAsPureUniformBlock(Entry, "wg-function entry");
+    Entry->setName("wg-func-entry");
+  }
+
+  for (unsigned Dim = 0; Dim < 3; Dim++) {
+    auto *LowerBound = getOrCreateWILoopLowerBoundGV(M, Dim);
+    auto *UpperBound = getOrCreateWILoopUpperBoundGV(M, Dim);
+    IRBuilder B(Entry, Entry->getFirstInsertionPt());
+    Type *BoundTy = LowerBound->getValueType();
+    Value *UpperBoundValue = getWorkgroupLocalSize(M, Dim, B.GetInsertPoint());
+
+    B.CreateStore(ConstantInt::get(BoundTy, 0), LowerBound);
+    B.CreateStore(UpperBoundValue, UpperBound);
+  }
+
+  bool InvariantBounds = !hasCallTo(&F, "__pocl_probe_set_wiloop_bounds");
+
+  // See hasInvariantWILoopBounds() definition for the meaning of the MD.
+  setModuleBoolMetadata(M, "invariant_wiloop_bounds", InvariantBounds);
+
+  return true;
+}
+
 PreservedAnalyses DeSPMDPass::run(Function &F,
                                   FunctionAnalysisManager &AM) {
 
@@ -140,6 +188,9 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
 #endif
 
   Changed = convertPHIsToAllocaAccesses(F, DT) || Changed;
+  REFRESH_LOOP_INFO();
+
+  Changed = setupKernelEntryWILoopBounds(F, WIH) || Changed;
   REFRESH_LOOP_INFO();
 
   pocl::VariableUniformityAnalysisResult VUA;

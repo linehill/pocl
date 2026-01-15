@@ -89,6 +89,16 @@ public:
     return false;
   }
 
+  static bool hasSGBarriers(const llvm::Function *F) {
+    if (!F->getParent()->getFunction(SGBARRIER_FUNCTION_NAME))
+      return false;
+
+    for (auto &BB : *F)
+      if (hasSGBarrier(&BB))
+        return true;
+    return false;
+  }
+
 #if LLVM_MAJOR < 20
   static SubgroupBarrier *createAtEnd(llvm::BasicBlock *BB) {
     return create(BB->getTerminator());
