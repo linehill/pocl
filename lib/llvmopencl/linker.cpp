@@ -494,6 +494,7 @@ static bool convertAddrSpaceOperator(llvm::Function *Func, std::string &Log) {
     return true;
   }
 
+  std::list<llvm::CallInst *> CallsToErase;
   for (auto *U : Func->users()) {
     if (llvm::CallInst *Call = dyn_cast<llvm::CallInst>(U)) {
       PointerType *ArgPT =
@@ -501,7 +502,7 @@ static bool convertAddrSpaceOperator(llvm::Function *Func, std::string &Log) {
       PointerType *RetPT =
           dyn_cast<PointerType>(Call->getFunctionType()->getReturnType());
       if (ArgPT == nullptr || RetPT == nullptr) {
-        Log.append("Invalid use of operator __to_{local,global,private}");
+        Log.append("Invalid use of operator __to_{local,global,private}\n");
         return false;
       }
       if (ArgPT->getAddressSpace() == RetPT->getAddressSpace()) {
@@ -518,9 +519,15 @@ static bool convertAddrSpaceOperator(llvm::Function *Func, std::string &Log) {
             Call->getIterator());
 #endif
         Call->replaceAllUsesWith(AsCast);
-        Call->eraseFromParent();
+        CallsToErase.push_back(Call);
       }
+    } else {
+      Log.append("convertAddrSpaceOperator error: Use is not CallInst !!!\n");
     }
+  }
+
+  for (auto CallI : CallsToErase) {
+      CallI->eraseFromParent();
   }
 
   Func->eraseFromParent();

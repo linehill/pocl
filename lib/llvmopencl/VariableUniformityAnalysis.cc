@@ -155,6 +155,10 @@ void VariableUniformityAnalysisResult::analyzeLoop(
             ? nullptr
             : dyn_cast<llvm::BranchInst>(ExitingBlock->getTerminator());
 
+    if (!LoopBranch) {
+      LoopStructureIsUniform = false;
+      continue;
+    }
     llvm::Value *LoopCondition = LoopBranch->getCondition();
     // Now the uniformity data can treat the condition as divergent since it is
     // written in the loop check basic block, which is treated as divergent at
