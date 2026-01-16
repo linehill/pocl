@@ -1587,12 +1587,6 @@ generate_function("work_group_barrier", SIG_TO_LLVM_TYPE_MAP['v'], '', None, 'j'
 # generate wrapper function
 #def generate_function(name, ret_type, ret_type_ext, multiAS, *args):
 # subgroups
-generate_function("get_sub_group_size", SIG_TO_LLVM_TYPE_MAP['i'], '', None)
-generate_function("get_max_sub_group_size", SIG_TO_LLVM_TYPE_MAP['i'], '', None)
-generate_function("get_num_sub_groups", SIG_TO_LLVM_TYPE_MAP['i'], '', None)
-generate_function("get_enqueued_num_sub_groups", SIG_TO_LLVM_TYPE_MAP['i'], '', None)
-generate_function("get_sub_group_id", SIG_TO_LLVM_TYPE_MAP['i'], '', None)
-generate_function("get_sub_group_local_id", SIG_TO_LLVM_TYPE_MAP['i'], '', None)
 generate_function("sub_group_ballot", SIG_TO_LLVM_TYPE_MAP['Dv4_i'], '', None, 'i')
 generate_function("sub_group_any", SIG_TO_LLVM_TYPE_MAP['i'], '', None, 'i')
 generate_function("sub_group_all", SIG_TO_LLVM_TYPE_MAP['i'], '', None, 'i')

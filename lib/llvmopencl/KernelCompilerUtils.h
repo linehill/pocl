@@ -78,6 +78,14 @@
 // The name of the mangled barrier() function.
 #define BARRIER_BUILTIN_NAME "?barrier@@$$J0YAXI@Z"
 
+// subgroup related functions
+#define GSID_BUILTIN_NAME "?get_sub_group_id@@$$J0YAIXZ"
+#define GSLID_BUILTIN_NAME "?get_sub_group_local_id@@$$J0YAIXZ"
+#define NSGROUPS_BUILTIN_NAME "?get_num_sub_groups@@$$J0YAIXZ"
+#define SGS_BUILTIN_NAME "?get_sub_group_size@@$$J0YAIXZ"
+#define MAXSGS_BUILTIN_NAME "?get_max_sub_group_size@@$$J0YAIXZ"
+#define GESID_BUILTIN_NAME "?get_enqueued_num_sub_groups@@$$J0YAIXZ"
+
 #else
 // Assuming Itanium mangling.
 // Used 'clang -target x86_64-pc-linux-gnu -cl-std=cl3.0 -S -emit-llvm
@@ -107,6 +115,15 @@
 #define LLID_BUILTIN_NAME "_Z19get_local_linear_idv"
 // The name of the mangled barrier() function.
 #define BARRIER_BUILTIN_NAME "_Z7barrierj"
+
+// subgroup related functions
+#define GSID_BUILTIN_NAME "_Z16get_sub_group_idv"
+#define GSLID_BUILTIN_NAME "_Z22get_sub_group_local_idv"
+#define NSGROUPS_BUILTIN_NAME "_Z18get_num_sub_groupsv"
+#define SGS_BUILTIN_NAME "_Z18get_sub_group_sizev"
+#define MAXSGS_BUILTIN_NAME "_Z22get_max_sub_group_sizev"
+#define GESID_BUILTIN_NAME "_Z27get_enqueued_num_sub_groupsv"
+
 #endif
 
 namespace PoCLMDKind {

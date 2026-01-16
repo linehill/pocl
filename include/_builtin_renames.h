@@ -1078,12 +1078,6 @@
 #define write_imagef _cl_write_imagef
 #define write_imageh _cl_write_imageh
 
-#define get_sub_group_size _cl_get_sub_group_size
-#define get_max_sub_group_size _cl_get_max_sub_group_size
-#define get_num_sub_groups _cl_get_num_sub_groups
-#define get_enqueued_num_sub_groups _cl_get_enqueued_num_sub_groups
-#define get_sub_group_id _cl_get_sub_group_id
-#define get_sub_group_local_id _cl_get_sub_group_local_id
 #define sub_group_ballot _cl_sub_group_ballot
 #define sub_group_broadcast _cl_sub_group_broadcast
 #define sub_group_barrier _cl_sub_group_barrier
