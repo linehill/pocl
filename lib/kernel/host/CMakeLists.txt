@@ -275,7 +275,6 @@ if(ENABLE_HOST_CPU_VECTORIZE_BUILTINS)
     sleef-pocl/log10.cl
 
     sleef-pocl/log.cl
-    sleef-pocl/ldexp.cl
     sleef-pocl/rint.cl
     sleef-pocl/round.cl
     sleef-pocl/sqrt.cl
@@ -300,7 +299,6 @@ if(ENABLE_HOST_CPU_VECTORIZE_BUILTINS)
     log10.cl
 
     log.cl
-    ldexp.cl
     rint.cl
     round.cl
     sqrt.cl
@@ -310,7 +308,6 @@ if(ENABLE_HOST_CPU_VECTORIZE_BUILTINS)
     list(REMOVE_ITEM SOURCES_WITH_SLEEF
       libclc-pocl/cosh.cl
       libclc-pocl/sinh.cl
-      libclc-pocl/pown.cl
       libclc-pocl/tan.cl
       libclc-pocl/tanh.cl
       libclc-pocl/isinf.cl
@@ -357,7 +354,6 @@ if(ENABLE_HOST_CPU_VECTORIZE_BUILTINS)
     tanh.cl
     ceil.cl
 
-    pown.cl
     tan.cl
     acos.cl
     asin.cl

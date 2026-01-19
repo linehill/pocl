@@ -1,4 +1,4 @@
-kernel void test_vectorization(__global const float *a, __global float *b, __global int *c) {
+kernel void test_vectorization(__global const float * restrict a, __global float * restrict b, __global int * restrict c) {
   size_t i = get_global_id(0);
   float f = 0;
   //============================================================================
@@ -19,10 +19,13 @@ kernel void test_vectorization(__global const float *a, __global float *b, __glo
   // f += remquo(a[i], a[i], c+i);
   f += rootn(a[i], a[i]);
   f += tgamma(a[i]);
+  f += pown(a[i], i);
+  //f += frexp(a[i], c+i);
+  f += ldexp(a[i], i);
+
   //============================================================================
   // Vectorized via LLVM veclib
   //============================================================================
-  // rint, round, rsqrt, sin, sqrt, tan, trunc
 
   f += acos(a[i]);
   f += asin(a[i]);
@@ -38,14 +41,10 @@ kernel void test_vectorization(__global const float *a, __global float *b, __glo
   f += fma(a[i], b[i], (float)(c[i]));
   f += fmax(a[i], b[i]);
   f += fmin(a[i], b[i]);
-  // These destroy vectorization for the entire program
-  //f += frexp(a[i], c+i);
-  //f += ldexp(a[i], i);
   f += log(a[i]);
   f += log2(a[i]);
   f += log10(a[i]);
-  f += pow(a[i], b[i]);
-  //f += pown(a[i], (int)(a[i]));
+  f += pow(a[i], a[i]);
   f += rint(a[i]);
   f += round(a[i]);
   f += rsqrt(a[i]);

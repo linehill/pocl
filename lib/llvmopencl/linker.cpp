@@ -708,6 +708,10 @@ static const std::map<std::string, VectorizableFuncInfo> VectorizableFuncs = {
     {"_cl_rootn(double, int)", {"vv", false}},
     {"_cl_tgamma(float)", {"v", false}},
     {"_cl_tgamma(double)", {"v", false}},
+    {"_cl_pown(float, int)", {"vv", false}},
+    {"_cl_pown(double, int)", {"vv", false}},
+    {"_cl_ldexp(float, int)", {"vv", false}},
+    {"_cl_ldexp(double, int)", {"vv", false}},
 };
 
 // Makes sure that the given vectorized function variant is declared and
@@ -741,8 +745,8 @@ static void
 addVectorFunctionVariantAttributes(llvm::Module *Program,
                                    const llvm::Module *Lib,
                                    llvm::StringSet<> &DeclaredFunctions) {
-  using VectorVariantSet2 = std::map<int, std::string>;
-  std::map<std::string, VectorVariantSet2> FoundVectorVariants;
+  using VectorVariantSet = std::map<int, std::string>;
+  std::map<std::string, VectorVariantSet> FoundVectorVariants;
 
   // Find all functions that may partake in vectorization, either scalar or
   // vector variants.
@@ -766,7 +770,13 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
 
     if (VectorizableFuncs.count(ScalarName)) {
       // Add this variant to the list.
-      FoundVectorVariants[ScalarName][Width] = MangledName;
+      std::string OldName = FoundVectorVariants[ScalarName][Width];
+      // Dumb heuristic - if the mangled name is longer, it's likely the one
+      // with more vector parameters.
+      if (MangledName.size() > OldName.size())
+      {
+          FoundVectorVariants[ScalarName][Width] = MangledName;
+      }
     }
   }
 
