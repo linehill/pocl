@@ -46,7 +46,7 @@ extern size_t _wiloop_upper_bound_z;
  * Only effective for CPU devices using loopvec work-group method.
  */
 void
-__pocl_probe_set_wiloop_bounds (uint dim,
+__pocl_probe_set_wiloop_bounds (unsigned int dim,
                                 size_t lower_bound,
                                 size_t upper_bound)
 {

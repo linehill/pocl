@@ -419,7 +419,7 @@ else()
   set(KERNEL_SOURCES ${SOURCES_GENERIC})
 endif()
 
-list(APPEND KERNEL_SOURCES test_probes.cl)
+list(APPEND KERNEL_SOURCES test_probes.c)
 
 if(HOST_DEVICE_CL_VERSION_MAJOR GREATER_EQUAL 2)
 if(MIPS)
