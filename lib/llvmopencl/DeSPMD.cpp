@@ -150,7 +150,7 @@ static bool convertSGBarriersToWGBarriers(llvm::Function &F,
 ///
 /// To:
 ///
-///   wiloop_0_bound = min(uniform_value, get_local_size());
+///   wiloop_0_bound = min(uniform_value, get_local_size(0));
 ///   WILOOP_UPPER_BOUND_NAME(0) = wiloop_0_bound;
 ///   // uniform "then" branch. Parallel loop formed here iterates
 ///   // over WIs 0..(wiloop_0_bound-1) at dimension zero.
