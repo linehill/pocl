@@ -87,39 +87,19 @@ _cl_ldexp (double16 x, int16 k)
 }
 
 _CL_OVERLOADABLE
-double2
-_cl_ldexp (double2 x, int k)
-{
-  return _cl_ldexp(x, (int2)(k));
-}
+double2 _cl_ldexp(double2 x, int k) { return _cl_ldexp(x, (int2)(k)); }
 
 _CL_OVERLOADABLE
-double3
-_cl_ldexp (double3 x, int k)
-{
-  return _cl_ldexp(x, (int3)(k));
-}
+double3 _cl_ldexp(double3 x, int k) { return _cl_ldexp(x, (int3)(k)); }
 
 _CL_OVERLOADABLE
-double4
-_cl_ldexp (double4 x, int k)
-{
-  return _cl_ldexp(x, (int4)(k));
-}
+double4 _cl_ldexp(double4 x, int k) { return _cl_ldexp(x, (int4)(k)); }
 
 _CL_OVERLOADABLE
-double8
-_cl_ldexp (double8 x, int k)
-{
-  return _cl_ldexp(x, (int8)(k));
-}
+double8 _cl_ldexp(double8 x, int k) { return _cl_ldexp(x, (int8)(k)); }
 
 _CL_OVERLOADABLE
-double16
-_cl_ldexp (double16 x, int k)
-{
-  return _cl_ldexp(x, (int16)(k));
-}
+double16 _cl_ldexp(double16 x, int k) { return _cl_ldexp(x, (int16)(k)); }
 
 #endif /* cl_khr_fp64 */
 
@@ -273,36 +253,16 @@ _cl_ldexp (float16 x, int16 k)
 #endif /* ENABLE_CONFORMANCE */
 
 _CL_OVERLOADABLE
-float2
-_cl_ldexp (float2 x, int k)
-{
-  return _cl_ldexp(x, (int2)(k));
-}
+float2 _cl_ldexp(float2 x, int k) { return _cl_ldexp(x, (int2)(k)); }
 
 _CL_OVERLOADABLE
-float3
-_cl_ldexp (float3 x, int k)
-{
-  return _cl_ldexp(x, (int3)(k));
-}
+float3 _cl_ldexp(float3 x, int k) { return _cl_ldexp(x, (int3)(k)); }
 
 _CL_OVERLOADABLE
-float4
-_cl_ldexp (float4 x, int k)
-{
-  return _cl_ldexp(x, (int4)(k));
-}
+float4 _cl_ldexp(float4 x, int k) { return _cl_ldexp(x, (int4)(k)); }
 
 _CL_OVERLOADABLE
-float8
-_cl_ldexp (float8 x, int k)
-{
-  return _cl_ldexp(x, (int8)(k));
-}
+float8 _cl_ldexp(float8 x, int k) { return _cl_ldexp(x, (int8)(k)); }
 
 _CL_OVERLOADABLE
-float16
-_cl_ldexp (float16 x, int k)
-{
-  return _cl_ldexp(x, (int16)(k));
-}
+float16 _cl_ldexp(float16 x, int k) { return _cl_ldexp(x, (int16)(k)); }

@@ -31,8 +31,8 @@
 #include <iostream>
 #include <set>
 
-#include "config.h"
 #include "CompilerWarnings.h"
+#include "config.h"
 IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
 #include <llvm/ADT/Twine.h>
 POP_COMPILER_DIAGS
@@ -672,46 +672,41 @@ static void handleDeviceSidePrintf(
 }
 
 #if LLVM_MAJOR > 17
-struct VectorizableFuncInfo {
-  const char *Params;
-  bool Masked;
-};
-
 // This is a list of built-in functions that need to be manually annotated with
 // vectorized variants. You should use this for OpenCL builtins which are not
 // covered by veclib, i.e. aren't LLVM builtins.
-static const std::map<std::string, VectorizableFuncInfo> VectorizableFuncs = {
-    {"_cl_atan2(float, float)", {"vv", false}},
-    {"_cl_atan2(double, double)", {"vv", false}},
-    {"_cl_cbrt(float)", {"v", false}},
-    {"_cl_cbrt(double)", {"v", false}},
-    {"_cl_erfc(float)", {"v", false}},
-    {"_cl_erfc(double)", {"v", false}},
-    {"_cl_erf(float)", {"v", false}},
-    {"_cl_erf(double)", {"v", false}},
-    {"_cl_expm1(float)", {"v", false}},
-    {"_cl_expm1(double)", {"v", false}},
-    {"_cl_lgamma(float)", {"v", false}},
-    {"_cl_lgamma(double)", {"v", false}},
+static const std::set<std::string> VectorizableFuncs = {
+    "_cl_atan2(float, float)",
+    "_cl_atan2(double, double)",
+    "_cl_cbrt(float)",
+    "_cl_cbrt(double)",
+    "_cl_erfc(float)",
+    "_cl_erfc(double)",
+    "_cl_erf(float)",
+    "_cl_erf(double)",
+    "_cl_expm1(float)",
+    "_cl_expm1(double)",
+    "_cl_lgamma(float)",
+    "_cl_lgamma(double)",
     // Commented out due to the pointer parameter not vectorizing properly.
-    //{"_cl_lgamma_r(float, int CLgeneric*)", {"vl4", false}},
-    //{"_cl_lgamma_r(double, int CLgeneric*)", {"vl4", false}},
-    {"_cl_native_powr(float, float)", {"vv", false}},
-    {"_cl_native_powr(double, double)", {"vv", false}},
-    {"_cl_powr(float, float)", {"vv", false}},
-    {"_cl_powr(double, double)", {"vv", false}},
-    {"_cl_remainder(float, float)", {"vv", false}},
-    {"_cl_remainder(double, double)", {"vv", false}},
-    //{"_cl_remquo(float, float, int CLgeneric*)", {"vvl4", false}},
-    //{"_cl_remquo(double, double, int CLgeneric*)", {"vvl4", false}},
-    {"_cl_rootn(float, int)", {"vv", false}},
-    {"_cl_rootn(double, int)", {"vv", false}},
-    {"_cl_tgamma(float)", {"v", false}},
-    {"_cl_tgamma(double)", {"v", false}},
-    {"_cl_pown(float, int)", {"vv", false}},
-    {"_cl_pown(double, int)", {"vv", false}},
-    {"_cl_ldexp(float, int)", {"vv", false}},
-    {"_cl_ldexp(double, int)", {"vv", false}},
+    //"_cl_lgamma_r(float, int CLgeneric*)",
+    //"_cl_lgamma_r(double, int CLgeneric*)",
+    "_cl_native_powr(float, float)",
+    "_cl_native_powr(double, double)",
+    "_cl_powr(float, float)",
+    "_cl_powr(double, double)",
+    "_cl_remainder(float, float)",
+    "_cl_remainder(double, double)",
+    //"_cl_remquo(float, float, int CLgeneric*)",
+    //"_cl_remquo(double, double, int CLgeneric*)",
+    "_cl_rootn(float, int)",
+    "_cl_rootn(double, int)",
+    "_cl_tgamma(float)",
+    "_cl_tgamma(double)",
+    "_cl_pown(float, int)",
+    "_cl_pown(double, int)",
+    "_cl_ldexp(float, int)",
+    "_cl_ldexp(double, int)",
 };
 
 // Makes sure that the given vectorized function variant is declared and
@@ -745,14 +740,39 @@ static void
 addVectorFunctionVariantAttributes(llvm::Module *Program,
                                    const llvm::Module *Lib,
                                    llvm::StringSet<> &DeclaredFunctions) {
-  using VectorVariantSet = std::map<int, std::string>;
-  std::map<std::string, VectorVariantSet> FoundVectorVariants;
+  struct MangledVectorFuncInfo {
+    std::string MangledName;
+    std::string Params;
+    int Width;
+    bool Masked;
+  };
+  std::map<std::string, std::vector<MangledVectorFuncInfo>> FoundVectorVariants;
 
   // Find all functions that may partake in vectorization, either scalar or
   // vector variants.
   for (const auto &Func : Lib->functions()) {
     std::string MangledName = Func.getName().str();
     std::string DemangledName = demangle(MangledName);
+
+    // Determine which parameters are vectors. Unfortunately, we can't just
+    // check it from Func directly due to the silly calling conventions on x86
+    // where <2 x float> is passed as a double.
+    std::string Params = "";
+
+    size_t Offset = DemangledName.find('(');
+    for (;;) {
+      size_t VecOffset = DemangledName.find("vector[", Offset);
+      size_t EndOffset = DemangledName.find_first_of(",)", Offset);
+
+      if (VecOffset < EndOffset)
+        Params += "v";
+      else
+        Params += "u";
+
+      if (EndOffset == std::string::npos || DemangledName[EndOffset] == ')')
+        break;
+      Offset = EndOffset + 1;
+    }
 
     // We construct the scalar name to act as the category name for all
     // variants of the same function. We do this by removing all vector[N]
@@ -770,13 +790,8 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
 
     if (VectorizableFuncs.count(ScalarName)) {
       // Add this variant to the list.
-      std::string OldName = FoundVectorVariants[ScalarName][Width];
-      // Dumb heuristic - if the mangled name is longer, it's likely the one
-      // with more vector parameters.
-      if (MangledName.size() > OldName.size())
-      {
-          FoundVectorVariants[ScalarName][Width] = MangledName;
-      }
+      FoundVectorVariants[ScalarName].push_back(
+          {MangledName, Params, Width, false});
     }
   }
 
@@ -787,9 +802,12 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
   // attributes.
   for (const auto &[ScalarName, Variants] : FoundVectorVariants) {
     bool FunctionIsUsed = false;
-    for (const auto &[Width, Name] : Variants) {
-      if (Program->getFunction(Name) != nullptr)
+    std::string ScalarMangledName;
+    for (const auto &Info : Variants) {
+      if (Program->getFunction(Info.MangledName) != nullptr)
         FunctionIsUsed = true;
+      if (Info.Width == 1)
+        ScalarMangledName = Info.MangledName;
     }
 
     // Only construct vector variant mappings if the vectorizable function is
@@ -797,37 +815,36 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
     if (!FunctionIsUsed)
       continue;
 
-    const VectorizableFuncInfo &info = VectorizableFuncs.at(ScalarName);
     std::vector<std::string> Mappings;
 
     // Construct the vector function variant mappings to be used for all call
     // annotations. The scalar version is omitted here.
-    for (const auto &[Width, Name] : Variants) {
+    for (const auto &Info : Variants) {
       // No need to list the scalar version.
-      if (Width == 1)
+      if (Info.Width == 1)
         continue;
 
       // Ensure the function is declared in the program.
-      ensureVectorFunctionVariantDeclaration(Name, Program, Lib,
+      ensureVectorFunctionVariantDeclaration(Info.MangledName, Program, Lib,
                                              DeclaredFunctions, CompilerUsed);
 
       // Construct mapping name, see vector-function-abi-variant from
       // LLVM langref for how this works.
       std::string MappingName = "_ZGV_LLVM_";
-      MappingName += info.Masked ? 'M' : 'N';
-      MappingName += std::to_string(Width);
-      MappingName += info.Params;
+      MappingName += Info.Masked ? 'M' : 'N';
+      MappingName += std::to_string(Info.Width);
+      MappingName += Info.Params;
       MappingName += "_";
-      MappingName += Variants.at(1);
+      MappingName += ScalarMangledName;
       MappingName += "(";
-      MappingName += Name;
+      MappingName += Info.MangledName;
       MappingName += ")";
       Mappings.push_back(MappingName);
     }
 
-    // Finally, go over calls and annotate them.
-    for (const auto &[Width, Name] : Variants) {
-      Function *CalledVariant = Program->getFunction(Name);
+    // Finally, go over scalar calls and annotate them.
+    for (const auto &Info : Variants) {
+      Function *CalledVariant = Program->getFunction(Info.MangledName);
 
       if (CalledVariant == nullptr)
         continue;

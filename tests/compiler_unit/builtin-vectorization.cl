@@ -1,4 +1,6 @@
-kernel void test_vectorization(__global const float * restrict a, __global float * restrict b, __global int * restrict c) {
+kernel void test_vectorization(__global const float *restrict a,
+                               __global float *restrict b,
+                               __global int *restrict c) {
   size_t i = get_global_id(0);
   float f = 0;
   //============================================================================
@@ -20,7 +22,7 @@ kernel void test_vectorization(__global const float * restrict a, __global float
   f += rootn(a[i], a[i]);
   f += tgamma(a[i]);
   f += pown(a[i], i);
-  //f += frexp(a[i], c+i);
+  // f += frexp(a[i], c+i);
   f += ldexp(a[i], i);
 
   //============================================================================
