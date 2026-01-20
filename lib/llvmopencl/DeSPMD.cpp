@@ -135,7 +135,25 @@ static bool convertSGBarriersToWGBarriers(llvm::Function &F,
 /// work-item loops must use them for correctness reasons.
 ///
 /// For each dimension there are two bound variable: one for lower bound
-/// (inclusive) and other for upper bound (exclusive).
+/// (inclusive) and other for upper bound (exclusive). The names of the
+/// variables are obtainable through WILOOP_LOWER_BOUND_NAME() and
+/// WILOOP_UPPER_BOUND_NAME() macros.
+///
+/// This transformation is part for work-item loops whose bounds may be
+/// redefined at kernel execution time. A possible opportunity utilize this
+/// feature is to redefine WI-loop bounds in order to uniformize divergent
+/// branches. For example, transform the following:
+///
+///   if (get_local_id(0) >= uniform_value)
+///     return;
+///   // divergent "then" branch.
+///
+/// To:
+///
+///   wiloop_0_bound = min(uniform_value, get_local_size());
+///   WILOOP_UPPER_BOUND_NAME(0) = wiloop_0_bound;
+///   // uniform "then" branch. Parallel loop formed here iterates
+///   // over WIs 0..(wiloop_0_bound-1) at dimension zero.
 static bool setupKernelEntryWILoopBounds(llvm::Function &F,
                                          WorkitemHandlerType WIH) {
   if (WIH != WorkitemHandlerType::LOOPS)
