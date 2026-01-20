@@ -82,6 +82,9 @@ public:
   bool invalidate(llvm::Function &F, const llvm::PreservedAnalyses PA,
                   llvm::AnalysisManager<llvm::Function>::Invalidator &Inv);
 
+  void dump(llvm::Function *F);
+  void dump();
+
 private:
   bool isUniformityAnalyzed(llvm::Function *F, llvm::Value *V) const;
   void removeUniformityData(llvm::Value &V, int Depth);

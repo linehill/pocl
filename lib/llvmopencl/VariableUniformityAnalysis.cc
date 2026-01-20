@@ -788,6 +788,29 @@ bool VariableUniformityAnalysisResult::invalidate(
 #endif
 }
 
+void VariableUniformityAnalysisResult::dump(Function *F) {
+  dbgs() << "Function: " << F->getName() << "\n";
+  for (auto &BB : *F) {
+    dbgs() << BB.getNameOrAsOperand() << ":";
+    if (isPureUniformBlock(&BB))
+      dbgs() << " PURE-UNIFORM";
+    else
+      dbgs() << (isUniform(F, &BB) ? " UNIFORM" : " DIVERGENT");
+    dbgs() << "\n";
+
+    for (auto &I : BB) {
+      dbgs() << (isUniform(F, &I) ? "  UNIFORM: " : "DIVERGENT: ") << I << "\n";
+    }
+    dbgs() << "\n";
+  }
+  dbgs() << "\n";
+}
+
+void VariableUniformityAnalysisResult::dump() {
+  for (auto [F, Ignored] : uniformityCache_)
+    dump(F);
+}
+
 REGISTER_NEW_FANALYSIS(PASS_NAME, PASS_CLASS, PASS_DESC);
 
 } // namespace pocl
