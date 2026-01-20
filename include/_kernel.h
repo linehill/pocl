@@ -181,7 +181,7 @@
 /****************************************************************************/
 /* Additional kernel built-ins for PoCL's internal testing
    purposes. These built-ins are second class citizens and their
-   behavior are not guaranteed or well-defined and thus they should be
+   behavior are not guaranteed or well-defined and thus they should not be
    relied on in production grade applications. For documentation seek
    to lib/kernel/test_probes.cl.  */
 

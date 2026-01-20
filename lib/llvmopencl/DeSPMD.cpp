@@ -130,7 +130,7 @@ static bool convertSGBarriersToWGBarriers(llvm::Function &F,
 /// These variables define the work-item ranges in each dimension the work-item
 /// loops iterate over and the bound may be adjusted during the kernel
 /// execution. The insertion is applicable for WorkitemHandlerType::LOOPS method
-/// which don't requiring linear work-item loops. When the work-item loop bound
+/// which doesn't require linear work-item loops. When the work-item loop bound
 /// variables are present and invariant_wiloop_bounds metadata is not set, the
 /// work-item loops must use them for correctness reasons.
 ///
