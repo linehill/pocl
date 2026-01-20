@@ -153,7 +153,7 @@ static bool setupKernelEntryWILoopBounds(llvm::Function &F,
   for (unsigned Dim = 0; Dim < 3; Dim++) {
     auto *LowerBound = getOrCreateWILoopLowerBoundGV(M, Dim);
     auto *UpperBound = getOrCreateWILoopUpperBoundGV(M, Dim);
-    IRBuilder B(Entry, Entry->getFirstInsertionPt());
+    IRBuilder<> B(Entry, Entry->getFirstInsertionPt());
     Type *BoundTy = LowerBound->getValueType();
     Value *UpperBoundValue = getWorkgroupLocalSize(M, Dim, B.GetInsertPoint());
 
