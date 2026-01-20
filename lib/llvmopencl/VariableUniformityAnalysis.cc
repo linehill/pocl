@@ -624,6 +624,10 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
       setUniform(F, V, true);
       return true;
     }
+  } else if (isa<llvm::IntrinsicInst>(V)) {
+    // The intrinsic is uniform if its operands are uniform. The operands are
+    // checked in the below. We are assuming there are no intrinsics whose
+    // result is always divergent.
   } else if (llvm::CallInst *Call = dyn_cast<llvm::CallInst>(V)) {
     auto Callee = Call->getCalledFunction();
     if (Callee == nullptr) {
