@@ -784,6 +784,34 @@ void pocl_append_to_buildlog(cl_program Program, cl_uint DeviceI, char *Log,
 
 #define POCL_METADATA_ROOT "pocl_meta"
 
+/// Returns true if MDNode is a pair with MDString as first operand.
+static bool isAKeyValuePair(MDNode *Node) {
+  if (!isa<MDTuple>(Node) || Node->getNumOperands() != 2)
+    return false;
+  return isa<MDString>(Node->getOperand(0));
+}
+
+/// Add a Key-Value pair to the NamedMDNode 'Root' or replace an existing one.
+static void resetOperand(NamedMDNode *Root, MDNode *KeyValuePair) {
+  assert(Root);
+  assert(isAKeyValuePair(KeyValuePair));
+  auto *Key = cast<MDString>(KeyValuePair->getOperand(0));
+
+  for (unsigned I = 0, E = Root->getNumOperands(); I < E; I++) {
+    auto *Node = Root->getOperand(I);
+    if (!isAKeyValuePair(Node))
+      continue;
+    auto *OldKey = cast<MDString>(Node->getOperand(0));
+    assert(OldKey);
+    if (OldKey == Key) {
+      if (KeyValuePair->getOperand(1) != Node->getOperand(1))
+        Root->setOperand(I, KeyValuePair);
+      return;
+    }
+  }
+  Root->addOperand(KeyValuePair);
+}
+
 void setModuleIntMetadata(llvm::Module *mod, const char *key, unsigned long data) {
 
   llvm::Metadata *meta[] = {MDString::get(mod->getContext(), key),
@@ -793,7 +821,7 @@ void setModuleIntMetadata(llvm::Module *mod, const char *key, unsigned long data
   MDNode *MD = MDNode::get(mod->getContext(), meta);
 
   NamedMDNode *Root = mod->getOrInsertNamedMetadata(POCL_METADATA_ROOT);
-  Root->addOperand(MD);
+  resetOperand(Root, MD);
 }
 
 void setModuleStringMetadata(llvm::Module *mod, const char *key,
@@ -804,7 +832,7 @@ void setModuleStringMetadata(llvm::Module *mod, const char *key,
   MDNode *MD = MDNode::get(mod->getContext(), meta);
 
   NamedMDNode *Root = mod->getOrInsertNamedMetadata(POCL_METADATA_ROOT);
-  Root->addOperand(MD);
+  resetOperand(Root, MD);
 }
 
 void setModuleBoolMetadata(llvm::Module *mod, const char *key, bool data) {
@@ -816,7 +844,7 @@ void setModuleBoolMetadata(llvm::Module *mod, const char *key, bool data) {
   MDNode *MD = MDNode::get(mod->getContext(), meta);
 
   NamedMDNode *Root = mod->getOrInsertNamedMetadata(POCL_METADATA_ROOT);
-  Root->addOperand(MD);
+  resetOperand(Root, MD);
 }
 
 bool getModuleIntMetadata(const llvm::Module &mod, const char *key,
