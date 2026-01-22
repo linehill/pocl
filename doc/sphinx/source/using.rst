@@ -391,6 +391,12 @@ pocl.
  some debugging information. Currently it prints the count of live cl_* objects
  by type (buffers, events, etc).
 
+- **POCL_SMALL_GRID_THRESHOLD**
+
+  Sets a threshold for "small-grid" kernel specialization. This
+  variable is intended for internal tests and should not be used in
+  OpenCL applications.
+
 - **POCL_STARTUP_DELAY**
 
   Default 0. If set to an integer N > 0, libpocl will make a pause of N seconds
