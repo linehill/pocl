@@ -1,4 +1,4 @@
-/* OpenCL built-in library: sleef-pocl/scalars.cl
+/* OpenCL built-in library: sleef-pocl/minmax_scalars.cl
 
    Copyright (c) 2017 Michal Babej / Tampere University of Technology
 
@@ -27,5 +27,3 @@
 DEFINE_EXPR_V_VS(fmax, fmax(a, (vtype)b))
 
 DEFINE_EXPR_V_VS(fmin, fmin(a, (vtype)b))
-
-DEFINE_EXPR_V_VI(ldexp, ldexp(a, (jtype)b))

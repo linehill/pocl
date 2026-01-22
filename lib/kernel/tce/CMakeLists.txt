@@ -240,7 +240,8 @@ tce/asin.cl
 )
 
 set(TODO_LIST
-sleef-pocl/scalars.cl
+sleef-pocl/minmax_scalars.cl
+sleef-pocl/ldexp_scalars.cl
 
 
 

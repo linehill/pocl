@@ -200,7 +200,8 @@ libclc/length.cl
 
 sleef/libm/sleef_glue.cl
 
-sleef-pocl/scalars.cl
+sleef-pocl/minmax_scalars.cl
+sleef-pocl/ldexp_scalars.cl
 sleef-pocl/acos.cl
 sleef-pocl/asin.cl
 sleef-pocl/atan2.cl
@@ -279,7 +280,7 @@ if(ENABLE_HOST_CPU_VECTORIZE_BUILTINS)
     sleef-pocl/round.cl
     sleef-pocl/sqrt.cl
 
-    sleef-pocl/scalars.cl
+    sleef-pocl/minmax_scalars.cl
     )
 
   list(APPEND SOURCES_WITH_SLEEF
