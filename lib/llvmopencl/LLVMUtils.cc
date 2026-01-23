@@ -445,6 +445,16 @@ void markAsPureUniformBlock(BasicBlock *BB, std::string Reason) {
                         {llvm::MDString::get(BB->getContext(), Reason)}));
 }
 
+void unmarkAsPureUniformBlock(llvm::BasicBlock *BB) {
+  assert(BB);
+  unsigned TargetKind = BB->getParent()->getParent()->getMDKindID(
+      PoCLMDKind::PureUniformBasicBlock);
+  auto *TI = cast<Instruction>(BB->getTerminator());
+  TI->eraseMetadataIf([=](unsigned MDKind, MDNode *Node) -> bool {
+    return MDKind == TargetKind;
+  });
+}
+
 void copyPureUniformMD(llvm::BasicBlock *Source,
                        llvm::BasicBlock *Destination) {
   if (!isPureUniformBlock(Source))

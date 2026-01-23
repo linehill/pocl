@@ -157,6 +157,10 @@ ParallelRegion *Kernel::CreateParallelRegionBetween(
                     << EntryBarr->getName().str() << " and "
                     << ExitBarr->getName().str() << "\n");
 
+  assert(
+      (Barrier::hasOnlyBarrier(EntryBarr) || isPureUniformBlock(EntryBarr)) &&
+      "Entry barrier block is not canonicalized!");
+
   BasicBlock *EntryBlock = nullptr;
 
   bool isSGRegion = false;
@@ -239,41 +243,24 @@ ParallelRegion *Kernel::CreateParallelRegionBetween(
   }
 
   // Create new entry block, when there is a conditional branch from entry
-  // barrier and both branches should be in the same parallel region. Create a
-  // new barrier block before the old entry barrier and then remove the barrier
-  // from the old barrier block.
+  // barrier and both branches should be in the same parallel region.
+  //
   //  (B)     (B)
   //  /|   ->  |
   // ()()     ()
   //          /|
   //         ()()
   if (createNewEntryBlock) {
+    auto *NewPREntry = SplitBlock(EntryBarr, EntryBarr->getTerminator());
+    if (EntryBarr->hasName())
+      NewPREntry->setName(Twine(EntryBarr->getName()) + ".singular_entry");
 
-    ValueToValueMapTy VMap;
-    BasicBlock *ClonedEntryBarr = CloneBasicBlock(
-        EntryBarr, VMap, "_singular_entry", EntryBarr->getParent());
-
-    // Update instructions inside cloned block to use mapped values
-    for (Instruction &I : *ClonedEntryBarr) {
-      RemapInstruction(&I, VMap, RF_IgnoreMissingLocals);
+    if (isPureUniformBlock(NewPREntry)) {
+      // Move the status back to the original BB. Having the status in the
+      // NewPREntry would block the PR formation.
+      copyPureUniformMD(NewPREntry, EntryBarr);
+      unmarkAsPureUniformBlock(NewPREntry);
     }
-
-    // Remove barrier from the cloned block.
-    llvm::Instruction *BarrierToRemove;
-    for (llvm::Instruction &Instr : *ClonedEntryBarr) {
-      if (isa<Barrier>(&Instr))
-        BarrierToRemove = &Instr;
-    }
-
-    BarrierToRemove->eraseFromParent();
-
-    // Erase branching from the barrier and make a new branch to singular entry
-    // block.
-    llvm::Instruction *BarrTerminator = EntryBarr->getTerminator();
-    BarrTerminator->eraseFromParent();
-
-    llvm::IRBuilder<> Builder(EntryBarr);
-    Builder.CreateBr(ClonedEntryBarr);
   }
 
   SmallPtrSet<BasicBlock *, 8> BlocksInRegion;
