@@ -146,10 +146,12 @@ sub_group_ballot (int predicate)
   SUB_GROUP_SHUFFLE_PT (, TYPE)                                               \
   SUB_GROUP_SHUFFLE_PT (intel_, TYPE)
 
+#ifdef cl_khr_subgroup_extended_types
 SUB_GROUP_SHUFFLE_T (char)
 SUB_GROUP_SHUFFLE_T (uchar)
 SUB_GROUP_SHUFFLE_T (short)
 SUB_GROUP_SHUFFLE_T (ushort)
+#endif
 SUB_GROUP_SHUFFLE_T (int)
 SUB_GROUP_SHUFFLE_T (uint)
 SUB_GROUP_SHUFFLE_T (long)
@@ -157,6 +159,28 @@ SUB_GROUP_SHUFFLE_T (ulong)
 __IF_FP16 (SUB_GROUP_SHUFFLE_T (half))
 SUB_GROUP_SHUFFLE_T (float)
 __IF_FP64 (SUB_GROUP_SHUFFLE_T (double))
+
+#ifdef cl_khr_subgroup_extended_types
+#define SUB_GROUP_SHUFFLE_VEC(TYPE)                                           \
+  SUB_GROUP_SHUFFLE_PT (, TYPE##2)                                      \
+  SUB_GROUP_SHUFFLE_PT (, TYPE##3)                                      \
+  SUB_GROUP_SHUFFLE_PT (, TYPE##4)                                      \
+  SUB_GROUP_SHUFFLE_PT (, TYPE##8)                                      \
+  SUB_GROUP_SHUFFLE_PT (, TYPE##16)
+
+SUB_GROUP_SHUFFLE_VEC (char)
+SUB_GROUP_SHUFFLE_VEC (uchar)
+SUB_GROUP_SHUFFLE_VEC (short)
+SUB_GROUP_SHUFFLE_VEC (ushort)
+SUB_GROUP_SHUFFLE_VEC (int)
+SUB_GROUP_SHUFFLE_VEC (uint)
+SUB_GROUP_SHUFFLE_VEC (long)
+SUB_GROUP_SHUFFLE_VEC (ulong)
+__IF_FP16 (SUB_GROUP_SHUFFLE_VEC (half))
+SUB_GROUP_SHUFFLE_VEC (float)
+__IF_FP64 (SUB_GROUP_SHUFFLE_VEC (double))
+#undef SUB_GROUP_SHUFFLE_VEC
+#endif
 
 #ifdef cl_intel_subgroups
 #define SUB_GROUP_SHUFFLE_VEC(TYPE)                                           \
@@ -169,6 +193,7 @@ __IF_FP64 (SUB_GROUP_SHUFFLE_T (double))
 SUB_GROUP_SHUFFLE_VEC (float)
 SUB_GROUP_SHUFFLE_VEC (int)
 SUB_GROUP_SHUFFLE_VEC (uint)
+#undef SUB_GROUP_SHUFFLE_VEC
 #endif
 
 #define SUB_GROUP_SHUFFLE_XOR_PT(PREFIX, TYPE)                                \
@@ -219,6 +244,12 @@ SUB_GROUP_SHUFFLE_XOR_VEC (uint)
     return sub_group_shuffle (val, id);                                       \
   }
 
+#ifdef cl_khr_subgroup_extended_types
+SUB_GROUP_BROADCAST_T (char)
+SUB_GROUP_BROADCAST_T (uchar)
+SUB_GROUP_BROADCAST_T (short)
+SUB_GROUP_BROADCAST_T (ushort)
+#endif
 SUB_GROUP_BROADCAST_T (int)
 SUB_GROUP_BROADCAST_T (uint)
 SUB_GROUP_BROADCAST_T (long)
@@ -226,6 +257,27 @@ SUB_GROUP_BROADCAST_T (ulong)
 __IF_FP16 (SUB_GROUP_BROADCAST_T (half))
 SUB_GROUP_BROADCAST_T (float)
 __IF_FP64 (SUB_GROUP_BROADCAST_T (double))
+
+#ifdef cl_khr_subgroup_extended_types
+#define SUB_GROUP_BROADCAST_VEC(TYPE)                                     \
+  SUB_GROUP_BROADCAST_T (TYPE##2)                                      \
+  SUB_GROUP_BROADCAST_T (TYPE##3)                                      \
+  SUB_GROUP_BROADCAST_T (TYPE##4)                                      \
+  SUB_GROUP_BROADCAST_T (TYPE##8)                                      \
+  SUB_GROUP_BROADCAST_T (TYPE##16)
+
+SUB_GROUP_BROADCAST_VEC (char)
+SUB_GROUP_BROADCAST_VEC (uchar)
+SUB_GROUP_BROADCAST_VEC (short)
+SUB_GROUP_BROADCAST_VEC (ushort)
+SUB_GROUP_BROADCAST_VEC (int)
+SUB_GROUP_BROADCAST_VEC (uint)
+SUB_GROUP_BROADCAST_VEC (long)
+SUB_GROUP_BROADCAST_VEC (ulong)
+__IF_FP16 (SUB_GROUP_BROADCAST_VEC (half))
+SUB_GROUP_BROADCAST_VEC (float)
+__IF_FP64 (SUB_GROUP_BROADCAST_VEC (double))
+#endif
 
 #define SUB_GROUP_REDUCE_OT(OPNAME, OPERATION, TYPE)                          \
   TYPE _CL_OVERLOADABLE sub_group_reduce##OPNAME (TYPE val)                   \
@@ -248,6 +300,10 @@ __IF_FP64 (SUB_GROUP_BROADCAST_T (double))
   }
 
 #define SUB_GROUP_REDUCE_T(OPNAME, OPERATION)                                 \
+  SUB_GROUP_REDUCE_OT (OPNAME, OPERATION, char)                               \
+  SUB_GROUP_REDUCE_OT (OPNAME, OPERATION, uchar)                              \
+  SUB_GROUP_REDUCE_OT (OPNAME, OPERATION, short)                              \
+  SUB_GROUP_REDUCE_OT (OPNAME, OPERATION, ushort)                             \
   SUB_GROUP_REDUCE_OT (OPNAME, OPERATION, int)                                \
   SUB_GROUP_REDUCE_OT (OPNAME, OPERATION, uint)                               \
   SUB_GROUP_REDUCE_OT (OPNAME, OPERATION, long)                               \
@@ -280,6 +336,10 @@ SUB_GROUP_REDUCE_T (_max, (a > b ? a : b))
   }
 
 #define SUB_GROUP_SCAN_INCLUSIVE_T(OPNAME, OPERATION)                         \
+  SUB_GROUP_SCAN_INCLUSIVE_OT (OPNAME, OPERATION, char)                       \
+  SUB_GROUP_SCAN_INCLUSIVE_OT (OPNAME, OPERATION, uchar)                      \
+  SUB_GROUP_SCAN_INCLUSIVE_OT (OPNAME, OPERATION, short)                      \
+  SUB_GROUP_SCAN_INCLUSIVE_OT (OPNAME, OPERATION, ushort)                     \
   SUB_GROUP_SCAN_INCLUSIVE_OT (OPNAME, OPERATION, int)                        \
   SUB_GROUP_SCAN_INCLUSIVE_OT (OPNAME, OPERATION, uint)                       \
   SUB_GROUP_SCAN_INCLUSIVE_OT (OPNAME, OPERATION, long)                       \
@@ -313,6 +373,10 @@ SUB_GROUP_SCAN_INCLUSIVE_T (_max, (a > b ? a : b))
     return data[get_local_linear_id ()];                                      \
   }
 
+SUB_GROUP_SCAN_EXCLUSIVE_OT (_add, a + b, char, 0)
+SUB_GROUP_SCAN_EXCLUSIVE_OT (_add, a + b, uchar, 0)
+SUB_GROUP_SCAN_EXCLUSIVE_OT (_add, a + b, short, 0)
+SUB_GROUP_SCAN_EXCLUSIVE_OT (_add, a + b, ushort, 0)
 SUB_GROUP_SCAN_EXCLUSIVE_OT (_add, a + b, int, 0)
 SUB_GROUP_SCAN_EXCLUSIVE_OT (_add, a + b, uint, 0)
 SUB_GROUP_SCAN_EXCLUSIVE_OT (_add, a + b, long, 0)
@@ -321,6 +385,10 @@ SUB_GROUP_SCAN_EXCLUSIVE_OT (_add, a + b, float, 0.0f)
 __IF_FP16 (SUB_GROUP_SCAN_EXCLUSIVE_OT (_add, a + b, half, 0))
 __IF_FP64 (SUB_GROUP_SCAN_EXCLUSIVE_OT (_add, a + b, double, 0))
 
+SUB_GROUP_SCAN_EXCLUSIVE_OT (_min, a > b ? b : a, char, CHAR_MAX)
+SUB_GROUP_SCAN_EXCLUSIVE_OT (_min, a > b ? b : a, uchar, UCHAR_MAX)
+SUB_GROUP_SCAN_EXCLUSIVE_OT (_min, a > b ? b : a, short, SHRT_MAX)
+SUB_GROUP_SCAN_EXCLUSIVE_OT (_min, a > b ? b : a, ushort, USHRT_MAX)
 SUB_GROUP_SCAN_EXCLUSIVE_OT (_min, a > b ? b : a, int, INT_MAX)
 SUB_GROUP_SCAN_EXCLUSIVE_OT (_min, a > b ? b : a, uint, UINT_MAX)
 SUB_GROUP_SCAN_EXCLUSIVE_OT (_min, a > b ? b : a, long, LONG_MAX)
@@ -331,6 +399,10 @@ __IF_FP16 (
 __IF_FP64 (SUB_GROUP_SCAN_EXCLUSIVE_OT (
   _min, a > b ? b : a, double, (double)(+INFINITY)))
 
+SUB_GROUP_SCAN_EXCLUSIVE_OT (_max, a > b ? a : b, char, CHAR_MIN)
+SUB_GROUP_SCAN_EXCLUSIVE_OT (_max, a > b ? a : b, uchar, 0)
+SUB_GROUP_SCAN_EXCLUSIVE_OT (_max, a > b ? a : b, short, SHRT_MIN)
+SUB_GROUP_SCAN_EXCLUSIVE_OT (_max, a > b ? a : b, ushort, 0)
 SUB_GROUP_SCAN_EXCLUSIVE_OT (_max, a > b ? a : b, int, INT_MIN)
 SUB_GROUP_SCAN_EXCLUSIVE_OT (_max, a > b ? a : b, uint, 0)
 SUB_GROUP_SCAN_EXCLUSIVE_OT (_max, a > b ? a : b, long, LONG_MIN)
