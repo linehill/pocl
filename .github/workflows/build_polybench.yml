@@ -105,7 +105,9 @@ jobs:
         with:
           path: benchmark_cache
           key: polybench-${{ runner.name }}-llvm-${{ matrix.llvm }}-${{ matrix.device }}-${{ github.ref_name }}-${{ github.run_id }}
-          restore-keys: polybench-${{ runner.name }}-llvm-${{ matrix.llvm }}-${{ matrix.device }}-main
+          restore-keys: |
+            polybench-${{ runner.name }}-llvm-${{ matrix.llvm }}-${{ matrix.device }}-main
+            polybench-${{ runner.name }}-llvm-${{ matrix.llvm }}-${{ matrix.device }}-loopvec-next
 
       - name: Run Polybench benchmarks
         id: run_polybench
