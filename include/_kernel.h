@@ -177,3 +177,14 @@
 #include "pocl_image_types.h"
 
 #pragma OPENCL EXTENSION all : disable
+
+/****************************************************************************/
+/* Additional kernel built-ins for PoCL's internal testing
+   purposes. These built-ins are second class citizens and their
+   behavior are not guaranteed or well-defined and thus they should not be
+   relied on in production grade applications. For documentation seek
+   to lib/kernel/test_probes.cl.  */
+
+void __pocl_probe_set_wiloop_bounds (uint dim,
+                                     size_t lower_bound,
+                                     size_t upper_bound);

@@ -900,4 +900,110 @@ void switchBarrierGranularity(llvm::BasicBlock *Bb) {
   BarrierToRemove->eraseFromParent();
 }
 
+static GlobalVariable *getOrCreateWILoopBoundGV(Module *M, StringRef Name) {
+  assert(M);
+  auto *Poison = PoisonValue::get(SizeT(M));
+
+  if (auto *GV = M->getGlobalVariable(Name, /*AllowInternal=*/true)) {
+    if (!GV->hasInitializer())
+      GV->setInitializer(Poison);
+    GV->setLinkage(GlobalValue::InternalLinkage);
+    return GV;
+  }
+
+  return new GlobalVariable(*M, SizeT(M), false, GlobalValue::InternalLinkage,
+                            Poison, Name);
+}
+
+/// Get or create lower work-item loop bound global variable.
+GlobalVariable *getOrCreateWILoopLowerBoundGV(Module *M, unsigned Dim) {
+  return getOrCreateWILoopBoundGV(M, WILOOP_LOWER_BOUND_NAME(Dim));
+}
+
+/// Get or create upper work-item loop bound global variable.
+GlobalVariable *getOrCreateWILoopUpperBoundGV(Module *M, unsigned Dim) {
+  return getOrCreateWILoopBoundGV(M, WILOOP_UPPER_BOUND_NAME(Dim));
+}
+
+/// Materialize the result of get_local_size(<Dim>) - possibly as constant if
+/// it's known.
+Value *getWorkgroupLocalSize(Module *M, unsigned Dim,
+                             BasicBlock::iterator InsPt) {
+  assert(M);
+  assert(Dim >= 0 && Dim <= 3);
+
+  auto *ST = SizeT(M);
+  bool WGDynamicLocalSize = true;
+  getModuleBoolMetadata(*M, "WGDynamicLocalSize", WGDynamicLocalSize);
+
+  if (!WGDynamicLocalSize) {
+    static const char *WGSizeNames[] = {"WGLocalSizeX", "WGLocalSizeY",
+                                        "WGLocalSizeZ"};
+    uint64_t WGSize = 0;
+    if (getModuleIntMetadata(*M, WGSizeNames[Dim], WGSize)) {
+      assert(WGSize && "Invalid static workgroup size");
+      return ConstantInt::get(ST, WGSize);
+    }
+
+    // TODO: what is correct resolution for missing WG-local size metadata?
+  }
+
+  auto *WGSizeGV = M->getGlobalVariable(LS_G_NAME(Dim));
+  if (!WGSizeGV)
+    WGSizeGV = new GlobalVariable(
+        *M, ST, true, GlobalValue::CommonLinkage, nullptr, LS_G_NAME(Dim),
+        nullptr, GlobalValue::ThreadLocalMode::NotThreadLocal, 0, true);
+
+  IRBuilder<> B(&*InsPt);
+  return B.CreateLoad(ST, WGSizeGV, Twine("wg_size_") + Twine(Dim));
+}
+
+/// Indicates whether the work-item loop bounds may change during execution of
+/// the kernel.
+///
+/// If false, the loop bounds may change. If true, the loop bounds are
+/// unchanging and covers all WIs in the WG.
+///
+/// This predicate is only applicable for kernels using
+/// WorkitemHandlerType::LOOPS method.
+bool hasInvariantWILoopBounds(Function *F) {
+  bool Result;
+  if (getModuleBoolMetadata(*F->getParent(), "invariant_wiloop_bounds", Result))
+    return Result;
+
+  // Absent invariant_wiloop_bounds MD is meant to imply (potentially) dynamic
+  // WI-loop bounds.
+  return false;
+}
+
+/// Returns true if 'F' may call a function by 'CalleeName' name.
+bool hasCallTo(Function *F, StringRef CalleeName) {
+  auto *M = F->getParent();
+  auto *Callee = M->getFunction(CalleeName);
+  if (!Callee)
+    return false;
+
+  SmallPtrSet<Function *, 8> Visited;
+  SmallVector<Function *> Worklist({Callee});
+
+  while (!Worklist.empty()) {
+    auto *Caller = Worklist.pop_back_val();
+    if (Caller == F)
+      return true;
+
+    for (Use &U : Caller->uses()) {
+      auto *CI = dyn_cast<CallInst>(U);
+      if (!CI)
+        continue;
+      auto *NextCaller = CI->getParent()->getParent();
+      if (!Visited.contains(NextCaller)) {
+        Visited.insert(NextCaller);
+        Worklist.push_back(NextCaller);
+      }
+    }
+  }
+
+  return false;
+}
+
 } // namespace pocl

@@ -49,6 +49,12 @@
 // Generates the name for the global magic variable for the local size.
 #define GOFFS_G_NAME(DIM) (std::string("_global_offset_") + (char)('x' + DIM))
 
+// Names for magic global variables for holding dynamic work-item loop bounds.
+#define WILOOP_LOWER_BOUND_NAME(DIM)                                           \
+  (std::string("_wiloop_lower_bound_") + (char)('x' + DIM))
+#define WILOOP_UPPER_BOUND_NAME(DIM)                                           \
+  (std::string("_wiloop_upper_bound_") + (char)('x' + DIM))
+
 #ifdef KERNEL_TRIPLE_TARGETS_MSVC_TOOLCHAIN
 // Used 'clang -target x86_64-pc-windows-msvc -cl-std=cl3.0 -S -emit-llvm
 // -o - some.cl' to generate MSVC-mangled symbols.

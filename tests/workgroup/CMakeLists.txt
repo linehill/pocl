@@ -312,6 +312,11 @@ add_test_pocl(NAME "workgroup/sg_shuffle_up"
               EXPECTED_OUTPUT "sg_shuffle_up_1_8_1_1.stdout"
               COMMAND "run_kernel" "simple_sg_shuffle_up.cl" "1" "8" "1" "1")
 
+add_test_pocl(NAME "workgroup/dynamic_wiloop_bounds"
+             EXPECTED_OUTPUT "dynamic_wiloop_bounds.stdout"
+             COMMAND "run_kernel" "dynamic_wiloop_bounds.cl" 1 4 4 4
+             WORKITEM_HANDLER "loopvec")
+
 set(VARIANTS "loopvec;fiber")
 foreach(VARIANT ${VARIANTS})
   set(TEST_LIST
