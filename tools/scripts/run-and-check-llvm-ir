@@ -122,6 +122,11 @@ then
 else
     echo "FAIL: none of the check-files passed!"
     cat $FILE_CHECK_INPUT
+    for CHECK_OUTPUT in ${CHECK_OUTPUT_LIST[@]}; do
+	echo
+	cat "${CHECK_OUTPUT}"
+    done
+    echo
     echo "note: IR used in file-checks: $FILE_CHECK_INPUT"
     echo "note: file-check logs are written in:"
     for CHECK_OUTPUT in ${CHECK_OUTPUT_LIST[@]}; do

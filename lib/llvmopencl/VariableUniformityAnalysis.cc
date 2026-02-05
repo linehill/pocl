@@ -624,6 +624,10 @@ bool VariableUniformityAnalysisResult::isUniform(llvm::Function *F,
       setUniform(F, V, true);
       return true;
     }
+  } else if (isa<llvm::IntrinsicInst>(V)) {
+    // The intrinsic is uniform if its operands are uniform. The operands are
+    // checked in the below. We are assuming there are no intrinsics whose
+    // result is always divergent.
   } else if (llvm::CallInst *Call = dyn_cast<llvm::CallInst>(V)) {
     auto Callee = Call->getCalledFunction();
     if (Callee == nullptr) {
@@ -786,6 +790,45 @@ bool VariableUniformityAnalysisResult::invalidate(
   }
   return !Preserved;
 #endif
+}
+
+static std::string getNameOrAsOperand(Value *V) {
+#if LLVM_MAJOR >= 21
+  // Before LLVM-21 this method is guarded by NDEBUG.
+  return V->getNameOrAsOperand();
+#else
+  // Copied from Value::getNameOrAsOperand().
+  if (!V->getName().empty())
+    return std::string(V->getName());
+
+  std::string BBName;
+  raw_string_ostream OS(BBName);
+  V->printAsOperand(OS, false);
+  return OS.str();
+#endif
+}
+
+void VariableUniformityAnalysisResult::dump(Function *F) {
+  dbgs() << "Function: " << F->getName() << "\n";
+  for (auto &BB : *F) {
+    dbgs() << getNameOrAsOperand(&BB) << ":";
+    if (isPureUniformBlock(&BB))
+      dbgs() << " PURE-UNIFORM";
+    else
+      dbgs() << (isUniform(F, &BB) ? " UNIFORM" : " DIVERGENT");
+    dbgs() << "\n";
+
+    for (auto &I : BB) {
+      dbgs() << (isUniform(F, &I) ? "  UNIFORM: " : "DIVERGENT: ") << I << "\n";
+    }
+    dbgs() << "\n";
+  }
+  dbgs() << "\n";
+}
+
+void VariableUniformityAnalysisResult::dump() {
+  for (auto [F, Ignored] : uniformityCache_)
+    dump(F);
 }
 
 REGISTER_NEW_FANALYSIS(PASS_NAME, PASS_CLASS, PASS_DESC);
