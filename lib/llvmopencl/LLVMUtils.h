@@ -151,6 +151,9 @@ bool isPureUniformBlock(llvm::BasicBlock *BB);
 /// \param Reason A human readable comment/reason.
 void markAsPureUniformBlock(llvm::BasicBlock *BB, std::string Reason);
 
+/// Unmarks a basic block as a pure uniform block.
+void unmarkAsPureUniformBlock(llvm::BasicBlock *BB);
+
 /// Copies the pure uniform metadata from \p Source to \p Destination.
 void copyPureUniformMD(llvm::BasicBlock *Source, llvm::BasicBlock *Destination);
 
