@@ -35,6 +35,7 @@
 #include "DeSPMD.h"
 
 #include "llvm/Analysis/PostDominators.h"
+#include <llvm/IR/IRBuilder.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 // TODO: Move the needed definitions from these PoCL modules to this file.
