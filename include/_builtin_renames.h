@@ -1086,6 +1086,8 @@
 #define sub_group_reduce_add _cl_sub_group_reduce_add
 #define sub_group_reduce_min _cl_sub_group_reduce_min
 #define sub_group_reduce_max _cl_sub_group_reduce_max
+#define sub_group_rotate _cl_sub_group_rotate
+#define sub_group_clustered_rotate _cl_sub_group_clustered_rotate
 #define sub_group_shuffle _cl_sub_group_shuffle
 #define sub_group_shuffle_xor _cl_sub_group_shuffle_xor
 #define sub_group_shuffle_up _cl_sub_group_shuffle_up

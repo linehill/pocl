@@ -238,6 +238,8 @@ SUB_GROUP_SHUFFLE_XOR_VEC (int)
 SUB_GROUP_SHUFFLE_XOR_VEC (uint)
 #endif
 
+//*************************************************************************
+
 #define SUB_GROUP_BROADCAST_T(TYPE)                                           \
   TYPE _CL_OVERLOADABLE sub_group_broadcast (TYPE val, uint id)               \
   {                                                                           \
@@ -278,6 +280,39 @@ __IF_FP16 (SUB_GROUP_BROADCAST_VEC (half))
 SUB_GROUP_BROADCAST_VEC (float)
 __IF_FP64 (SUB_GROUP_BROADCAST_VEC (double))
 #endif
+
+//*************************************************************************
+
+#ifdef cl_khr_subgroup_rotate
+
+#define SUB_GROUP_ROTATE(TYPE)                                              \
+TYPE _CL_OVERLOADABLE sub_group_rotate (TYPE val, int delta)                \
+{                                                                           \
+    int id = (get_sub_group_local_id () + delta) % get_sub_group_size ();   \
+    return sub_group_shuffle (val, id);                                     \
+} \
+TYPE _CL_OVERLOADABLE sub_group_clustered_rotate (TYPE val, int dlt, uint cs) \
+{                                                                             \
+        int id = (get_sub_group_local_id () + dlt) % cs;                      \
+        id += (get_sub_group_local_id () / cs) * cs;                          \
+        return sub_group_shuffle (val, id);                                   \
+}
+
+
+SUB_GROUP_ROTATE (char)
+SUB_GROUP_ROTATE (uchar)
+SUB_GROUP_ROTATE (short)
+SUB_GROUP_ROTATE (ushort)
+SUB_GROUP_ROTATE (int)
+SUB_GROUP_ROTATE (uint)
+SUB_GROUP_ROTATE (long)
+SUB_GROUP_ROTATE (ulong)
+__IF_FP16 (SUB_GROUP_ROTATE (half))
+SUB_GROUP_ROTATE (float)
+__IF_FP64 (SUB_GROUP_ROTATE (double))
+#endif
+
+//*************************************************************************
 
 #define SUB_GROUP_REDUCE_OT(OPNAME, OPERATION, TYPE)                          \
   TYPE _CL_OVERLOADABLE sub_group_reduce##OPNAME (TYPE val)                   \
