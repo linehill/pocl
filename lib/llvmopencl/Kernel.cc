@@ -406,6 +406,7 @@ ParallelRegion *Kernel::CreateParallelRegionBetween(
        PI != PE; ++PI) {
     Preds.insert(*PI);
   }
+
   // There can be many predecessor basic blocks to the region,
   // fix all the predecessor blocks from other regions to jump to the region
   // entry. Note: a special case is the intra-PR-loop case where the header node
@@ -415,11 +416,22 @@ ParallelRegion *Kernel::CreateParallelRegionBetween(
     if (BlocksInRegion.count(PredBB) > 0)
       continue; // Must be an intra-PR loop backedge source.
 
-    BranchInst *BR = cast<BranchInst>(PredBB->getTerminator());
+    // Basic blocks can be terminated by multiple different instructions;
+    // SwitchInst-terminated BB occurs in subgroup_functions_rotate test of CTS
+    if (BranchInst *BR = dyn_cast<BranchInst>(PredBB->getTerminator())) {
+      for (unsigned Suc = 0; Suc < BR->getNumSuccessors(); ++Suc)
+        if (BR->getSuccessor(Suc) == EntryBlock)
+          BR->setSuccessor(Suc, PREntry);
+    } else if (SwitchInst *SW = dyn_cast<SwitchInst>(PredBB->getTerminator())) {
+      for (unsigned Suc = 0; Suc < SW->getNumSuccessors(); ++Suc)
+        if (SW->getSuccessor(Suc) == EntryBlock)
+          SW->setSuccessor(Suc, PREntry);
+    } else {
+        POCL_MSG_ERR("Kernel::CreateParallelRegionBetween: "
+                     "unhandled Terminator instruction!\n");
+        assert(0 && "Unhandled Terminator");
+    }
 
-    for (unsigned Suc = 0; Suc < BR->getNumSuccessors(); ++Suc)
-      if (BR->getSuccessor(Suc) == EntryBlock)
-        BR->setSuccessor(Suc, PREntry);
     EntryBlock->replacePhiUsesWith(PredBB, PREntry);
   }
 
