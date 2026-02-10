@@ -31,12 +31,11 @@
 #include "templates.h"
 #include "work_group_alloca.h"
 
-/* Magic variable that is expanded in Workgroup.cc */
-extern uint _pocl_sub_group_size;
-
 size_t _CL_OVERLOADABLE get_local_id (unsigned int dimindx);
 size_t _CL_OVERLOADABLE get_local_linear_id (void);
 size_t _CL_OVERLOADABLE get_local_size (unsigned int dimindx);
+
+uint _CL_OVERLOADABLE get_sub_group_size (void);
 
 void _CL_OVERLOADABLE _CL_CONVERGENT work_group_barrier(cl_mem_fence_flags);
 
@@ -52,12 +51,6 @@ int _CL_OVERLOADABLE
 sub_group_all (int predicate)
 {
   return sub_group_reduce_min ((unsigned)predicate);
-}
-
-uint _CL_OVERLOADABLE
-get_sub_group_size (void)
-{
-  return _pocl_sub_group_size;
 }
 
 uint _CL_OVERLOADABLE

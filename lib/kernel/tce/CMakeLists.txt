@@ -136,7 +136,6 @@ sign.cl
 smoothstep.cl
 step.cl
 sqrt.cl
-subgroup_barrier.ll
 sub_sat.cl
 upsample.cl
 vload.cl
