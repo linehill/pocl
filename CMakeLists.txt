@@ -1659,6 +1659,7 @@ set(HOST_DEVICE_CL_VERSION_MINOR 0)
 set(HOST_DEVICE_EXTENSIONS "cl_khr_byte_addressable_store cl_khr_global_int32_base_atomics \
 cl_khr_global_int32_extended_atomics cl_khr_local_int32_base_atomics \
 cl_khr_local_int32_extended_atomics cl_khr_3d_image_writes cl_ext_float_atomics \
+cl_khr_subgroups cl_khr_subgroup_rotate cl_khr_subgroup_shuffle cl_khr_subgroup_shuffle_relative cl_khr_subgroup_extended_types \
 cl_intel_unified_shared_memory cl_ext_buffer_device_address")
 
 # Host CPU device: list of OpenCL 3.0 features that are always enabled
@@ -1666,7 +1667,7 @@ cl_intel_unified_shared_memory cl_ext_buffer_device_address")
 # for now it's included because CTS test 'C11 atomics' subtest 'atomic_flag' requires it
 # .... seems like a bug in CTS, but needs to be investigated.
 set(HOST_DEVICE_FEATURES_30 "__opencl_c_3d_image_writes  __opencl_c_images \
-__opencl_c_atomic_order_acq_rel __opencl_c_atomic_order_seq_cst \
+__opencl_c_atomic_order_acq_rel __opencl_c_atomic_order_seq_cst __opencl_c_subgroups \
 __opencl_c_atomic_scope_device __opencl_c_atomic_scope_all_devices \
 __opencl_c_generic_address_space __opencl_c_work_group_collective_functions")
 
@@ -1694,12 +1695,10 @@ if(NOT ENABLE_CONFORMANCE)
     set(HOST_DEVICE_EXTENSIONS "${HOST_DEVICE_EXTENSIONS} \
       cl_exp_defined_builtin_kernels")
   endif()
-  set(HOST_DEVICE_EXTENSIONS "${HOST_DEVICE_EXTENSIONS} \
-cl_khr_subgroups cl_khr_subgroup_ballot cl_khr_subgroup_shuffle \
-cl_intel_subgroups cl_intel_subgroups_short cl_intel_subgroups_char cl_intel_required_subgroup_size cl_exp_tensor")
+  set(HOST_DEVICE_EXTENSIONS "${HOST_DEVICE_EXTENSIONS} cl_khr_subgroup_ballot cl_intel_subgroups cl_intel_subgroups_short cl_intel_subgroups_char cl_intel_required_subgroup_size cl_exp_tensor")
   # read-write images are still partially broken
   # program-scope variables work on OpenCL C input, but breaks with SPIR-V input (llvm-spirv bugs)
-  set(HOST_DEVICE_FEATURES_30  "${HOST_DEVICE_FEATURES_30} __opencl_c_subgroups __opencl_c_read_write_images __opencl_c_program_scope_global_variables")
+  set(HOST_DEVICE_FEATURES_30  "${HOST_DEVICE_FEATURES_30} __opencl_c_read_write_images __opencl_c_program_scope_global_variables")
 endif()
 
 # Extensions that are considered feature-complete (preferably CTS-tested).
