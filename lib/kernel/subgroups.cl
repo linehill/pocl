@@ -120,6 +120,10 @@ sub_group_ballot (int predicate)
   return votes[get_sub_group_id ()];
 }
 
+//*************************************************************************
+
+#if defined(cl_intel_subgroups) || defined(cl_khr_subgroup_shuffle)
+
 /* The shuffle implementation assumes only one shuffle is actually alive at
    the same time and can share the temporary storage. @todo: implement
    __pocl_sub_group_alloca() to save stack space. */
@@ -127,19 +131,27 @@ sub_group_ballot (int predicate)
   TYPE _CL_OVERLOADABLE PREFIX##sub_group_shuffle (TYPE val, uint index)      \
   {                                                                           \
     TYPE *__temp_storage = __pocl_work_group_alloca (                         \
-      sizeof (TYPE), POCL_CPU_DEVICES_MAX_SUBGROUP_SIZE * sizeof (TYPE), 0);  \
-    __temp_storage[get_local_linear_id ()] = val;                             \
+      sizeof (TYPE), sizeof (TYPE), 0);      \
+    __temp_storage[get_sub_group_local_id ()] = val;                             \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
     return __temp_storage[get_sub_group_id () * get_sub_group_size ()         \
                           + index];                                           \
   }
 
 /* Define both the non-prefixed (khr) and Intel-prefixed shuffles. */
-#define SUB_GROUP_SHUFFLE_T(TYPE)                                             \
-  SUB_GROUP_SHUFFLE_PT (, TYPE)                                               \
+#if defined(cl_intel_subgroups) && defined(cl_khr_subgroup_shuffle)
+#define SUB_GROUP_SHUFFLE_T(TYPE)                                        \
+  SUB_GROUP_SHUFFLE_PT (, TYPE)                                         \
   SUB_GROUP_SHUFFLE_PT (intel_, TYPE)
+#elif defined(cl_khr_subgroup_shuffle)
+#define SUB_GROUP_SHUFFLE_T(TYPE)                                        \
+  SUB_GROUP_SHUFFLE_PT (, TYPE)
+#else
+#define SUB_GROUP_SHUFFLE_T(TYPE)                                        \
+  SUB_GROUP_SHUFFLE_PT (intel_, TYPE)
+#endif
 
-#ifdef cl_khr_subgroup_extended_types
+#if defined(cl_intel_subgroups_char) || defined(cl_khr_subgroup_extended_types)
 SUB_GROUP_SHUFFLE_T (char)
 SUB_GROUP_SHUFFLE_T (uchar)
 SUB_GROUP_SHUFFLE_T (short)
@@ -189,27 +201,41 @@ SUB_GROUP_SHUFFLE_VEC (uint)
 #undef SUB_GROUP_SHUFFLE_VEC
 #endif
 
+//*************************************************************************
+
+#if defined(cl_intel_subgroups) || defined(cl_khr_subgroup_shuffle)
+
 #define SUB_GROUP_SHUFFLE_XOR_PT(PREFIX, TYPE)                                \
   TYPE _CL_OVERLOADABLE PREFIX##sub_group_shuffle_xor (TYPE val, uint mask)   \
   {                                                                           \
     TYPE *temp_storage                                                        \
       = __pocl_work_group_alloca (sizeof (TYPE), sizeof (TYPE), 0);           \
-    temp_storage[get_local_linear_id ()] = val;                               \
+    temp_storage[get_sub_group_local_id ()] = val;                               \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
     return temp_storage[get_first_llid ()                                     \
                         + (get_sub_group_local_id () ^ mask)                  \
                             % get_sub_group_size ()];                         \
   }
 
+#if defined(cl_intel_subgroups) && defined(cl_khr_subgroup_shuffle)
 /* Define both the non-prefixed (khr) and Intel-prefixed shuffles. */
-#define SUB_GROUP_SHUFFLE_XOR_T(TYPE)                                         \
-  SUB_GROUP_SHUFFLE_XOR_PT (, TYPE)                                           \
+#define SUB_GROUP_SHUFFLE_XOR_T(TYPE)                                        \
+  SUB_GROUP_SHUFFLE_XOR_PT (, TYPE)                                         \
   SUB_GROUP_SHUFFLE_XOR_PT (intel_, TYPE)
+#elif defined(cl_khr_subgroup_shuffle)
+#define SUB_GROUP_SHUFFLE_XOR_T(TYPE)                                        \
+  SUB_GROUP_SHUFFLE_XOR_PT (, TYPE)
+#else
+#define SUB_GROUP_SHUFFLE_XOR_T(TYPE)                                        \
+  SUB_GROUP_SHUFFLE_XOR_PT (intel_, TYPE)
+#endif
 
+#if defined(cl_intel_subgroups_char) || defined(cl_khr_subgroup_extended_types)
 SUB_GROUP_SHUFFLE_XOR_T (char)
 SUB_GROUP_SHUFFLE_XOR_T (uchar)
 SUB_GROUP_SHUFFLE_XOR_T (short)
 SUB_GROUP_SHUFFLE_XOR_T (ushort)
+#endif
 SUB_GROUP_SHUFFLE_XOR_T (int)
 SUB_GROUP_SHUFFLE_XOR_T (uint)
 SUB_GROUP_SHUFFLE_XOR_T (long)
@@ -217,6 +243,29 @@ SUB_GROUP_SHUFFLE_XOR_T (ulong)
 __IF_FP16 (SUB_GROUP_SHUFFLE_XOR_T (half))
 SUB_GROUP_SHUFFLE_XOR_T (float)
 __IF_FP64 (SUB_GROUP_SHUFFLE_XOR_T (double))
+
+#ifdef cl_khr_subgroup_extended_types
+#define SUB_GROUP_SHUFFLE_XOR_VEC(TYPE)                                           \
+  SUB_GROUP_SHUFFLE_XOR_PT (, TYPE##2)                                      \
+  SUB_GROUP_SHUFFLE_XOR_PT (, TYPE##3)                                      \
+  SUB_GROUP_SHUFFLE_XOR_PT (, TYPE##4)                                      \
+  SUB_GROUP_SHUFFLE_XOR_PT (, TYPE##8)                                      \
+  SUB_GROUP_SHUFFLE_XOR_PT (, TYPE##16)
+
+SUB_GROUP_SHUFFLE_XOR_VEC (char)
+SUB_GROUP_SHUFFLE_XOR_VEC (uchar)
+SUB_GROUP_SHUFFLE_XOR_VEC (short)
+SUB_GROUP_SHUFFLE_XOR_VEC (ushort)
+SUB_GROUP_SHUFFLE_XOR_VEC (int)
+SUB_GROUP_SHUFFLE_XOR_VEC (uint)
+SUB_GROUP_SHUFFLE_XOR_VEC (long)
+SUB_GROUP_SHUFFLE_XOR_VEC (ulong)
+__IF_FP16 (SUB_GROUP_SHUFFLE_XOR_VEC (half))
+SUB_GROUP_SHUFFLE_XOR_VEC (float)
+__IF_FP64 (SUB_GROUP_SHUFFLE_XOR_VEC (double))
+#undef SUB_GROUP_SHUFFLE_XOR_VEC
+#endif
+
 
 #ifdef cl_intel_subgroups
 #define SUB_GROUP_SHUFFLE_XOR_VEC(TYPE)                                       \
@@ -229,6 +278,9 @@ __IF_FP64 (SUB_GROUP_SHUFFLE_XOR_T (double))
 SUB_GROUP_SHUFFLE_XOR_VEC (float)
 SUB_GROUP_SHUFFLE_XOR_VEC (int)
 SUB_GROUP_SHUFFLE_XOR_VEC (uint)
+#undef SUB_GROUP_SHUFFLE_XOR_VEC
+#endif
+
 #endif
 
 //*************************************************************************
@@ -311,7 +363,7 @@ __IF_FP64 (SUB_GROUP_ROTATE (double))
   {                                                                           \
     TYPE *temp_storage                                                        \
       = __pocl_work_group_alloca (sizeof (TYPE), sizeof (TYPE), 0);           \
-    temp_storage[get_local_linear_id ()] = val;                               \
+    temp_storage[get_sub_group_local_id ()] = val;                               \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
     if (get_sub_group_local_id () == 0)                                       \
       {                                                                       \
@@ -347,7 +399,7 @@ SUB_GROUP_REDUCE_T (_max, (a > b ? a : b))
   TYPE _CL_OVERLOADABLE sub_group_scan_inclusive##OPNAME (TYPE val)           \
   {                                                                           \
     TYPE *data = __pocl_work_group_alloca (sizeof (TYPE), sizeof (TYPE), 0);  \
-    data[get_local_linear_id ()] = val;                                       \
+    data[get_sub_group_local_id ()] = val;                                       \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
     if (get_sub_group_local_id () == 0)                                       \
       {                                                                       \
@@ -359,7 +411,7 @@ SUB_GROUP_REDUCE_T (_max, (a > b ? a : b))
           }                                                                   \
       }                                                                       \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
-    return data[get_local_linear_id ()];                                      \
+    return data[get_sub_group_local_id ()];                                      \
   }
 
 #define SUB_GROUP_SCAN_INCLUSIVE_T(OPNAME, OPERATION)                         \
@@ -384,7 +436,7 @@ SUB_GROUP_SCAN_INCLUSIVE_T (_max, (a > b ? a : b))
   {                                                                           \
     TYPE *data = __pocl_work_group_alloca (sizeof (TYPE), sizeof (TYPE),      \
                                            sizeof (TYPE));                    \
-    data[get_local_linear_id () + 1] = val;                                   \
+    data[get_sub_group_local_id () + 1] = val;                                   \
     data[get_first_llid ()] = ID;                                             \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
     if (get_sub_group_local_id () == 0)                                       \
@@ -397,7 +449,7 @@ SUB_GROUP_SCAN_INCLUSIVE_T (_max, (a > b ? a : b))
           }                                                                   \
       }                                                                       \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
-    return data[get_local_linear_id ()];                                      \
+    return data[get_sub_group_local_id ()];                                      \
   }
 
 SUB_GROUP_SCAN_EXCLUSIVE_OT (_add, a + b, char, 0)
@@ -440,7 +492,7 @@ __IF_FP16 (
 __IF_FP64 (SUB_GROUP_SCAN_EXCLUSIVE_OT (
   _max, a > b ? a : b, double, (double)(-INFINITY)))
 
-// ****************************************************************************
+//****************************************************************************
 
 #if defined(cl_intel_subgroups) || defined(cl_khr_subgroup_shuffle_relative)
 
@@ -466,7 +518,7 @@ TYPE _CL_OVERLOADABLE sub_group_shuffle_down (TYPE value,         \
     return sub_group_shuffle (value, cur_idx);            \
 }
 
-#if defined(cl_intel_subgroups) || defined(cl_khr_subgroup_shuffle_relative)
+#if defined(cl_intel_subgroups) && defined(cl_khr_subgroup_shuffle_relative)
 /* Define both the non-prefixed (khr) and Intel-prefixed shuffles. */
 #define SUB_GROUP_SHUFFLE_DOWN_T(TYPE)                                        \
   SUB_GROUP_SHUFFLE_DOWN_INTEL (TYPE)                                         \
@@ -479,10 +531,12 @@ TYPE _CL_OVERLOADABLE sub_group_shuffle_down (TYPE value,         \
   SUB_GROUP_SHUFFLE_DOWN_INTEL (TYPE)
 #endif
 
+#if defined(cl_intel_subgroups_char) || defined(cl_khr_subgroup_extended_types)
 SUB_GROUP_SHUFFLE_DOWN_T (char)
 SUB_GROUP_SHUFFLE_DOWN_T (uchar)
 SUB_GROUP_SHUFFLE_DOWN_T (short)
 SUB_GROUP_SHUFFLE_DOWN_T (ushort)
+#endif
 SUB_GROUP_SHUFFLE_DOWN_T(uint)
 SUB_GROUP_SHUFFLE_DOWN_T(int)
 SUB_GROUP_SHUFFLE_DOWN_T(float)
@@ -491,6 +545,7 @@ __IF_INT64 (SUB_GROUP_SHUFFLE_DOWN_T(long)
 __IF_FP16 (SUB_GROUP_SHUFFLE_DOWN_T(half))
 __IF_FP64 (SUB_GROUP_SHUFFLE_DOWN_T(double))
 
+#ifdef cl_khr_subgroup_extended_types
 #define SUB_GROUP_SHUFFLE_DOWN_VEC(TYPE)                                       \
   SUB_GROUP_SHUFFLE_DOWN_T (TYPE##2)                                           \
   SUB_GROUP_SHUFFLE_DOWN_T (TYPE##3)                                           \
@@ -501,6 +556,13 @@ __IF_FP64 (SUB_GROUP_SHUFFLE_DOWN_T(double))
 SUB_GROUP_SHUFFLE_DOWN_VEC (float)
 SUB_GROUP_SHUFFLE_DOWN_VEC (int)
 SUB_GROUP_SHUFFLE_DOWN_VEC (uint)
+#endif
+
+#endif
+
+//****************************************************************************
+
+#if defined(cl_intel_subgroups) || defined(cl_khr_subgroup_shuffle_relative)
 
 #define SUB_GROUP_SHUFFLE_UP_INTEL(TYPE)                                      \
   TYPE _CL_OVERLOADABLE intel_sub_group_shuffle_up (TYPE previous,            \
@@ -519,10 +581,10 @@ TYPE _CL_OVERLOADABLE sub_group_shuffle_up (TYPE value,            \
 {                                                                           \
     int idx = get_sub_group_local_id () - delta;                              \
     uint cur_idx = (idx < 0) ? 0 : idx;                                       \
-    return intel_sub_group_shuffle (value, cur_idx);                \
+    return sub_group_shuffle (value, cur_idx);                              \
 }
 
-#if defined(cl_intel_subgroups) || defined(cl_khr_subgroup_shuffle_relative)
+#if defined(cl_intel_subgroups) && defined(cl_khr_subgroup_shuffle_relative)
 /* Define both the non-prefixed (khr) and Intel-prefixed shuffles. */
 #define SUB_GROUP_SHUFFLE_UP_T(TYPE)                                        \
   SUB_GROUP_SHUFFLE_UP_INTEL (TYPE)                                         \
@@ -535,10 +597,12 @@ TYPE _CL_OVERLOADABLE sub_group_shuffle_up (TYPE value,            \
   SUB_GROUP_SHUFFLE_UP_INTEL (TYPE)
 #endif
 
+#if defined(cl_intel_subgroups_char) || defined(cl_khr_subgroup_extended_types)
 SUB_GROUP_SHUFFLE_UP_T (char)
 SUB_GROUP_SHUFFLE_UP_T (uchar)
 SUB_GROUP_SHUFFLE_UP_T (short)
 SUB_GROUP_SHUFFLE_UP_T (ushort)
+#endif
 SUB_GROUP_SHUFFLE_UP_T(uint)
 SUB_GROUP_SHUFFLE_UP_T(int)
 SUB_GROUP_SHUFFLE_UP_T(float)
@@ -547,6 +611,7 @@ __IF_INT64 (SUB_GROUP_SHUFFLE_UP_T(long)
 __IF_FP16 (SUB_GROUP_SHUFFLE_UP_T(half))
 __IF_FP64 (SUB_GROUP_SHUFFLE_UP_T(double))
 
+#ifdef cl_khr_subgroup_extended_types
 #define SUB_GROUP_SHUFFLE_UP_VEC(TYPE)                                         \
   SUB_GROUP_SHUFFLE_UP_T (TYPE##2)                                             \
   SUB_GROUP_SHUFFLE_UP_T (TYPE##3)                                             \
@@ -557,8 +622,13 @@ __IF_FP64 (SUB_GROUP_SHUFFLE_UP_T(double))
 SUB_GROUP_SHUFFLE_UP_VEC (float)
 SUB_GROUP_SHUFFLE_UP_VEC (int)
 SUB_GROUP_SHUFFLE_UP_VEC (uint)
+#endif
+
+#endif
 
 // ****************************************************************************
+
+#ifdef cl_intel_subgroups
 
 #define INTEL_SG_BLOCK_READ_WRITE_T(TYPE, SUFFIX)                             \
   TYPE _CL_OVERLOADABLE intel_sub_group_block_read##SUFFIX (                  \
@@ -695,6 +765,8 @@ INTEL_SG_BLOCK_READ_WRITE_T_16 (uchar, _uc)
 
 #if defined(cl_intel_subgroups_short) || defined(cl_intel_subgroups_char)
 INTEL_SG_BLOCK_READ_WRITE_T (uint, _ui)
+#endif
+
 #endif
 
 #endif
