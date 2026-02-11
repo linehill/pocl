@@ -258,7 +258,8 @@ ParallelRegion::dumpNames()
     std::cerr << std::endl;
 }
 
-// Recursive function to check if instruction depends on the 3D local ids.
+// Recursive function to check if instruction depends on the 3D local OR global
+// ids.
 bool traceOperands(Value *V, std::set<Value *> &visited, int indent = 0) {
   if (!V || visited.count(V))
     return false;
@@ -267,7 +268,8 @@ bool traceOperands(Value *V, std::set<Value *> &visited, int indent = 0) {
 
   if (auto *CI = dyn_cast<CallInst>(V)) {
     Function *CalledFunc = CI->getCalledFunction();
-    if (CalledFunc && (CalledFunc->getName() == LID_BUILTIN_NAME))
+    if (CalledFunc && ((CalledFunc->getName() == LID_BUILTIN_NAME) ||
+                       (CalledFunc->getName() == GID_BUILTIN_NAME)))
       return true;
   }
 
@@ -292,8 +294,8 @@ ParallelRegion *ParallelRegion::Create(const SmallPtrSet<BasicBlock *, 8> &BBs,
   bool NoIDRefs = true;
 
   // For subgroup regions, mark region as 'linearizable' IF there are NO
-  // references to 3D ids. This allows looping over PR in a single loop (by
-  // local linear id).
+  // references to 3D ids (local OR global). This allows looping over PR in
+  // a single loop (over local linear id).
   if (IsSGRegion) {
     NewRegion->setSGRegion();
     for (BasicBlock *BB : BBs) {
