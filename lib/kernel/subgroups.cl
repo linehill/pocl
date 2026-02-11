@@ -132,10 +132,10 @@ sub_group_ballot (int predicate)
   {                                                                           \
     TYPE *__temp_storage = __pocl_work_group_alloca (                         \
       sizeof (TYPE), sizeof (TYPE), 0);      \
-    __temp_storage[get_sub_group_local_id ()] = val;                             \
+    __temp_storage[get_sub_group_local_id ()] = val;                          \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
     return __temp_storage[get_sub_group_id () * get_sub_group_size ()         \
-                          + index];                                           \
+                          + (index % get_sub_group_size ())];                 \
   }
 
 /* Define both the non-prefixed (khr) and Intel-prefixed shuffles. */
