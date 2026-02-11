@@ -759,10 +759,17 @@ add_test(NAME "${TS_NAME}${TS_SUFFIX}_api_micro_ocl_30"
          pipe_properties_queries   queue_flush_on_release   queue_hint   queue_properties
          queue_properties_queries   retain_mem_object_set_kernel_arg)
 
-add_test(NAME "${TS_NAME}${TS_SUFFIX}_subgroups_micro"
+# TBD: "subgroup_functions_rotate" fails when run together with subgroup_functions_ext subgroup_functions_core
+# tests, however it passes when ran separately or with other tests. Possibly a problem in CTS ?
+add_test(NAME "${TS_NAME}${TS_SUFFIX}_subgroups_micro_1"
+         COMMAND "${TS_BUILDDIR}/subgroups/test_subgroups" ${EXTRA_ARGS}
+         subgroup_functions_extended_types subgroup_functions_shuffle subgroup_functions_shuffle_relative
+         subgroup_functions_rotate barrier_functions_ext  barrier_functions_core )
+
+add_test(NAME "${TS_NAME}${TS_SUFFIX}_subgroups_micro_2"
          COMMAND "${TS_BUILDDIR}/subgroups/test_subgroups" ${EXTRA_ARGS} sub_group_info_ext
-         sub_group_info_core work_item_functions_ext  work_item_functions_core  subgroup_functions_ext
-         subgroup_functions_core  barrier_functions_ext  barrier_functions_core)
+         sub_group_info_core work_item_functions_ext  work_item_functions_core
+         subgroup_functions_ext subgroup_functions_core)
 
 add_test(NAME "${TS_NAME}${TS_SUFFIX}_basic_micro_other_ocl_30"
          COMMAND "${TS_BUILDDIR}/basic/test_basic" ${EXTRA_ARGS} async_copy_global_to_local2D
@@ -1002,7 +1009,8 @@ set(OCL_30_TESTS_MICRO
     "${TS_NAME}${TS_SUFFIX}_integer_ops_micro_ocl_30"
     "${TS_NAME}${TS_SUFFIX}_non_uniform_work_group"
     "${TS_NAME}${TS_SUFFIX}_generic_AS_micro"
-    "${TS_NAME}${TS_SUFFIX}_subgroups_micro"
+    "${TS_NAME}${TS_SUFFIX}_subgroups_micro_1"
+    "${TS_NAME}${TS_SUFFIX}_subgroups_micro_2"
     "${TS_NAME}${TS_SUFFIX}_SVM_micro_1"
     "${TS_NAME}${TS_SUFFIX}_SVM_micro_2"
 )
