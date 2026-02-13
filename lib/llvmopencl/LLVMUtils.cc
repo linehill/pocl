@@ -992,7 +992,7 @@ bool hasCallTo(Function *F, StringRef CalleeName) {
       return true;
 
     for (Use &U : Caller->uses()) {
-      auto *CI = dyn_cast<CallInst>(U);
+      auto *CI = dyn_cast<CallInst>(U.getUser());
       if (!CI)
         continue;
       auto *NextCaller = CI->getParent()->getParent();
