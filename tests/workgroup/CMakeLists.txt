@@ -49,7 +49,7 @@ endif()
 
 # This is expected to generate shufflevector instructions.
 # only enable these tests if cl_khr_subgroup is enabled
-if(HOST_DEVICE_EXTENSIONS MATCHES "cl_khr_subgroup")
+if(HOST_DEVICE_EXTENSIONS MATCHES "cl_khr_subgroup_shuffle")
   add_test_pocl(NAME "subgroup/shuffle_small"
                 EXPECTED_OUTPUT "sg_shuffle_small_1_8_1_1.stdout"
                 COMMAND "run_kernel" "sg_shuffle.cl" 1 8 1 1
@@ -304,13 +304,25 @@ add_test_pocl(NAME "workgroup/ballot"
               EXPECTED_OUTPUT "ballot_1_32_1_1.stdout"
               COMMAND "run_kernel" "ballot.cl" "1" "32" "1" "1")
 
-add_test_pocl(NAME "workgroup/sg_shuffle_down"
-              EXPECTED_OUTPUT "sg_shuffle_down_1_8_1_1.stdout"
+if(HOST_DEVICE_EXTENSIONS MATCHES "cl_khr_subgroup")
+  add_test_pocl(NAME "workgroup/sg_shuffle_down_khr"
+              EXPECTED_OUTPUT "sg_shuffle_down_1_8_1_1.stdout.khr"
               COMMAND "run_kernel" "simple_sg_shuffle_down.cl" "1" "8" "1" "1")
 
-add_test_pocl(NAME "workgroup/sg_shuffle_up"
-              EXPECTED_OUTPUT "sg_shuffle_up_1_8_1_1.stdout"
+  add_test_pocl(NAME "workgroup/sg_shuffle_up_khr"
+              EXPECTED_OUTPUT "sg_shuffle_up_1_8_1_1.stdout.khr"
               COMMAND "run_kernel" "simple_sg_shuffle_up.cl" "1" "8" "1" "1")
+endif()
+if(HOST_DEVICE_EXTENSIONS MATCHES "cl_intel_subgroups")
+  add_test_pocl(NAME "workgroup/sg_shuffle_down_intel"
+              EXPECTED_OUTPUT "sg_shuffle_down_1_8_1_1.stdout.intel"
+              COMMAND "run_kernel" "simple_sg_shuffle_down_intel.cl" "1" "8" "1" "1")
+
+  add_test_pocl(NAME "workgroup/sg_shuffle_up_intel"
+              EXPECTED_OUTPUT "sg_shuffle_up_1_8_1_1.stdout.intel"
+              COMMAND "run_kernel" "simple_sg_shuffle_up_intel.cl" "1" "8" "1" "1")
+endif()
+
 
 add_test_pocl(NAME "workgroup/dynamic_wiloop_bounds"
              EXPECTED_OUTPUT "dynamic_wiloop_bounds.stdout"
@@ -319,10 +331,18 @@ add_test_pocl(NAME "workgroup/dynamic_wiloop_bounds"
 
 set(VARIANTS "loopvec;fiber")
 foreach(VARIANT ${VARIANTS})
-  set(TEST_LIST
-    "workgroup/ballot_${VARIANT}"
-    "workgroup/sg_shuffle_down_${VARIANT}"
-    "workgroup/sg_shuffle_up_${VARIANT}")
+  set(TEST_LIST "workgroup/ballot_${VARIANT}")
+  if(HOST_DEVICE_EXTENSIONS MATCHES "cl_intel_subgroups")
+    list(APPEND TEST_LIST
+      "workgroup/sg_shuffle_down_intel_${VARIANT}"
+      "workgroup/sg_shuffle_up_intel_${VARIANT}")
+  endif()
+  if(HOST_DEVICE_EXTENSIONS MATCHES "cl_khr_subgroups")
+    list(APPEND TEST_LIST
+      "workgroup/sg_shuffle_down_khr_${VARIANT}"
+      "workgroup/sg_shuffle_up_khr_${VARIANT}")
+  endif()
+
   set_property(TEST ${TEST_LIST}
     APPEND PROPERTY ENVIRONMENT "POCL_MAX_COMPUTE_UNITS=1")
   # Disable subgroup & ballot tests in conformance build.

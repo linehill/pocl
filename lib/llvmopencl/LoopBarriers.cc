@@ -101,7 +101,11 @@ static BasicBlock *getConditionCheckBlock(Loop &L,
     if (CondCmpI == nullptr)
       CondCmpI = &Temp;
 
+#if LLVM_MAJOR < 22
     auto *Instr = CondComp->getTerminator()->getPrevNonDebugInstruction();
+#else
+    auto *Instr = CondComp->getTerminator()->getPrevNode();
+#endif
 
     if (Instr == nullptr) {
       // A basic block with only a branch in the end.
@@ -115,7 +119,11 @@ static BasicBlock *getConditionCheckBlock(Loop &L,
     // We might have added implicit barriers to the block. They should be fine
     // in the condition check block of a b-loop. Just skip them.
     if (isa<Barrier>(Instr)) {
+#if LLVM_MAJOR < 22
       Instr = Instr->getPrevNonDebugInstruction();
+#else
+      Instr = Instr->getPrevNode();
+#endif
       *CondCmpI = dyn_cast_or_null<ICmpInst>(Instr);
       if (*CondCmpI != nullptr)
         return CondComp;
@@ -132,7 +140,11 @@ static bool isolateUniformLatch(BasicBlock *Latch,
   // The first instruction in the new Latch basic block.
   auto *SplitPoint = Latch->getTerminator();
   do {
+#if LLVM_MAJOR < 22
     Instruction *Prev = SplitPoint->getPrevNonDebugInstruction(true);
+#else
+    Instruction *Prev = SplitPoint->getPrevNode();
+#endif
     if (Prev == nullptr || !VUA.isUniform(Latch->getParent(), Prev))
       break;
     SplitPoint = Prev;
@@ -140,7 +152,11 @@ static bool isolateUniformLatch(BasicBlock *Latch,
 
   // Do not create basic blocks with only the branch.
   if (SplitPoint == Latch->getTerminator() ||
+#if LLVM_MAJOR < 22
       SplitPoint->getNextNonDebugInstruction(true) == Latch->getTerminator())
+#else
+      SplitPoint->getNextNode() == Latch->getTerminator())
+#endif
     return false;
 
   BasicBlock *NewLatch = SplitBlock(Latch, SplitPoint);
@@ -422,7 +438,7 @@ static bool processLoop(Loop &L, llvm::DominatorTree &DT,
                         VariableUniformityAnalysisResult &VUA) {
 
   if (Barrier::isLoopWithBarrier(L)) {
-    // std::cout << "loopbarriers: loop with barrier\n";
+    LLVM_DEBUG(dbgs() << "loopbarriers: loop with barrier\n" );
     return processLoopWithBarriers(L, DT, VUA);
   }
 

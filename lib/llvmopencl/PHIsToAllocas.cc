@@ -149,7 +149,11 @@ bool convertPHIsToAllocaAccesses(llvm::Function &F, llvm::DominatorTree &DT) {
       // loop construct sharing (see LoopBarriers.cc).
       Instruction *Pos = IncomingBB->getTerminator();
       do {
+#if LLVM_MAJOR < 22
         Instruction *Prev = Pos->getPrevNonDebugInstruction(true);
+#else
+        Instruction *Prev = Pos->getPrevNode();
+#endif
         if (Prev == nullptr || Prev == Val || Prev == AllocaI)
           break;
 

@@ -1601,16 +1601,19 @@ for arg_type in SUBGROUP_TYPES:
 	ret_type = arg_type
 	signext = LLVM_TYPE_EXT_MAP[ret_type]
 	mask_type = 'j'
+	generate_function("sub_group_broadcast", SIG_TO_LLVM_TYPE_MAP[ret_type], signext, False, arg_type, mask_type)
+	generate_function("sub_group_rotate", SIG_TO_LLVM_TYPE_MAP[ret_type], signext, False, arg_type, 'i')
+	generate_function("sub_group_clustered_rotate", SIG_TO_LLVM_TYPE_MAP[ret_type], signext, False, arg_type, 'i', 'j')
 	for suffix in ['', '_xor']:
 		generate_function("sub_group_shuffle"+suffix, SIG_TO_LLVM_TYPE_MAP[ret_type], signext, False, arg_type, mask_type)
 		generate_function("intel_sub_group_shuffle"+suffix, SIG_TO_LLVM_TYPE_MAP[ret_type], signext, False, arg_type, mask_type)
-	generate_function("sub_group_broadcast", SIG_TO_LLVM_TYPE_MAP[ret_type], signext, False, arg_type, mask_type)
+	for suffix in ['_up', '_down']:
+		generate_function("sub_group_shuffle"+suffix, SIG_TO_LLVM_TYPE_MAP[ret_type], signext, False, arg_type, mask_type)
+		generate_function("intel_sub_group_shuffle"+suffix, SIG_TO_LLVM_TYPE_MAP[ret_type], signext, False, arg_type, arg_type, mask_type)
 	for suffix in ['_add', '_min', '_max']:
 		generate_function("sub_group_reduce"+suffix, SIG_TO_LLVM_TYPE_MAP[ret_type], signext, False, arg_type)
 		generate_function("sub_group_scan_inclusive"+suffix, SIG_TO_LLVM_TYPE_MAP[ret_type], signext, False, arg_type)
 		generate_function("sub_group_scan_exclusive"+suffix, SIG_TO_LLVM_TYPE_MAP[ret_type], signext, False, arg_type)
-	for suffix in ['_up', '_down']:
-		generate_function("intel_sub_group_shuffle"+suffix, SIG_TO_LLVM_TYPE_MAP[ret_type], signext, False, arg_type, arg_type, mask_type)
 
 # Intel extension adds support for some types which are not supported by the Khronos extension:
 # For the sub_group_shuffle, sub_group_shuffle_down, sub_group_shuffle_up, and sub_group_shuffle_xor functions, gentype is float, float2, float3,
@@ -1624,6 +1627,12 @@ for int_type in SUBGROUP_VEC_TYPES:
 			generate_function("intel_sub_group_shuffle"+suffix, SIG_TO_LLVM_TYPE_MAP[ret_type], '', False, arg_type, mask_type)
 		for suffix in ['_up', '_down']:
 			generate_function("intel_sub_group_shuffle"+suffix, SIG_TO_LLVM_TYPE_MAP[ret_type], '', False, arg_type, arg_type, mask_type)
+
+for scalar_type in SUBGROUP_TYPES:
+	for vecsize in ['2','3','4','8','16']:
+		ret_type = arg_type = 'Dv'+vecsize+'_'+scalar_type
+		mask_type = 'j'
+		generate_function("sub_group_broadcast", SIG_TO_LLVM_TYPE_MAP[ret_type], '', False, arg_type, mask_type)
 
 for vecsize in ['','2','4','8']:
 	# uints
