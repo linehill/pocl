@@ -1388,11 +1388,16 @@ bool WorkitemLoopsImpl::fixMultiRegionVariables() {
 
 llvm::Value *
 WorkitemLoopsImpl::getLinearWIIndexInRegion(llvm::Instruction *Instr) {
-
   ParallelRegion *ParRegion = regionOfBlock(Instr->getParent());
   if (ParRegion != nullptr) {
     return ParRegion->getOrCreateIDLoad(LLID_G_NAME);
   }
+
+  // LLID is not suitable for partial-WG execution because the variable is
+  // updated by incrementing by one in the innermost WI-loop causing it to be
+  // out-of-sync as some WIs are skipped.
+  assert(hasInvariantWILoopBounds(Instr->getParent()->getParent()));
+
   IRBuilder<> Builder(Instr);
   return Builder.CreateLoad(ST, LLID);
 }
