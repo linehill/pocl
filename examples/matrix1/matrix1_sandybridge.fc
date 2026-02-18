@@ -1,0 +1,1 @@
+CHECK: store <{{([0-9]+|vscale x [0-9]+)}}
