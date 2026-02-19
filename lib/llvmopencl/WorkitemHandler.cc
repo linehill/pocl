@@ -384,6 +384,9 @@ static bool isRematerializableBuiltinVar(llvm::Value *Ptr) {
       GROUP_ID_G_NAME(1),
       GROUP_ID_G_NAME(2),
       SG_S_NAME,
+      LID_G_NAME(0),
+      LID_G_NAME(1),
+      LID_G_NAME(2),
   });
 
   auto *GV = dyn_cast<GlobalVariable>(Ptr);
