@@ -97,20 +97,24 @@ WORK_GROUP_BROADCAST_T (double)
   __attribute__ ((always_inline)) TYPE _CL_OVERLOADABLE                       \
     work_group_reduce_##OPNAME (TYPE val)                                     \
   {                                                                           \
-    TYPE *result = __pocl_local_mem_alloca (sizeof (TYPE), sizeof (TYPE));    \
+    TYPE *data = __pocl_work_group_alloca (                                   \
+        sizeof (TYPE), ALIGN_ELEMENT_MULTIPLE * sizeof (TYPE), 0);            \
+    data[get_local_linear_id()] = val;                                        \
                                                                               \
     work_group_barrier (CLK_LOCAL_MEM_FENCE);                                 \
-    /* Serial WI-Loop generated here because of the access to result. */      \
+                                                                              \
     if (get_local_linear_id () == 0)                                          \
-      *result = 0;                                                            \
-    /* Add another WI-loop here to make sure LLVM doesn't get confused of the \
-     * initializer.                                                           \
-     */                                                                       \
+      {                                                                       \
+        for (size_t i = 1; i < get_total_local_size(); ++i)                   \
+          {                                                                   \
+            TYPE a = data[0],                                                 \
+                 b = data[i];                                                 \
+            data[0] = OPERATION;                                              \
+          }                                                                   \
+      }                                                                       \
+                                                                              \
     work_group_barrier (CLK_LOCAL_MEM_FENCE);                                 \
-    TYPE a = *result, b = val;                                                \
-    *result = OPERATION;                                                      \
-    work_group_barrier (CLK_LOCAL_MEM_FENCE);                                 \
-    return *result;                                                           \
+    return data[0];                                                           \
   }
 
 #define WORK_GROUP_REDUCE_T(OPNAME, OPERATION)                                \
@@ -135,7 +139,7 @@ WORK_GROUP_REDUCE_T (max, a > b ? a : b)
     work_group_barrier (CLK_LOCAL_MEM_FENCE);                                 \
     if (get_local_linear_id () == 0)                                          \
       {                                                                       \
-        for (uint i = 1; i < get_total_local_size (); ++i)                    \
+        for (size_t i = 1; i < get_total_local_size (); ++i)                  \
           {                                                                   \
             TYPE a = data[i - 1], b = data[i];                                \
             data[i] = OPERATION;                                              \
@@ -169,7 +173,7 @@ WORK_GROUP_SCAN_INCLUSIVE_T (max, a > b ? a : b)
     work_group_barrier (CLK_LOCAL_MEM_FENCE);                                 \
     if (get_local_linear_id () == 0)                                          \
       {                                                                       \
-        for (uint i = 1; i < get_total_local_size (); ++i)                    \
+        for (size_t i = 1; i < get_total_local_size (); ++i)                  \
           {                                                                   \
             TYPE a = data[i - 1], b = data[i];                                \
             data[i] = OPERATION;                                              \
@@ -211,7 +215,7 @@ work_group_any (int predicate)
   if (get_local_linear_id () == 0)
     {
       int result = 0;
-      for (uint i = 0; i < get_total_local_size (); ++i)
+      for (size_t i = 0; i < get_total_local_size (); ++i)
         result += flags[i];
       flags[0] = result;
     }
@@ -230,7 +234,7 @@ work_group_all (int predicate)
     if (get_local_linear_id () == 0)
     {
         int result = 0;
-        for (uint i = 0; i < get_total_local_size (); ++i)
+        for (size_t i = 0; i < get_total_local_size (); ++i)
             result += flags[i];
         flags[0] = result;
     }
