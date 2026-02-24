@@ -1591,10 +1591,20 @@ bool canHandleKernel(llvm::Function &K, llvm::PostDominatorTree &PDT,
 
     // Some loops with multiple back-edges form invalid parallel regions
     // currently.
-    if (L->getLoopLatch()) {
+    if (!L->getLoopLatch()) {
       LLVM_DEBUG(
           dbgs()
           << "Multiple back-edges inside a barrier loop, won't handle.\n");
+      return false;
+    }
+
+    // Some loops with break in the middle of loop form invalid parallel regions
+    // currently.
+    if (L->getExitingBlock() != L->getLoopLatch() &&
+        L->getExitingBlock() != L->getHeader()) {
+      LLVM_DEBUG(
+          dbgs()
+          << "break in the middle of the barrier loop, won't handle.\n");
       return false;
     }
   }
