@@ -100,7 +100,8 @@ protected:
                     llvm::Instruction *Before = nullptr, bool IsAlloca = false);
   ParallelRegion *regionOfBlock(llvm::BasicBlock *BB);
 
-  void addContextSaveRestore(llvm::Instruction *Instruction, llvm::LoopInfo &LI);
+  void addContextSaveRestore(llvm::Instruction *Instruction, llvm::LoopInfo &LI,
+                             VariableUniformityAnalysisResult *VUA = nullptr);
 
   llvm::GetElementPtrInst *
   createContextArrayGEP(llvm::AllocaInst *CtxArrayAlloca,
@@ -115,9 +116,11 @@ protected:
 
   llvm::Instruction *getWorkGroupSizeInstr();
 
-  llvm::Value *tryToRematerialize(llvm::Instruction *Before, llvm::Value *Def,
-    std::string NamePrefix,
-    bool *CanDoIt = nullptr, int *Depth = 0);
+  llvm::Value *
+  tryToRematerialize(llvm::Instruction *Before, llvm::Value *Def,
+                     std::string NamePrefix,
+                     VariableUniformityAnalysisResult *VUA = nullptr,
+                     bool *CanDoIt = nullptr, int *Depth = 0);
 
   // The type of size_t for the current target.
   llvm::Type *ST;
