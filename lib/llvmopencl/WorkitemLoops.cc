@@ -1378,7 +1378,7 @@ bool WorkitemLoopsImpl::fixMultiRegionVariables() {
   for (auto &I : ValuesToContextSave) {
     LLVM_DEBUG(dbgs() << "#### Adding context/save restore for\n");
     LLVM_DEBUG(I->dump());
-    addContextSaveRestore(I, LI);
+    addContextSaveRestore(I, LI, &VUA);
   }
 
   return ValuesToContextSave.size() > 0;

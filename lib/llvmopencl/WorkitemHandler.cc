@@ -357,6 +357,9 @@ static bool isRematerializableBuiltinVar(llvm::Value *Ptr) {
       GROUP_ID_G_NAME(1),
       GROUP_ID_G_NAME(2),
       SG_S_NAME,
+      LID_G_NAME(0),
+      LID_G_NAME(1),
+      LID_G_NAME(2),
   });
 
   auto *GV = dyn_cast<GlobalVariable>(Ptr);
@@ -381,10 +384,9 @@ static bool isRematerializableBuiltinVar(llvm::Value *Ptr) {
 /// cloning is not actually done, but only its possibility is investigated.
 /// \param Depth the recursion depth. Used to limit rematerialization size.
 /// \return The rematerialized instruction if possible and beneficial.
-llvm::Value *WorkitemHandler::tryToRematerialize(llvm::Instruction *Before,
-  llvm::Value *Def,
-  std::string NamePrefix,
-  bool *CanDoIt, int *Depth) {
+llvm::Value *WorkitemHandler::tryToRematerialize(
+    llvm::Instruction *Before, llvm::Value *Def, std::string NamePrefix,
+    VariableUniformityAnalysisResult *VUA, bool *CanDoIt, int *Depth) {
 
   auto DbgRemat = [=](const std::string &Reason) {
     LLVM_DEBUG(dbgs() << Reason << " ");
@@ -410,11 +412,11 @@ llvm::Value *WorkitemHandler::tryToRematerialize(llvm::Instruction *Before,
   if (CanDoIt == nullptr && Depth == nullptr) {
     bool Able = true;
     int Depth = 0;
-    tryToRematerialize(Before, Def, NamePrefix, &Able, &Depth);
+    tryToRematerialize(Before, Def, NamePrefix, VUA, &Able, &Depth);
     if (!Able)
       return nullptr;
     Depth = 0;
-    return tryToRematerialize(Before, Def, NamePrefix, nullptr, &Depth);
+    return tryToRematerialize(Before, Def, NamePrefix, VUA, nullptr, &Depth);
   }
 
   // Limit the height of the cloned instruction tree to avoid counter-
@@ -432,13 +434,13 @@ llvm::Value *WorkitemHandler::tryToRematerialize(llvm::Instruction *Before,
                               Callee->getName() != LS_BUILTIN_NAME)) {
       UNABLE_TO_REMAT("called an unsupported function");
     }
-  } else if (isa<Constant>(Def) || isa<Argument>(Def)) {
+  } else if (isa<Constant>(Def) || isa<Argument>(Def) ||
+             (VUA && VUA->isUniform(K, Def))) {
     ABLE_TO_REMAT();
-    // No need to clone a constant or function argument, we can refer to the
-    // original directly.
+    // No need to clone an uniform value, we can refer to the original directly.
     return Def;
   } else if (isa<AllocaInst>(Def) &&
-    dyn_cast<AllocaInst>(Def)->getParent() != &K->getEntryBlock()) {
+             dyn_cast<AllocaInst>(Def)->getParent() != &K->getEntryBlock()) {
     // The allocas in the pure uniform entry block can be referred to without
     // rematerialization. But other than that we do not yet handle recursive
     // alloca references. Should be an easy and valuable low hanging fruit.
@@ -485,8 +487,8 @@ llvm::Value *WorkitemHandler::tryToRematerialize(llvm::Instruction *Before,
     Copy->insertBefore(Before);
   }
   for (unsigned I = 0; I < Inst->getNumOperands(); ++I) {
-    llvm::Value *ClonedArg = tryToRematerialize(Copy, Inst->getOperand(I),
-      NamePrefix, CanDoIt, Depth);
+    llvm::Value *ClonedArg = tryToRematerialize(
+        Copy, Inst->getOperand(I), NamePrefix, VUA, CanDoIt, Depth);
 
     if (CanDoIt == nullptr)
       Copy->setOperand(I, ClonedArg);
@@ -500,7 +502,9 @@ llvm::Value *WorkitemHandler::tryToRematerialize(llvm::Instruction *Before,
 /// instruction.
 ///
 /// First attemps to rematerialize the value instead of storing it to memory.
-void WorkitemHandler::addContextSaveRestore(llvm::Instruction *Def, llvm::LoopInfo &LI) {
+void WorkitemHandler::addContextSaveRestore(
+    llvm::Instruction *Def, llvm::LoopInfo &LI,
+    VariableUniformityAnalysisResult *VUA) {
 
   InstructionVec Uses;
   // Restore the produced variable before each use to ensure the correct
@@ -632,7 +636,7 @@ void WorkitemHandler::addContextSaveRestore(llvm::Instruction *Def, llvm::LoopIn
     bool CanRemat = true;
     int Depth = 0;
     tryToRematerialize(nullptr, InitializerStore->getValueOperand(), "",
-                       &CanRemat, &Depth);
+                       VUA, &CanRemat, &Depth);
 
     if (!CanRemat) {
       LLVM_DEBUG(dbgs() << "Cannot remat the initializer.\n");
@@ -690,11 +694,11 @@ void WorkitemHandler::addContextSaveRestore(llvm::Instruction *Def, llvm::LoopIn
         LLVM_DEBUG(dbgs() << "        Use:"; UserI->dump());
         RematerializedValue = tryToRematerialize(
             ContextRestoreLocation, InitializerStore->getValueOperand(),
-            Def->getName().str());
+            Def->getName().str(), VUA);
         assert(RematerializedValue != nullptr);
       } else {
         RematerializedValue = tryToRematerialize(ContextRestoreLocation, Def,
-                                                 Def->getName().str());
+                                                 Def->getName().str(), VUA);
       }
     }
     if (RematerializedValue != nullptr) {
