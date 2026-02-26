@@ -22,6 +22,7 @@
 // THE SOFTWARE.
 #include <fstream>
 #include <iostream>
+#include <regex>
 #include <set>
 #include <sstream>
 
@@ -50,6 +51,9 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "Workgroup.h"
 #include "pocl_file_util.h"
 #include "pocl_runtime_config.h"
+
+// Force kernel name to be at most 200 characters in the dump filenames
+#define MAX_KERNEL_FNAME_LENGTH 200
 
 POP_COMPILER_DIAGS
 
@@ -179,11 +183,24 @@ static void printBasicBlock(
   S << ";" << std::endl << std::endl;
 }
 
-void dumpCFG(llvm::Function &F, std::string FileName,
+void dumpCFG(llvm::Function &F, std::string Suffix,
              const std::vector<llvm::Region *> *Regions,
              const ParallelRegion::ParallelRegionVector *ParRegions,
              const std::set<llvm::BasicBlock *> *Highlights) {
   unsigned LastRegID = 0;
+
+  std::string KernelName = F.getName().str();
+
+  // Get rid of illegal characters that result in "stringifying" the file name.
+  KernelName = std::regex_replace(KernelName, std::regex("[^a-zA-Z0-9_.-]"), "_");
+
+  std::string FileName = KernelName + Suffix;
+
+  // If kernel name is too long, truncate it so it can be incorporated into a filename.
+  if (FileName.size() > NAME_MAX) {
+    KernelName.resize(MAX_KERNEL_FNAME_LENGTH);
+    FileName = KernelName + Suffix;
+  }
 
   // By default dump the dots to the kernel compiler cache/tmp directory,
   // if set explicitly to avoid polluting the CWD.
@@ -203,7 +220,7 @@ void dumpCFG(llvm::Function &F, std::string FileName,
 
   std::ofstream S;
   S.open(FileName.c_str(), std::ios::trunc);
-  S << "digraph " << F.getName().str() << " {" << std::endl;
+  S << "digraph " << KernelName << " {" << std::endl;
 
   std::set<BasicBlock*> RegionBBs;
 

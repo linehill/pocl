@@ -47,10 +47,10 @@ namespace pocl {
 /// highlighting spots of interest in the kernel compilation perspective.
 ///
 /// \param F the function to dump.
-/// \param FileName the target file name.
+/// \param Suffix the suffix containing info where the dump is from.
 /// \param Regions highlight these parallel regions in the graph.
 /// \param Highlights highlight these basic blocks in the graph.
-void dumpCFG(llvm::Function &F, std::string FileName = "",
+void dumpCFG(llvm::Function &F, std::string Suffix,
              const std::vector<llvm::Region *> *Regions = nullptr,
              const ParallelRegion::ParallelRegionVector *ParRegions = nullptr,
              const std::set<llvm::BasicBlock *> *Highlights = nullptr);

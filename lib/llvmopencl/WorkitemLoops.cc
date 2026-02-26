@@ -557,8 +557,7 @@ bool WorkitemLoopsImpl::runOnFunction(Function &Func) {
   bool Changed = processFunction(Func);
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-  dumpCFG(*F, F->getName().str() + "_after_wiloops.dot", nullptr,
-          &OriginalParallelRegions);
+  dumpCFG(*F, "_after_wiloops.dot", nullptr, &OriginalParallelRegions);
 #endif
 
   ContextArrays.clear();
@@ -980,8 +979,7 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
   // dynamic WG one (produced for the binaries) and the specialized static one.
   std::string DotSuffix = WGDynamicLocalSize ? "_dyn" : "_static";
 #endif
-  dumpCFG(F, F.getName().str() + "_before_pregions" + DotSuffix + ".dot",
-          nullptr, nullptr);
+  dumpCFG(F, "_before_pregions" + DotSuffix + ".dot", nullptr, nullptr);
 
   K->getParallelRegions(LI, &OriginalParallelRegions, VUA);
 
@@ -996,7 +994,7 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
   Changed = handleWorkitemFunctions() || Changed;
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-  dumpCFG(F, F.getName().str() + "_before_wiloops" + DotSuffix + ".dot", nullptr,
+  dumpCFG(F, "_before_wiloops" + DotSuffix + ".dot", nullptr,
           &OriginalParallelRegions);
 #endif
 
@@ -1193,7 +1191,7 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
   ParallelRegion::insertLocalIdInit(&F.getEntryBlock(), 0, 0, 0);
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-  dumpCFG(*K, K->getName().str() + "_after_wiloops" + DotSuffix + ".dot", nullptr,
+  dumpCFG(*K, "_after_wiloops" + DotSuffix + ".dot", nullptr,
           &OriginalParallelRegions);
 #endif
 

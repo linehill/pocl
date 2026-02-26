@@ -581,8 +581,7 @@ void Kernel::getParallelRegions(
   }
 
 #ifdef DEBUG_PR_CREATION
-  dumpCFG(*this, this->getName().str() + ".pregions.dot", nullptr,
-          ParallelRegions);
+  dumpCFG(*this, ".pregions.dot", nullptr, ParallelRegions);
 #endif
 }
 

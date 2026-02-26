@@ -187,8 +187,8 @@ static bool convertToLoopWithBarriers(Loop &L) {
   llvm::BasicBlock *HeaderBlock = L.getHeader();
   llvm::Function *F = L.getHeader()->getParent();
 
-  dumpCFG(*F, F->getName().str() + "_before_impl_loopbbarriers_on_loop_" +
-                  L.getName().str() + ".dot");
+  dumpCFG(*F,
+          "_before_impl_loopbbarriers_on_loop_" + L.getName().str() + ".dot");
 
   std::set<llvm::BasicBlock *> Highlights;
 
@@ -207,9 +207,7 @@ static bool convertToLoopWithBarriers(Loop &L) {
             << std::endl;
   HeaderBlock->dump();
   Highlights.insert(HeaderBlock);
-  dumpCFG(*F,
-          F->getName().str() + "_after_impl_loopbbarriers_on_loop_" +
-              L.getName().str() + ".dot",
+  dumpCFG(*F, "_after_impl_loopbbarriers_on_loop_" + L.getName().str() + ".dot",
           nullptr, nullptr, &Highlights);
 #endif
 

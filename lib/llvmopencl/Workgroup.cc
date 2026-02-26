@@ -600,8 +600,7 @@ bool WorkgroupImpl::runOnModule(Module &M, llvm::FunctionAnalysisManager &FAM) {
     }
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
-    /* dumpCFG(F, F.getName().str() + "_after_workgroup.dot", nullptr,
-            nullptr); */
+    /* dumpCFG(F, "_after_workgroup.dot", nullptr, nullptr); */
 #endif
   }
 
