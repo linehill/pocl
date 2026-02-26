@@ -242,11 +242,12 @@ PreservedAnalyses DeSPMDPass::run(Function &F,
     Changed = canonicalizeBarriers(F, LI, DT) || Changed;
     REFRESH_LOOP_INFO();
 
-    Changed = removeLifetimeMarkers(F);
+    Changed = removeLifetimeMarkers(F) || Changed;
 
     // TODO: Run CBS if chosen.
     Changed = addWorkItemLoops(F, DT, PDT, LI, VUA) || Changed;
   } else {
+    Changed = removeLifetimeMarkers(F) || Changed;
     Changed = addFiberExecution(F, DT, PDT, LI, VUA) || Changed;
   }
 
