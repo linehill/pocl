@@ -36,13 +36,16 @@ if((LLVM_VERSION VERSION_GREATER_EQUAL 21.0) AND
     (${TESTED_CPU_UARCH} MATCHES "(broadwell|znver3)"))
   # Check the kernel emits a vector load instead of a (masked) gather.
   list(APPEND SG_SHUFFLE_SMALL_FC_LIST sg_shuffle_small.fc)
-else()
+elseif(NOT (${TESTED_CPU_UARCH} MATCHES "sandybridge"))
   # So far, the vector load is known to be emitted for few(?)
   # architectures by PoCL's pass pipeline.  However, dumping the
   # kernel bitcode right after the workgroup pass and passing it to
   # `clang -O2` emits code with vector load instead of gather
   # instruction (on an Alderlake machine at least). Maybe PoCL's
   # pipeline needs tweaking?
+  #
+  # sandybridge: No vectorization seem to occur but this is only
+  # checked on LLVM-21 and LLVM-22.
   list(APPEND SG_SHUFFLE_SMALL_FC_LIST
     sg_shuffle_small_gather.fc sg_shuffle_small.fc sg_shuffle_small_vstore.fc)
 endif()

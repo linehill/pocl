@@ -2569,6 +2569,14 @@ endif()
 
 include(add_test_pocl)
 
+if(ENABLE_HOST_CPU_DEVICES)
+    # The kernel compiler LLVM IR tests might produce microarchitecture
+    # specific output. Assume for now that the tested uarch is what we
+    # have selected at CMake time. This affects some of the FileCheck
+    # tests only.
+    set(TESTED_CPU_UARCH "${SELECTED_HOST_CPU}")
+endif()
+
 if(ENABLE_TESTS)
     add_subdirectory("tests")
 

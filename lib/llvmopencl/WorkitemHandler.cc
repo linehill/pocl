@@ -281,37 +281,10 @@ llvm::Instruction *WorkitemHandler::addContextSave(llvm::Instruction *Def,
   while (isa<PHINode>(Definition))
     ++Definition;
 
-  // TO CLEAN: Refactor by calling CreateContextArrayGEP.
   IRBuilder<> Builder(&*Definition);
-  std::vector<llvm::Value *> GepArgs;
-
-  if (WGDynamicLocalSize) {
-    if (WIH == WorkitemHandlerType::FIBER) {
-      GepArgs.push_back(getLinearWiIndex(Builder, M, nullptr, WIH));
-    } else {
-      Module *M = AllocaI->getParent()->getParent()->getParent();
-      GepArgs.push_back(getLinearWiIndex(Builder, M, Region, WIH));
-    }
-  } else {
-    GepArgs.push_back(ConstantInt::get(ST, 0));
-
-    if (WIH == WorkitemHandlerType::FIBER) {
-      llvm::Value *LinearIndex = Builder.CreateLoad(ST, LocLinID);
-      GepArgs.push_back(LinearIndex);
-    } else {
-      GepArgs.push_back(Builder.CreateLoad(
-          ST, M->getGlobalVariable(LLID_G_NAME), "local_linear_id"));
-    }
-  }
-
-  return Builder.CreateStore(
-      Def,
-#if LLVM_MAJOR < 15
-      builder.CreateGEP(AllocaI->getType()->getPointerElementType(), AllocaI,
-                        gepArgs));
-#else
-      Builder.CreateGEP(AllocaI->getAllocatedType(), AllocaI, GepArgs));
-#endif
+  auto *GEP =
+      createContextArrayGEP(AllocaI, &*Definition, /*AlignPadding=*/false);
+  return Builder.CreateStore(Def, GEP);
 }
 
 llvm::Instruction *WorkitemHandler::addContextRestore(
@@ -1107,7 +1080,16 @@ WorkitemHandler::createContextArrayGEP(llvm::AllocaInst *CtxArrayAlloca,
   std::vector<llvm::Value *> GEPArgs;
   IRBuilder<> Builder(Before);
 
-  if (WGDynamicLocalSize) {
+  bool InvariantBounds =
+      hasInvariantWILoopBounds(Before->getParent()->getParent());
+
+  if (!WGDynamicLocalSize)
+    GEPArgs.push_back(llvm::ConstantInt::get(ST, 0));
+
+  if (WIH == WorkitemHandlerType::LOOPS && !InvariantBounds) {
+    ParallelRegion *Region = regionOfBlock(Before->getParent());
+    GEPArgs.push_back(getLinearWiIndex(Builder, M, Region, WIH));
+  } else if (WGDynamicLocalSize) {
     if (WIH == WorkitemHandlerType::FIBER)
       GEPArgs.push_back(getLinearWiIndex(Builder, M, nullptr, WIH));
     else
@@ -1115,12 +1097,8 @@ WorkitemHandler::createContextArrayGEP(llvm::AllocaInst *CtxArrayAlloca,
   } else {
     if (WIH == WorkitemHandlerType::FIBER) {
       llvm::Value *LinearIndex = Builder.CreateLoad(ST, LocLinID);
-      llvm::Value *Zero = llvm::ConstantInt::get(ST, 0);
-      GEPArgs.push_back(Zero);
       GEPArgs.push_back(LinearIndex);
     } else {
-      llvm::Value *Zero = llvm::ConstantInt::get(ST, 0);
-      GEPArgs.push_back(Zero);
       GEPArgs.push_back(getLinearWIIndexInRegion(Before));
     }
   }

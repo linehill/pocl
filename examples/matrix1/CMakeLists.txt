@@ -29,8 +29,16 @@ add_executable("matrix1" matrix1.c matrix1.cl)
 target_link_libraries("matrix1" ${POCLU_LINK_OPTIONS})
 add_symlink_to_built_opencl_dynlib(matrix1)
 
+if(${TESTED_CPU_UARCH} MATCHES "sandybridge")
+  # Separate IR check for sandybridge whose vector code looks
+  # inferior compared to code on other archs.
+  set(FC_LIST matrix1_sandybridge.fc)
+else()
+  set(FC_LIST matrix1.fc)
+endif()
+
 add_test_pocl(NAME "examples/matrix1" COMMAND "matrix1" 512
-  LLVM_FILECHECKS "matrix1.fc" WORKITEM_HANDLER "loopvec")
+  LLVM_FILECHECKS "${FC_LIST}" WORKITEM_HANDLER "loopvec")
 
 add_test(NAME "examples/matrix1_local" COMMAND "matrix1" 512 -l)
 

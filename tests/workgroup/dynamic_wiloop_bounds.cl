@@ -26,24 +26,25 @@
 kernel void
 test_kernel (global int *out_d)
 {
-  out_d[get_global_linear_id ()] = -1;
+  size_t glid = get_global_linear_id ();
+  out_d[glid] = -1;
 
   barrier (CLK_LOCAL_MEM_FENCE);
   // Set to loop over WIs in dimension 0 in range [1, 3).
   __pocl_probe_set_wiloop_bounds (0, 1, 3);
   barrier (CLK_LOCAL_MEM_FENCE);
 
-  out_d[get_global_linear_id ()] = -2;
+  out_d[glid] = -2;
 
   barrier (CLK_LOCAL_MEM_FENCE);
   __pocl_probe_set_wiloop_bounds (1, 2, 4);
   barrier (CLK_LOCAL_MEM_FENCE);
 
-  out_d[get_global_linear_id ()] = -3;
+  out_d[glid] = -3;
 
   barrier (CLK_LOCAL_MEM_FENCE);
   __pocl_probe_set_wiloop_bounds (2, 1, 2);
   barrier (CLK_LOCAL_MEM_FENCE);
 
-  out_d[get_global_linear_id ()] = -4;
+  out_d[glid] = -4;
 }
