@@ -31,6 +31,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/ADT/StringSet.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DIBuilder.h>
+#include <llvm/IR/Dominators.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Metadata.h>
 #include <llvm/IR/Module.h>
@@ -380,13 +381,16 @@ static bool isRematerializableBuiltinVar(llvm::Value *Ptr) {
 /// \param Def is the produced value to attempt to clone recursively.
 /// \param NamePrefix a prefix string to add to the name of the cloned
 /// instructions.
+/// \param VUA is optional analysis.
+/// \param DT is optional analysis.
 /// \param CanDoIt can be set to a true-initialized boolean in which case the
 /// cloning is not actually done, but only its possibility is investigated.
 /// \param Depth the recursion depth. Used to limit rematerialization size.
 /// \return The rematerialized instruction if possible and beneficial.
 llvm::Value *WorkitemHandler::tryToRematerialize(
     llvm::Instruction *Before, llvm::Value *Def, std::string NamePrefix,
-    VariableUniformityAnalysisResult *VUA, bool *CanDoIt, int *Depth) {
+    VariableUniformityAnalysisResult *VUA, DominatorTree *DT, bool *CanDoIt,
+    int *Depth) {
 
   auto DbgRemat = [=](const std::string &Reason) {
     LLVM_DEBUG(dbgs() << Reason << " ");
@@ -412,11 +416,12 @@ llvm::Value *WorkitemHandler::tryToRematerialize(
   if (CanDoIt == nullptr && Depth == nullptr) {
     bool Able = true;
     int Depth = 0;
-    tryToRematerialize(Before, Def, NamePrefix, VUA, &Able, &Depth);
+    tryToRematerialize(Before, Def, NamePrefix, VUA, DT, &Able, &Depth);
     if (!Able)
       return nullptr;
     Depth = 0;
-    return tryToRematerialize(Before, Def, NamePrefix, VUA, nullptr, &Depth);
+    return tryToRematerialize(Before, Def, NamePrefix, VUA, DT, nullptr,
+                              &Depth);
   }
 
   // Limit the height of the cloned instruction tree to avoid counter-
@@ -434,8 +439,7 @@ llvm::Value *WorkitemHandler::tryToRematerialize(
                               Callee->getName() != LS_BUILTIN_NAME)) {
       UNABLE_TO_REMAT("called an unsupported function");
     }
-  } else if (isa<Constant>(Def) || isa<Argument>(Def) ||
-             (VUA && VUA->isUniform(K, Def))) {
+  } else if (isa<Constant>(Def) || isa<Argument>(Def)) {
     ABLE_TO_REMAT();
     // No need to clone an uniform value, we can refer to the original directly.
     return Def;
@@ -463,6 +467,11 @@ llvm::Value *WorkitemHandler::tryToRematerialize(
 
     if (!CanRemat)
       UNABLE_TO_REMAT("potentially unsafe load to rematerialize");
+  } else if (Before && VUA && DT && VUA->isUniform(K, Def) &&
+             DT->dominates(Def, Before)) {
+    ABLE_TO_REMAT();
+    // No need to clone an uniform value, we can refer to the Def directly.
+    return Def;
   }
 
   llvm::Instruction *Inst = dyn_cast<Instruction>(Def);
@@ -487,8 +496,10 @@ llvm::Value *WorkitemHandler::tryToRematerialize(
     Copy->insertBefore(Before);
   }
   for (unsigned I = 0; I < Inst->getNumOperands(); ++I) {
+    // For queries, pass the root rematerialization point for dominance queries.
     llvm::Value *ClonedArg = tryToRematerialize(
-        Copy, Inst->getOperand(I), NamePrefix, VUA, CanDoIt, Depth);
+        CanDoIt == nullptr ? Copy : Before, Inst->getOperand(I), NamePrefix,
+        VUA, DT, CanDoIt, Depth);
 
     if (CanDoIt == nullptr)
       Copy->setOperand(I, ClonedArg);
@@ -504,7 +515,7 @@ llvm::Value *WorkitemHandler::tryToRematerialize(
 /// First attemps to rematerialize the value instead of storing it to memory.
 void WorkitemHandler::addContextSaveRestore(
     llvm::Instruction *Def, llvm::LoopInfo &LI,
-    VariableUniformityAnalysisResult *VUA) {
+    VariableUniformityAnalysisResult *VUA, DominatorTree *DT) {
 
   InstructionVec Uses;
   // Restore the produced variable before each use to ensure the correct
@@ -634,9 +645,16 @@ void WorkitemHandler::addContextSaveRestore(
 
   if (RematCandidate && isa<AllocaInst>(Def)) {
     bool CanRemat = true;
-    int Depth = 0;
-    tryToRematerialize(nullptr, InitializerStore->getValueOperand(), "",
-                       VUA, &CanRemat, &Depth);
+
+    // Check the initializer doesn't break SSA dominance if rematerialized.
+    for (auto *User : Def->users()) {
+      int Depth = 0;
+      tryToRematerialize(cast<Instruction>(User),
+                         InitializerStore->getValueOperand(), "", VUA, DT,
+                         &CanRemat, &Depth);
+      if (!CanRemat)
+        break;
+    }
 
     if (!CanRemat) {
       LLVM_DEBUG(dbgs() << "Cannot remat the initializer.\n");
@@ -694,11 +712,11 @@ void WorkitemHandler::addContextSaveRestore(
         LLVM_DEBUG(dbgs() << "        Use:"; UserI->dump());
         RematerializedValue = tryToRematerialize(
             ContextRestoreLocation, InitializerStore->getValueOperand(),
-            Def->getName().str(), VUA);
+            Def->getName().str(), VUA, DT);
         assert(RematerializedValue != nullptr);
       } else {
         RematerializedValue = tryToRematerialize(ContextRestoreLocation, Def,
-                                                 Def->getName().str(), VUA);
+                                                 Def->getName().str(), VUA, DT);
       }
     }
     if (RematerializedValue != nullptr) {

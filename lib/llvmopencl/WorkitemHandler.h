@@ -40,6 +40,10 @@
 
 #include <iostream>
 
+namespace llvm {
+class DominatorTree;
+}
+
 namespace pocl {
 
 // Common base class for work-group function generators that includes
@@ -101,7 +105,8 @@ protected:
   ParallelRegion *regionOfBlock(llvm::BasicBlock *BB);
 
   void addContextSaveRestore(llvm::Instruction *Instruction, llvm::LoopInfo &LI,
-                             VariableUniformityAnalysisResult *VUA = nullptr);
+                             VariableUniformityAnalysisResult *VUA = nullptr,
+                             llvm::DominatorTree *DT = nullptr);
 
   llvm::GetElementPtrInst *
   createContextArrayGEP(llvm::AllocaInst *CtxArrayAlloca,
@@ -120,7 +125,8 @@ protected:
   tryToRematerialize(llvm::Instruction *Before, llvm::Value *Def,
                      std::string NamePrefix,
                      VariableUniformityAnalysisResult *VUA = nullptr,
-                     bool *CanDoIt = nullptr, int *Depth = 0);
+                     llvm::DominatorTree *DT = nullptr, bool *CanDoIt = nullptr,
+                     int *Depth = 0);
 
   // The type of size_t for the current target.
   llvm::Type *ST;

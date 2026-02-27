@@ -1375,10 +1375,13 @@ bool WorkitemLoopsImpl::fixMultiRegionVariables() {
               return !isa<AllocaInst>(Lhs) < !isa<AllocaInst>(Rhs);
             });
 
+  // Just to be safe - not sure if the DT is up-to-date at this point.
+  DT.recalculate(*K);
+
   for (auto &I : ValuesToContextSave) {
     LLVM_DEBUG(dbgs() << "#### Adding context/save restore for\n");
     LLVM_DEBUG(I->dump());
-    addContextSaveRestore(I, LI, &VUA);
+    addContextSaveRestore(I, LI, &VUA, &DT);
   }
 
   return ValuesToContextSave.size() > 0;
