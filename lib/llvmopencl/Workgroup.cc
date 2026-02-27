@@ -2043,6 +2043,8 @@ llvm::Value *WorkgroupImpl::getRequiredSubgroupSize(llvm::Function &F) {
 // The subgroup size can be forced via environment variable.
 // Currently, only implemented for 'static' workgroup sizes.
 // If provided value is not legal, fallback to default size.
+// @todo subgroup size queries should be done in one place '
+// (see Fiber.cc)
 llvm::Value *WorkgroupImpl::getForcedSubgroupSize() {
 
   int SGSize = pocl_get_int_option("POCL_SUB_GROUP_SIZE", 0);
