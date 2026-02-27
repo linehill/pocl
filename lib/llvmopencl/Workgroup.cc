@@ -154,6 +154,8 @@ private:
 
   llvm::Value *getRequiredSubgroupSize(llvm::Function &F);
 
+  llvm::Value *getForcedSubgroupSize();
+
   llvm::Module *M;
   llvm::LLVMContext *C;
 
@@ -1436,7 +1438,16 @@ void WorkgroupImpl::privatizeContext(Function *F) {
 
   // Initialize the SG size global and privatize it.
   if (M->getGlobalVariable(SG_S_NAME) != nullptr) {
-    Value *SGSize = getRequiredSubgroupSize(*F);
+
+    // Prioritize the subgroup size that is provided via env variable.
+    Value *SGSize = getForcedSubgroupSize();
+
+    // Check if reqd_sub_group_size attribute is provided.
+    if (SGSize == nullptr) {
+      SGSize = getRequiredSubgroupSize(*F);
+    }
+
+    // Default subgroup size to the size of x-dimension.
     if (SGSize == nullptr) {
       Builder.SetInsertPoint(LocalSizeXStore->getNextNode());
       SGSize = Builder.CreateLoad(LocalSizeAllocas[0]->getAllocatedType(),
@@ -2023,6 +2034,29 @@ llvm::Value *WorkgroupImpl::getRequiredSubgroupSize(llvm::Function &F) {
     // Cast it to i64 as all other workgroup variables are i64 too.
     ConstantInt *Const64 = llvm::cast<ConstantInt>(
         llvm::ConstantInt::get(SizeT, Const->getSExtValue()));
+
+    return Const64;
+  }
+  return nullptr;
+}
+
+// The subgroup size can be forced via environment variable.
+// Currently, only implemented for 'static' workgroup sizes.
+// If provided value is not legal, fallback to default size.
+// @todo subgroup size queries should be done in one place '
+// (see Fiber.cc)
+llvm::Value *WorkgroupImpl::getForcedSubgroupSize() {
+
+  int SGSize = pocl_get_int_option("POCL_SUB_GROUP_SIZE", 0);
+
+  int LowerBound = 0;
+  int UpperBound = WGLocalSizeX * WGLocalSizeY * WGLocalSizeZ;
+
+  // Valid subgroup size is between [1..WG-size]
+  if (SGSize > LowerBound && SGSize < UpperBound) {
+    // Return the value as i64 as all wg varibles are of that type.
+    ConstantInt *Const64 =
+        llvm::cast<ConstantInt>(llvm::ConstantInt::get(SizeT, SGSize));
 
     return Const64;
   }

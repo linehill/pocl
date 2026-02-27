@@ -396,6 +396,20 @@ pocl.
   Default 0. If set to an integer N > 0, libpocl will make a pause of N seconds
   once, when it's loading. Useful e.g. to set up a LTTNG tracing session.
 
+- **POCL_SUB_GROUP_SIZE**
+
+  If set, this option overrides the subgroup size with the provided value.
+  The value must be greater than 0, and the upper limit is the size of the
+  workgroup. If an illegal value is provided, this option is ignored.
+
+  In addition to this variable, the subgroup size can be controlled with kernel
+  attribute `intel_reqd_sub_group_size`, which overrides the default subgroup
+  size. The default subgroup size is determined by the size of the x-dimension
+  of the kernel.
+
+  The subgroup size is determined in the following order of priority:
+  POCL_SUB_GROUP_SIZE > `intel_reqd_sub_group_size` > default
+
 - **POCL_TBB_DEV_PER_NUMA_NODE** can be set to either 0 or 1 (default). If set,
   PoCL TBB driver creates a separate OpenCL device per each NUMA node.
 

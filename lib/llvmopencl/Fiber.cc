@@ -25,6 +25,7 @@
 #include "DebugHelpers.h"
 #include "SubgroupBarrier.h"
 #include "WorkitemHandler.h"
+#include "pocl_runtime_config.h"
 
 #include "llvm/IR/IRBuilder.h"
 #include <llvm/IR/DataLayout.h>
@@ -469,8 +470,16 @@ void FiberImpl::initializeWGDataStruct(llvm::IRBuilder<> *Builder) {
        llvm::ConstantInt::get(llvm::Type::getInt32Ty(M->getContext()), 3)});
 
   // Store the sub-group size to struct.
-  // If specified with intel_reqd_sub_group_size:
-  if (llvm::MDNode *SGSizeMD = F->getMetadata("intel_reqd_sub_group_size")) {
+  // If specified with environment variable / intel_reqd_sub_group_size:
+  // @todo subgroup size queries should be done in one place (see Workgroup.cc)
+  if (pocl_is_option_set("POCL_SUB_GROUP_SIZE")) {
+    int SGSize = pocl_get_int_option("POCL_SUB_GROUP_SIZE", 0);
+    ConstantInt *Const64 = llvm::cast<ConstantInt>(llvm::ConstantInt::get(
+        llvm::Type::getInt64Ty(F->getContext()), SGSize));
+    Builder->CreateStore(Const64, SubGroupSize);
+
+  } else if (llvm::MDNode *SGSizeMD =
+                 F->getMetadata("intel_reqd_sub_group_size")) {
 
     llvm::ConstantAsMetadata *ConstMD =
         llvm::cast<llvm::ConstantAsMetadata>(SGSizeMD->getOperand(0));
