@@ -964,7 +964,9 @@ int link(llvm::Module *Program, const llvm::Module *Lib, std::string &Log,
     }
   }
 
-  addVectorFunctionVariantAttributes(Program, Lib, DeclaredFunctions);
+  if (!ClDev->spmd) {
+    addVectorFunctionVariantAttributes(Program, Lib, DeclaredFunctions);
+  }
 
   // Copy all the globals from lib to program.
   // It probably is faster to just copy them all, than to inspect
