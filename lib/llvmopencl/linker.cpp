@@ -52,9 +52,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
-#if LLVM_MAJOR > 17
 #include <llvm/IR/VFABIDemangler.h>
-#endif
 #include <llvm/IR/Verifier.h>
 #include <llvm/PassInfo.h>
 #include <llvm/PassRegistry.h>
@@ -261,7 +259,6 @@ find_called_functions(llvm::Function *F,
     llvm::SmallVector<llvm::Function *> CalleeVariants;
     CalleeVariants.push_back(CI->getCalledFunction());
 
-#if LLVM_MAJOR > 17
     llvm::SmallVector<std::string> VectorVariantNames;
     llvm::VFABI::getVectorVariantNames(*CI, VectorVariantNames);
     for (std::string VectorVariantName : VectorVariantNames) {
@@ -287,7 +284,6 @@ find_called_functions(llvm::Function *F,
 
       CalleeVariants.push_back(CalleeVariant);
     }
-#endif
 
     for (llvm::Function *Callee : CalleeVariants) {
       // this happens with e.g. inline asm calls
@@ -671,7 +667,6 @@ static void handleDeviceSidePrintf(
   }
 }
 
-#if LLVM_MAJOR > 17
 // This is a list of built-in functions that need to be manually annotated with
 // vectorized variants. You should use this for OpenCL builtins which are not
 // covered by veclib, i.e. aren't LLVM builtins.
@@ -874,7 +869,6 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
                        "llvm.compiler.used");
   }
 }
-#endif
 
 static void replaceIntrinsics(llvm::Module *Program, const llvm::Module *Lib,
                               ValueToValueMapTy &vvm, cl_device_id ClDev) {
@@ -970,9 +964,7 @@ int link(llvm::Module *Program, const llvm::Module *Lib, std::string &Log,
     }
   }
 
-#if LLVM_MAJOR > 17
   addVectorFunctionVariantAttributes(Program, Lib, DeclaredFunctions);
-#endif
 
   // Copy all the globals from lib to program.
   // It probably is faster to just copy them all, than to inspect
