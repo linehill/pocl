@@ -1,1 +1,1 @@
-CHECK-NOT: !{!"has_uniformized_exit", i8 1}
+CHECK-NOT: !{!"pocl.has_uniformized_exit", i8 1}

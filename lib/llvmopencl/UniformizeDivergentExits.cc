@@ -504,10 +504,10 @@ bool UniformizeDivergentExits(Function &F, PostDominatorTree &PDT,
   if (Changed) {
     EliminateUnreachableBlocks(F);
 
-    setModuleBoolMetadata(F.getParent(), "invariant_wiloop_bounds", false);
+    setModuleBoolMetadata(F.getParent(), "pocl.invariant_wiloop_bounds", false);
 
     // This metadata is for internal regression tests.
-    setModuleBoolMetadata(F.getParent(), "has_uniformized_exit", true);
+    setModuleBoolMetadata(F.getParent(), "pocl.has_uniformized_exit", true);
   }
 
   return Changed;

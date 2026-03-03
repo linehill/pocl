@@ -997,11 +997,12 @@ Value *getWorkgroupLocalSize(Module *M, unsigned Dim,
 /// WorkitemHandlerType::LOOPS method.
 bool hasInvariantWILoopBounds(Function *F) {
   bool Result;
-  if (getModuleBoolMetadata(*F->getParent(), "invariant_wiloop_bounds", Result))
+  if (getModuleBoolMetadata(*F->getParent(), "pocl.invariant_wiloop_bounds",
+                            Result))
     return Result;
 
-  // Absent invariant_wiloop_bounds MD is meant to imply (potentially) dynamic
-  // WI-loop bounds.
+  // Absent pocl.invariant_wiloop_bounds MD is meant to imply (potentially)
+  // dynamic WI-loop bounds.
   return false;
 }
 
