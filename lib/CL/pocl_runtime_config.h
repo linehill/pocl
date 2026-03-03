@@ -27,6 +27,8 @@
 
 #include "pocl_export.h"
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -35,6 +37,8 @@ POCL_EXPORT
 int pocl_is_option_set(const char *key);
 POCL_EXPORT
 int pocl_get_int_option(const char *key, int default_value);
+POCL_EXPORT
+size_t pocl_get_size_t_option(const char *key, size_t default_value);
 POCL_EXPORT
 int pocl_get_bool_option(const char *key, int default_value);
 POCL_EXPORT
