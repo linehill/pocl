@@ -308,22 +308,37 @@ add_test_pocl(NAME "workgroup/ballot"
               COMMAND "run_kernel" "ballot.cl" "1" "32" "1" "1")
 
 if(HOST_DEVICE_EXTENSIONS MATCHES "cl_khr_subgroup")
-  add_test_pocl(NAME "workgroup/sg_shuffle_down_khr"
+  add_test_pocl(NAME "workgroup/sg_shuffle_down_khr_1_subgroup"
               EXPECTED_OUTPUT "sg_shuffle_down_1_8_1_1.stdout.khr"
               COMMAND "run_kernel" "simple_sg_shuffle_down.cl" "1" "8" "1" "1")
 
-  add_test_pocl(NAME "workgroup/sg_shuffle_up_khr"
+  add_test_pocl(NAME "workgroup/sg_shuffle_down_khr_2_subgroups"
+              EXPECTED_OUTPUT "sg_shuffle_down_1_8_2_1.stdout.khr"
+              COMMAND "run_kernel" "simple_sg_shuffle_down.cl" "1" "8" "2" "1")
+
+  add_test_pocl(NAME "workgroup/sg_shuffle_up_khr_1_subgroup"
               EXPECTED_OUTPUT "sg_shuffle_up_1_8_1_1.stdout.khr"
               COMMAND "run_kernel" "simple_sg_shuffle_up.cl" "1" "8" "1" "1")
+
+  add_test_pocl(NAME "workgroup/sg_shuffle_up_khr_2_subgroups"
+              EXPECTED_OUTPUT "sg_shuffle_up_1_8_2_1.stdout.khr"
+              COMMAND "run_kernel" "simple_sg_shuffle_up.cl" "1" "8" "2" "1")
 endif()
 if(HOST_DEVICE_EXTENSIONS MATCHES "cl_intel_subgroups")
-  add_test_pocl(NAME "workgroup/sg_shuffle_down_intel"
+  add_test_pocl(NAME "workgroup/sg_shuffle_down_intel_1_subgroup"
               EXPECTED_OUTPUT "sg_shuffle_down_1_8_1_1.stdout.intel"
               COMMAND "run_kernel" "simple_sg_shuffle_down_intel.cl" "1" "8" "1" "1")
+  add_test_pocl(NAME "workgroup/sg_shuffle_down_intel_2_subgroups"
+              EXPECTED_OUTPUT "sg_shuffle_down_1_16_1_1.stdout.intel"
+              COMMAND "run_kernel" "simple_sg_shuffle_down_intel.cl" "1" "16" "1" "1")
 
-  add_test_pocl(NAME "workgroup/sg_shuffle_up_intel"
+  add_test_pocl(NAME "workgroup/sg_shuffle_up_intel_1_subgroup"
               EXPECTED_OUTPUT "sg_shuffle_up_1_8_1_1.stdout.intel"
               COMMAND "run_kernel" "simple_sg_shuffle_up_intel.cl" "1" "8" "1" "1")
+
+  add_test_pocl(NAME "workgroup/sg_shuffle_up_intel_2_subgroups"
+              EXPECTED_OUTPUT "sg_shuffle_up_1_16_1_1.stdout.intel"
+              COMMAND "run_kernel" "simple_sg_shuffle_up_intel.cl" "1" "16" "1" "1")
 endif()
 
 
@@ -337,13 +352,18 @@ foreach(VARIANT ${VARIANTS})
   set(TEST_LIST "workgroup/ballot_${VARIANT}")
   if(HOST_DEVICE_EXTENSIONS MATCHES "cl_intel_subgroups")
     list(APPEND TEST_LIST
-      "workgroup/sg_shuffle_down_intel_${VARIANT}"
-      "workgroup/sg_shuffle_up_intel_${VARIANT}")
+      "workgroup/sg_shuffle_down_intel_1_subgroup_${VARIANT}"
+      "workgroup/sg_shuffle_down_intel_2_subgroups_${VARIANT}"
+      "workgroup/sg_shuffle_up_intel_1_subgroup_${VARIANT}"
+      "workgroup/sg_shuffle_up_intel_2_subgroups_${VARIANT}")
   endif()
   if(HOST_DEVICE_EXTENSIONS MATCHES "cl_khr_subgroups")
     list(APPEND TEST_LIST
-      "workgroup/sg_shuffle_down_khr_${VARIANT}"
-      "workgroup/sg_shuffle_up_khr_${VARIANT}")
+      "workgroup/sg_shuffle_down_khr_1_subgroup_${VARIANT}"
+      "workgroup/sg_shuffle_down_khr_2_subgroups_${VARIANT}"
+      "workgroup/sg_shuffle_up_khr_1_subgroup_${VARIANT}"
+      "workgroup/sg_shuffle_up_khr_2_subgroups_${VARIANT}")
+
   endif()
 
   set_property(TEST ${TEST_LIST}

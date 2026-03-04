@@ -1,4 +1,3 @@
-#define SUB_GROUP_SIZE 8
 #define SHUFFLE_AMOUNT 2
 
 #if defined(cl_khr_subgroups)

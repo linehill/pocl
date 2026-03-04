@@ -132,7 +132,7 @@ sub_group_ballot (int predicate)
   {                                                                           \
     TYPE *__temp_storage = __pocl_work_group_alloca (                         \
       sizeof (TYPE), sizeof (TYPE), 0);      \
-    __temp_storage[get_sub_group_local_id ()] = val;                          \
+    __temp_storage[get_local_linear_id ()] = val;                             \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
     return __temp_storage[get_sub_group_id () * get_sub_group_size ()         \
                           + (index % get_sub_group_size ())];                 \
@@ -140,14 +140,14 @@ sub_group_ballot (int predicate)
 
 /* Define both the non-prefixed (khr) and Intel-prefixed shuffles. */
 #if defined(cl_intel_subgroups) && defined(cl_khr_subgroup_shuffle)
-#define SUB_GROUP_SHUFFLE_T(TYPE)                                        \
-  SUB_GROUP_SHUFFLE_PT (, TYPE)                                         \
+#define SUB_GROUP_SHUFFLE_T(TYPE)                                             \
+  SUB_GROUP_SHUFFLE_PT (, TYPE)                                               \
   SUB_GROUP_SHUFFLE_PT (intel_, TYPE)
 #elif defined(cl_khr_subgroup_shuffle)
-#define SUB_GROUP_SHUFFLE_T(TYPE)                                        \
+#define SUB_GROUP_SHUFFLE_T(TYPE)                                             \
   SUB_GROUP_SHUFFLE_PT (, TYPE)
 #else
-#define SUB_GROUP_SHUFFLE_T(TYPE)                                        \
+#define SUB_GROUP_SHUFFLE_T(TYPE)                                             \
   SUB_GROUP_SHUFFLE_PT (intel_, TYPE)
 #endif
 
@@ -210,7 +210,7 @@ SUB_GROUP_SHUFFLE_VEC (uint)
   {                                                                           \
     TYPE *temp_storage                                                        \
       = __pocl_work_group_alloca (sizeof (TYPE), sizeof (TYPE), 0);           \
-    temp_storage[get_sub_group_local_id ()] = val;                               \
+    temp_storage[get_local_linear_id ()] = val;                               \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
     return temp_storage[get_first_llid ()                                     \
                         + (get_sub_group_local_id () ^ mask)                  \
@@ -363,7 +363,7 @@ __IF_FP64 (SUB_GROUP_ROTATE (double))
   {                                                                           \
     TYPE *temp_storage                                                        \
       = __pocl_work_group_alloca (sizeof (TYPE), sizeof (TYPE), 0);           \
-    temp_storage[get_sub_group_local_id ()] = val;                               \
+    temp_storage[get_local_linear_id ()] = val;                               \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
     if (get_sub_group_local_id () == 0)                                       \
       {                                                                       \
@@ -399,7 +399,7 @@ SUB_GROUP_REDUCE_T (_max, (a > b ? a : b))
   TYPE _CL_OVERLOADABLE sub_group_scan_inclusive##OPNAME (TYPE val)           \
   {                                                                           \
     TYPE *data = __pocl_work_group_alloca (sizeof (TYPE), sizeof (TYPE), 0);  \
-    data[get_sub_group_local_id ()] = val;                                       \
+    data[get_local_linear_id ()] = val;                                       \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
     if (get_sub_group_local_id () == 0)                                       \
       {                                                                       \
@@ -411,7 +411,7 @@ SUB_GROUP_REDUCE_T (_max, (a > b ? a : b))
           }                                                                   \
       }                                                                       \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
-    return data[get_sub_group_local_id ()];                                      \
+    return data[get_local_linear_id ()];                                      \
   }
 
 #define SUB_GROUP_SCAN_INCLUSIVE_T(OPNAME, OPERATION)                         \
@@ -436,7 +436,7 @@ SUB_GROUP_SCAN_INCLUSIVE_T (_max, (a > b ? a : b))
   {                                                                           \
     TYPE *data = __pocl_work_group_alloca (sizeof (TYPE), sizeof (TYPE),      \
                                            sizeof (TYPE));                    \
-    data[get_sub_group_local_id () + 1] = val;                                   \
+    data[get_local_linear_id () + 1] = val;                                   \
     data[get_first_llid ()] = ID;                                             \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
     if (get_sub_group_local_id () == 0)                                       \
@@ -449,7 +449,7 @@ SUB_GROUP_SCAN_INCLUSIVE_T (_max, (a > b ? a : b))
           }                                                                   \
       }                                                                       \
     sub_group_barrier (CLK_LOCAL_MEM_FENCE);                                  \
-    return data[get_sub_group_local_id ()];                                      \
+    return data[get_local_linear_id ()];                                      \
   }
 
 SUB_GROUP_SCAN_EXCLUSIVE_OT (_add, a + b, char, 0)
