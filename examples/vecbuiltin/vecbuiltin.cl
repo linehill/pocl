@@ -27,13 +27,12 @@ vecbuiltin (__global const float *a,
             __global float *c)
 {
   size_t gid = get_global_id (0);
-  c[gid] = sin (a[gid]) + cos (b[gid]) + log2 (125.0f + a[gid])
-           + pow (a[gid], 1.5f) + exp (a[gid]) + exp2 (b[gid]) + fabs (a[gid])
-           + fma (a[gid], 4.0f, b[gid]) + fmax (a[gid], b[gid])
-           + fmin (a[gid], b[gid]) + log10 (125.0f + a[gid])
-           + log (125.0f + a[gid]) + rint (a[gid]) + round (b[gid])
-           + sqrt (b[gid]) + ceil (b[gid]) + tan (a[gid]) + pown (a[gid], 4)
-           + floor (a[gid]) + trunc (b[gid]);
+  c[gid] = sin(a[gid]) + cos(b[gid]) + log2(125.0f + a[gid]) +
+           pow(a[gid], 1.5f) + exp(a[gid]) + exp2(b[gid]) + fabs(a[gid]) +
+           fma(a[gid], 4.0f, b[gid]) + fmax(a[gid], b[gid]) +
+           fmin(a[gid], b[gid]) + log10(125.0f + a[gid]) +
+           log(125.0f + a[gid]) + rint(a[gid]) + round(b[gid]) + sqrt(b[gid]) +
+           ceil(b[gid]) + tan(a[gid]) + floor(a[gid]) + trunc(b[gid]);
 
   /* these exist as builtins but for some reason LLVM won't vectorize them: */
 #if 0

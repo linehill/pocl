@@ -7,4 +7,5 @@ These have been edited by hand:
 expfrexp.cl
 fma.cl
 frexp.cl
-scalars.cl
+minmax_scalars.cl
+ldexp_scalars.cl

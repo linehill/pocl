@@ -501,7 +501,10 @@ void markFunctionAlwaysInline(llvm::Function *F) {
   // pass to skip the inlining
   for (auto U: F->users()) {
     if (CallInst *CI = dyn_cast<CallInst>(U)) {
-      CI->removeFnAttr(Attribute::NoInline);
+      // If the call has vector-function-abi-variant, removing NoInline from it
+      // would prevent the attribute from working correctly.
+      if (!CI->hasFnAttr("vector-function-abi-variant"))
+        CI->removeFnAttr(Attribute::NoInline);
       CI->removeFnAttr(Attribute::OptimizeNone);
     }
   }

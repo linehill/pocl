@@ -32,6 +32,7 @@
 #include <set>
 
 #include "CompilerWarnings.h"
+#include "config.h"
 IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
 #include <llvm/ADT/Twine.h>
 POP_COMPILER_DIAGS
@@ -43,6 +44,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/ADT/SmallSet.h>
 #include <llvm/ADT/StringExtras.h>
 #include <llvm/ADT/StringSet.h>
+#include <llvm/Demangle/Demangle.h>
 #include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalValue.h>
@@ -50,6 +52,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
+#include <llvm/IR/VFABIDemangler.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/PassInfo.h>
 #include <llvm/PassRegistry.h>
@@ -245,6 +248,7 @@ find_called_functions(llvm::Function *F,
 
   assert(F->hasName());
   std::string FName = F->getName().str();
+  llvm::Module *Mod = F->getParent();
 
   for (auto &I : instructions(F)) {
 
@@ -252,33 +256,63 @@ find_called_functions(llvm::Function *F,
     if (CI == nullptr)
       continue;
 
-    llvm::Function *Callee = CI->getCalledFunction();
-    // this happens with e.g. inline asm calls
-    if (Callee == nullptr) {
-      DB_PRINT("search: %s callee NULL\n", FName.c_str());
-      continue;
+    llvm::SmallVector<llvm::Function *> CalleeVariants;
+    CalleeVariants.push_back(CI->getCalledFunction());
+
+    llvm::SmallVector<std::string> VectorVariantNames;
+    llvm::VFABI::getVectorVariantNames(*CI, VectorVariantNames);
+    for (std::string VectorVariantName : VectorVariantNames) {
+      // The vector variant names look something like
+      // _ZGV_LLVM_N2v__Z7_cl_erff(_Z7_cl_erfDv2_f)
+      // If the parentheses exist, they specify the real name of the function.
+      // Otherwise, it's the part before the parens that starts with _ZGV.
+      std::string FuncName;
+      std::string::size_type Start = VectorVariantName.find('(');
+      std::string::size_type End = VectorVariantName.find(')');
+      if (Start != std::string::npos && End != std::string::npos &&
+          End > Start) {
+        FuncName = VectorVariantName.substr(Start + 1, End - 1 - Start);
+      } else {
+        FuncName = VectorVariantName;
+      }
+
+      llvm::Function *CalleeVariant = Mod->getFunction(FuncName);
+      if (CalleeVariant == nullptr) {
+        DB_PRINT("search: %s callee variant NULL\n", FuncName.c_str());
+        continue;
+      }
+
+      CalleeVariants.push_back(CalleeVariant);
     }
 
-    assert(Callee->hasName());
-    std::string CName = Callee->getName().str();
+    for (llvm::Function *Callee : CalleeVariants) {
+      // this happens with e.g. inline asm calls
+      if (Callee == nullptr) {
+        DB_PRINT("search: %s callee NULL\n", FName.c_str());
+        continue;
+      }
 
-    if (CallStack.contains(Callee)) {
-      DB_PRINT("Recursion detected: %s\n", CName.c_str());
-      return Callee;
-    }
-    DB_PRINT("Function %s calls %s\n", FName.c_str(), CName.c_str());
+      assert(Callee->hasName());
+      std::string CName = Callee->getName().str();
 
-    auto It = std::find(CalledFuncList.begin(), CalledFuncList.end(), Callee);
-    if (It != CalledFuncList.end()) {
-      DB_PRINT("already contained in CalledList: %s\n", CName.c_str());
-      continue;
-    } else {
-      DB_PRINT("function %s not seen before, recursing into it\n",
-               CName.c_str());
-      if (auto *R = find_called_functions(Callee, CalledFuncList, CallStack))
-        return R;
-      DB_PRINT("inserting %s into CalledList\n", CName.c_str());
-      CalledFuncList.push_back(Callee);
+      if (CallStack.contains(Callee)) {
+        DB_PRINT("Recursion detected: %s\n", CName.c_str());
+        return Callee;
+      }
+      DB_PRINT("Function %s calls %s\n", FName.c_str(), CName.c_str());
+
+      auto It = std::find(CalledFuncList.begin(), CalledFuncList.end(), Callee);
+      if (It != CalledFuncList.end()) {
+        DB_PRINT("already contained in CalledList: %s\n", CName.c_str());
+        continue;
+      } else {
+        DB_PRINT("function %s not seen before, recursing into it\n",
+                 CName.c_str());
+        if (auto *R = find_called_functions(Callee, CalledFuncList, CallStack))
+          return R;
+        DB_PRINT("inserting %s into CalledList\n", CName.c_str());
+        CalledFuncList.push_back(Callee);
+      }
     }
   }
 
@@ -633,6 +667,216 @@ static void handleDeviceSidePrintf(
   }
 }
 
+// This is a list of built-in functions that need to be manually annotated with
+// vectorized variants. You should use this for OpenCL builtins which are not
+// covered by veclib, i.e. aren't LLVM builtins.
+static const std::set<std::string> VectorizableFuncs = {
+    "_cl_atan2(float, float)",
+    "_cl_atan2(double, double)",
+    "_cl_cbrt(float)",
+    "_cl_cbrt(double)",
+    "_cl_erfc(float)",
+    "_cl_erfc(double)",
+    "_cl_erf(float)",
+    "_cl_erf(double)",
+    "_cl_expm1(float)",
+    "_cl_expm1(double)",
+    "_cl_lgamma(float)",
+    "_cl_lgamma(double)",
+    // Commented out due to the pointer parameter not vectorizing properly.
+    //"_cl_lgamma_r(float, int CLgeneric*)",
+    //"_cl_lgamma_r(double, int CLgeneric*)",
+    "_cl_native_powr(float, float)",
+    "_cl_native_powr(double, double)",
+    "_cl_powr(float, float)",
+    "_cl_powr(double, double)",
+    "_cl_remainder(float, float)",
+    "_cl_remainder(double, double)",
+    //"_cl_remquo(float, float, int CLgeneric*)",
+    //"_cl_remquo(double, double, int CLgeneric*)",
+    "_cl_rootn(float, int)",
+    "_cl_rootn(double, int)",
+    "_cl_tgamma(float)",
+    "_cl_tgamma(double)",
+    "_cl_pown(float, int)",
+    "_cl_pown(double, int)",
+    "_cl_ldexp(float, int)",
+    "_cl_ldexp(double, int)",
+};
+
+// Makes sure that the given vectorized function variant is declared and
+// marked as used. This is necessary so that the functions referenced in
+// `vector-function-abi-variant` exist all the way up to the vectorization
+// passes.
+static void ensureVectorFunctionVariantDeclaration(
+    const std::string &FuncName, llvm::Module *Program, const llvm::Module *Lib,
+    llvm::StringSet<> &DeclaredFunctions,
+    std::vector<Constant *> &CompilerUsed) {
+  Function *VariantFunc = Program->getFunction(FuncName);
+  const Function *LibFunc = Lib->getFunction(FuncName);
+  if (!VariantFunc && LibFunc) {
+    POCL_MSG_PRINT_LLVM("Adding declaration for %s\n", FuncName.c_str());
+    Function *FuncDecl =
+        Function::Create(cast<FunctionType>(LibFunc->getValueType()),
+                         LibFunc->getLinkage(), LibFunc->getName(), Program);
+    FuncDecl->copyAttributesFrom(LibFunc);
+    DeclaredFunctions.insert(LibFunc->getName());
+
+    // We also need to explicitly mark these functions as used, otherwise
+    // GlobalDCE removes them before any vectorization pass gets to use them.
+    CompilerUsed.push_back(FuncDecl);
+  }
+}
+
+// Adds the `vector-function-abi-variant` attributes to every call to functions
+// that can use it. This attribute allows autovectorizers to pick up
+// pre-vectorized variants of the same function.
+static void
+addVectorFunctionVariantAttributes(llvm::Module *Program,
+                                   const llvm::Module *Lib,
+                                   llvm::StringSet<> &DeclaredFunctions) {
+  struct MangledVectorFuncInfo {
+    std::string MangledName;
+    std::string Params;
+    int Width;
+    bool Masked;
+  };
+  std::map<std::string, std::vector<MangledVectorFuncInfo>> FoundVectorVariants;
+
+  // Find all functions that may partake in vectorization, either scalar or
+  // vector variants.
+  for (const auto &Func : Lib->functions()) {
+    std::string MangledName = Func.getName().str();
+    std::string DemangledName = demangle(MangledName);
+
+    // Determine which parameters are vectors. Unfortunately, we can't just
+    // check it from Func directly due to the silly calling conventions on x86
+    // where <2 x float> is passed as a double.
+    std::string Params = "";
+
+    size_t Offset = DemangledName.find('(');
+    for (;;) {
+      size_t VecOffset = DemangledName.find("vector[", Offset);
+      size_t EndOffset = DemangledName.find_first_of(",)", Offset);
+
+      if (VecOffset < EndOffset)
+        Params += "v";
+      else
+        Params += "u";
+
+      if (EndOffset == std::string::npos || DemangledName[EndOffset] == ')')
+        break;
+      Offset = EndOffset + 1;
+    }
+
+    // We construct the scalar name to act as the category name for all
+    // variants of the same function. We do this by removing all vector[N]
+    // notation from the demangled name.
+    std::string ScalarName = DemangledName;
+    int Width = 1;
+
+    for (;;) {
+      std::string::size_type offset = ScalarName.find(" vector[");
+      if (offset == std::string::npos)
+        break;
+      Width = atoi(ScalarName.c_str() + offset + 8);
+      ScalarName.erase(offset, ScalarName.find(']', offset) + 1 - offset);
+    }
+
+    if (VectorizableFuncs.count(ScalarName)) {
+      // Add this variant to the list.
+      FoundVectorVariants[ScalarName].push_back(
+          {MangledName, Params, Width, false});
+    }
+  }
+
+  std::vector<Constant *> CompilerUsed;
+
+  // Using the found vector function variant families, check which ones are
+  // called and annotate those calls with vector-function-abi-variant
+  // attributes.
+  for (const auto &[ScalarName, Variants] : FoundVectorVariants) {
+    // No vector mappings available, so don't bother with the metadata.
+    if (Variants.size() <= 1)
+      continue;
+
+    bool FunctionIsUsed = false;
+    std::string ScalarMangledName;
+    for (const auto &Info : Variants) {
+      if (Program->getFunction(Info.MangledName) != nullptr)
+        FunctionIsUsed = true;
+      if (Info.Width == 1)
+        ScalarMangledName = Info.MangledName;
+    }
+
+    // Only construct vector variant mappings if the vectorizable function is
+    // actually being used.
+    if (!FunctionIsUsed)
+      continue;
+
+    std::vector<std::string> Mappings;
+
+    // Construct the vector function variant mappings to be used for all call
+    // annotations. The scalar version is omitted here.
+    for (const auto &Info : Variants) {
+      // No need to list the scalar version.
+      if (Info.Width == 1)
+        continue;
+
+      // Ensure the function is declared in the program.
+      ensureVectorFunctionVariantDeclaration(Info.MangledName, Program, Lib,
+                                             DeclaredFunctions, CompilerUsed);
+
+      // Construct mapping name, see vector-function-abi-variant from
+      // LLVM langref for how this works.
+      std::string MappingName = "_ZGV_LLVM_";
+      MappingName += Info.Masked ? 'M' : 'N';
+      MappingName += std::to_string(Info.Width);
+      MappingName += Info.Params;
+      MappingName += "_";
+      MappingName += ScalarMangledName;
+      MappingName += "(";
+      MappingName += Info.MangledName;
+      MappingName += ")";
+      Mappings.push_back(MappingName);
+    }
+
+    // Finally, go over scalar calls and annotate them.
+    for (const auto &Info : Variants) {
+      Function *CalledVariant = Program->getFunction(Info.MangledName);
+
+      if (CalledVariant == nullptr)
+        continue;
+
+      if (CalledVariant->arg_size() != Info.Params.size())
+        continue;
+
+      for (auto U : CalledVariant->users()) {
+        CallInst *CI = dyn_cast<CallInst>(U);
+        if (CI == nullptr)
+          continue;
+        if (CI->getCalledFunction() != CalledVariant)
+          continue;
+        llvm::VFABI::setVectorVariantNames(CI, Mappings);
+        // We need to ensure that the scalar variant doesn't get inlined before
+        // vectorization runs.
+        CI->addFnAttr(llvm::Attribute::NoInline);
+      }
+    }
+  }
+
+  // Finally, mark the vector variants as used, so that they don't get removed
+  // before autovectorization runs.
+  if (!CompilerUsed.empty()) {
+    auto ArrayType = ArrayType::get(PointerType::get(Program->getContext(), 0),
+                                    CompilerUsed.size());
+    auto Array = ConstantArray::get(ArrayType, CompilerUsed);
+    new GlobalVariable(*Program, ArrayType, false,
+                       GlobalValue::AppendingLinkage, Array,
+                       "llvm.compiler.used");
+  }
+}
+
 static void replaceIntrinsics(llvm::Module *Program, const llvm::Module *Lib,
                               ValueToValueMapTy &vvm, cl_device_id ClDev) {
   llvm_intrin_replace_fn IntrinRepl = ClDev->llvm_intrin_replace;
@@ -725,6 +969,10 @@ int link(llvm::Module *Program, const llvm::Module *Lib, std::string &Log,
       DB_PRINT("Adding function '%s' to list of called funcs\n", FName.c_str());
       DeclaredFunctions.insert(F->getName());
     }
+  }
+
+  if (!ClDev->spmd) {
+    addVectorFunctionVariantAttributes(Program, Lib, DeclaredFunctions);
   }
 
   // Copy all the globals from lib to program.
