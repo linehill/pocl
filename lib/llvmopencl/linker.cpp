@@ -796,6 +796,10 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
   // called and annotate those calls with vector-function-abi-variant
   // attributes.
   for (const auto &[ScalarName, Variants] : FoundVectorVariants) {
+    // No vector mappings available, so don't bother with the metadata.
+    if (Variants.size() <= 1)
+      continue;
+
     bool FunctionIsUsed = false;
     std::string ScalarMangledName;
     for (const auto &Info : Variants) {
@@ -842,6 +846,9 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
       Function *CalledVariant = Program->getFunction(Info.MangledName);
 
       if (CalledVariant == nullptr)
+        continue;
+
+      if (CalledVariant->arg_size() != Info.Params.size())
         continue;
 
       for (auto U : CalledVariant->users()) {
