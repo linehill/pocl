@@ -411,6 +411,9 @@ llvm::Value *WorkitemHandler::tryToRematerialize(
       return nullptr;                                                          \
   } while (0)
 
+  // Set to true if Def is a LoadInst and can be rematerialized.
+  bool CanRematLoad = false;
+
   // A call without arguments: Setup a pre-check before cloning to see if we
   // can succeed.
   if (CanDoIt == nullptr && Depth == nullptr) {
@@ -461,11 +464,11 @@ llvm::Value *WorkitemHandler::tryToRematerialize(
     //    in the way to it - e.g. loads from a global buffer witch the target PR
     //    writes into.
     auto *Ptr = LD->getPointerOperand();
-    bool CanRemat = pointsToContextArray(Ptr, *Depth);        // (1)
-    CanRemat = CanRemat || isRematerializableBuiltinVar(Ptr); // (2)
+    CanRematLoad = pointsToContextArray(Ptr, *Depth);                 // (1)
+    CanRematLoad = CanRematLoad || isRematerializableBuiltinVar(Ptr); // (2)
     // TODO: (3)
 
-    if (!CanRemat)
+    if (!CanRematLoad)
       UNABLE_TO_REMAT("potentially unsafe load to rematerialize");
   } else if (Before && VUA && DT && VUA->isUniform(K, Def) &&
              DT->dominates(Def, Before)) {
@@ -478,7 +481,8 @@ llvm::Value *WorkitemHandler::tryToRematerialize(
   if (Inst == nullptr)
     UNABLE_TO_REMAT("unsupported value type");
 
-  if (Inst->mayWriteToMemory() || Inst->mayHaveSideEffects())
+  if (Inst->mayWriteToMemory() || Inst->mayHaveSideEffects() ||
+      (Inst->mayReadFromMemory() && !CanRematLoad))
     UNABLE_TO_REMAT("has side-effects");
 
   if (Depth != nullptr)
