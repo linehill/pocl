@@ -83,6 +83,11 @@ add_llvm_check(OPENCLC_NAME force-vector-width ENVIRONMENT "POCL_VECTORIZER_FORC
 add_llvm_check(OPENCLC_NAME prefer-vector-width ENVIRONMENT "POCL_VECTORIZER_PREFER_VECTOR_WIDTH=512")
 
 # TODO: Enable on RISC-V when we have scalable vector support
-if(${TESTED_CPU_UARCH} MATCHES "(znver1)")
-  add_llvm_check(OPENCLC_NAME builtin-vectorization)
+# match the widest vector type supported by CPU
+if(TARGET_CPU_HAS_FEATURE_AVX512F)
+  add_llvm_check(OPENCLC_NAME builtin-vectorization ENVIRONMENT "POCL_VECTORIZER_FORCE_VECTOR_WIDTH=16")
+elseif(TARGET_CPU_HAS_FEATURE_AVX2)
+  add_llvm_check(OPENCLC_NAME builtin-vectorization ENVIRONMENT "POCL_VECTORIZER_FORCE_VECTOR_WIDTH=8")
+elseif(TARGET_CPU_HAS_FEATURE_AVX)
+  add_llvm_check(OPENCLC_NAME builtin-vectorization ENVIRONMENT "POCL_VECTORIZER_FORCE_VECTOR_WIDTH=4")
 endif()
