@@ -195,7 +195,7 @@ macro(compile_to_bc SUBDIR OUTPUT_FILE_LIST EXTRA_CONFIG)
   endforeach()
 endmacro()
 
-function(generate_cuda_spir_wrapper OUTPUT)
+function(generate_cuda_spir_wrapper OUTPUT TARGET_NAME)
   set(FNAME "${CMAKE_CURRENT_BINARY_DIR}/spir_wrapper.ll")
   set(${OUTPUT} "${FNAME}" PARENT_SCOPE)
   set(EXTRA_OPT "--fp16" "-g")
@@ -205,6 +205,7 @@ function(generate_cuda_spir_wrapper OUTPUT)
       COMMAND "${HOST_PYTHON3}" "${CMAKE_SOURCE_DIR}/lib/kernel/SPIR/generate_spir_wrapper.py" ${EXTRA_OPT} "-t" "cuda" "${FNAME}"
       COMMENT "Generating CUDA SPIR wrapper to ${FNAME}"
       VERBATIM)
+  add_custom_target(${TARGET_NAME} DEPENDS ${FNAME})
 endfunction()
 
 function(generate_cpu_spir_wrapper ARCH SUBDIR SIZE OUTPUT)
