@@ -507,6 +507,8 @@ void markFunctionAlwaysInline(llvm::Function *F) {
       // would prevent the attribute from working correctly.
       if (!CI->hasFnAttr("vector-function-abi-variant"))
         CI->removeFnAttr(Attribute::NoInline);
+
+      CI->removeFnAttr(Attribute::NoBuiltin);
       CI->removeFnAttr(Attribute::OptimizeNone);
     }
   }
