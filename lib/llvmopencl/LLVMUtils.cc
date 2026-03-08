@@ -55,6 +55,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "KernelCompilerUtils.h"
 #include "LLVMUtils.h"
 #include "LoopBarriers.h"
+#include "MarkAllInlineable.hh"
 #include "MinLegalVecSize.hh"
 #include "OptimizeBuiltins.h"
 #include "OptimizeWorkItemGVars.h"
@@ -740,6 +741,7 @@ void registerPassBuilderPasses(llvm::PassBuilder &PB) {
   SubCFGFormation::registerWithPB(PB);
   Workgroup::registerWithPB(PB);
   PoCLCFGPrinter::registerWithPB(PB);
+  MarkAllInlineable::registerWithPB(PB);
 }
 
 void registerFunctionAnalyses(llvm::PassBuilder &PB) {

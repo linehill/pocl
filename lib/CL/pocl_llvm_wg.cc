@@ -96,7 +96,7 @@ POP_COMPILER_DIAGS
 // Use a separate PM instance to run the default optimization pipeline
 // TODO: this MUST be left enabled for now; disabling causes a few tests fail
 // should be investigated
-#define SEPARATE_OPTIMIZATION_FROM_POCL_PASSES
+//#define SEPARATE_OPTIMIZATION_FROM_POCL_PASSES
 
 // use a separate instance of llvm::TargetMachine; disabling this
 // may cause test failures / random crashes / ASanitizer complaints
@@ -172,6 +172,7 @@ public:
 #ifndef PER_STAGE_TARGET_MACHINE
                     TargetMachine *TM,
 #endif
+                    bool AppendInlining,
                     cl_device_id Dev);
   void run(llvm::Module &Bitcode);
 };
@@ -182,6 +183,7 @@ llvm::Error PoCLModulePassManager::build(std::string PoclPipeline,
 #ifndef PER_STAGE_TARGET_MACHINE
                                          TargetMachine *TM,
 #endif
+                                         bool AppendInlining,
                                          cl_device_id Dev) {
 
 #ifdef PER_STAGE_TARGET_MACHINE
@@ -282,6 +284,10 @@ llvm::Error PoCLModulePassManager::build(std::string PoclPipeline,
       break;
     }
   }
+  if (AppendInlining) {
+    PoclPipeline += ",mark-all-inlineable";
+    PoclPipeline += ",cgscc(inline)";
+  }
 #endif
 
   return PB.parsePassPipeline(PM, StringRef(PoclPipeline));
@@ -345,7 +351,7 @@ llvm::Error TwoStagePoCLModulePassManager::build(
 #ifndef PER_STAGE_TARGET_MACHINE
                    TMach,
 #endif
-                   Dev);
+                   false, Dev);
   if (E1)
     return E1;
 
@@ -358,7 +364,7 @@ llvm::Error TwoStagePoCLModulePassManager::build(
 #ifndef PER_STAGE_TARGET_MACHINE
                       TMach,
 #endif
-                      Dev);
+                      true, Dev);
 }
 
 void TwoStagePoCLModulePassManager::run(llvm::Module &Bitcode) {
