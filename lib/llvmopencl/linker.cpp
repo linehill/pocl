@@ -670,6 +670,8 @@ static void handleDeviceSidePrintf(
 // This is a list of built-in functions that need to be manually annotated with
 // vectorized variants. You should use this for OpenCL builtins which are not
 // covered by veclib, i.e. aren't LLVM builtins.
+//
+#ifdef ENABLE_HOST_CPU_VECTORIZE_BUILTINS
 static const std::set<std::string> VectorizableFuncs = {
     "_cl_atan2(float, float)",
     "_cl_atan2(double, double)",
@@ -703,6 +705,216 @@ static const std::set<std::string> VectorizableFuncs = {
     "_cl_ldexp(float, int)",
     "_cl_ldexp(double, int)",
 };
+#else
+static const std::set<std::string> VectorizableFuncs = {
+    "_cl_acos(float)",
+    "_cl_acos(double)",
+    "_cl_acosh(float)",
+    "_cl_acosh(double)",
+    "_cl_acospi(float)",
+    "_cl_acospi(double)",
+
+    "_cl_asin(float)",
+    "_cl_asin(double)",
+    "_cl_asinh(float)",
+    "_cl_asinh(double)",
+    "_cl_asinpi(float)",
+    "_cl_asinpi(double)",
+
+    "_cl_atan(float)",
+    "_cl_atan(double)",
+    "_cl_atan2(float, float)",
+    "_cl_atan2(double, double)",
+    "_cl_atanh(float)",
+    "_cl_atanh(double)",
+    "_cl_atanpi(float)",
+    "_cl_atanpi(double)",
+    "_cl_atan2pi(float, float)",
+    "_cl_atan2pi(double, double)",
+
+    "_cl_cbrt(float)",
+    "_cl_cbrt(double)",
+    "_cl_ceil(float)",
+    "_cl_ceil(double)",
+
+    "_cl_copysign(float, float)",
+    "_cl_copysign(double, double)",
+
+    "_cl_cos(float)",
+    "_cl_cos(double)",
+    "_cl_cosh(float)",
+    "_cl_cosh(double)",
+    "_cl_cospi(float)",
+    "_cl_cospi(double)",
+
+    "_cl_erfc(float)",
+    "_cl_erfc(double)",
+    "_cl_erf(float)",
+    "_cl_erf(double)",
+
+    "_cl_exp(float)",
+    "_cl_exp(double)",
+    "_cl_exp2(float)",
+    "_cl_exp2(double)",
+    "_cl_exp10(float)",
+    "_cl_exp10(double)",
+    "_cl_expm1(float)",
+    "_cl_expm1(double)",
+
+    "_cl_fabs(float)",
+    "_cl_fabs(double)",
+    "_cl_fdim(float, float)",
+    "_cl_fdim(double, double)",
+    "_cl_floor(float)",
+    "_cl_floor(double)",
+    "_cl_fma(float, float, float)",
+    "_cl_fma(double, double, double)",
+
+    // TODO: other variants of fmax/fmin
+    "_cl_fmax(float, float)",
+    "_cl_fmax(double, double)",
+    "_cl_fmin(float, float)",
+    "_cl_fmin(double, double)",
+
+    "_cl_fmod(float, float)",
+    "_cl_fmod(double, double)",
+
+    // Commented out due to the pointer parameter not vectorizing properly.
+    //"_cl_fract(float, int CLgeneric*)",
+    //"_cl_fract(double, int CLgeneric*)",
+    //"_cl_frexp(float, int CLgeneric*)",
+    //"_cl_frexp(double, int CLgeneric*)",
+
+    "_cl_hypot(float, float)",
+    "_cl_hypot(double, double)",
+
+    "_cl_ilogb(float)",
+    "_cl_ilogb(double)",
+
+    "_cl_ldexp(float, int)",
+    "_cl_ldexp(double, int)",
+
+    "_cl_lgamma(float)",
+    "_cl_lgamma(double)",
+
+    // Commented out due to the pointer parameter not vectorizing properly.
+    //"_cl_lgamma_r(float, int CLgeneric*)",
+    //"_cl_lgamma_r(double, int CLgeneric*)",
+
+    "_cl_log(float)",
+    "_cl_log(double)",
+    "_cl_log2(float)",
+    "_cl_log2(double)",
+    "_cl_log10(float)",
+    "_cl_log10(double)",
+    "_cl_log1p(float)",
+    "_cl_log1p(double)",
+    "_cl_logb(float)",
+    "_cl_logb(double)",
+
+    "_cl_mad(float, float, float)",
+    "_cl_mad(double, double, double)",
+
+    "_cl_maxmag(float, float)",
+    "_cl_maxmag(double, double)",
+    "_cl_minmag(float, float)",
+    "_cl_minmag(double, double)",
+
+    // Commented out due to the pointer parameter not vectorizing properly.
+    //"_cl_modf(float, int CLgeneric*)",
+    //"_cl_modf(double, int CLgeneric*)",
+
+    "_cl_nan(float)",
+    "_cl_nan(double)",
+
+    "_cl_nextafter(float, float)",
+    "_cl_nextafter(double, double)",
+
+    "_cl_pow(float, float)",
+    "_cl_pow(double, double)",
+    "_cl_pown(float, int)",
+    "_cl_pown(double, int)",
+    "_cl_powr(float, float)",
+    "_cl_powr(double, double)",
+
+    "_cl_remainder(float, float)",
+    "_cl_remainder(double, double)",
+
+    //"_cl_remquo(float, float, int CLgeneric*)",
+    //"_cl_remquo(double, double, int CLgeneric*)",
+
+    "_cl_rint(float)",
+    "_cl_rint(double)",
+
+    "_cl_rootn(float, int)",
+    "_cl_rootn(double, int)",
+
+    "_cl_round(float)",
+    "_cl_round(double)",
+
+    "_cl_rsqrt(float)",
+    "_cl_rsqrt(double)",
+
+    // Commented out due to the pointer parameter not vectorizing properly.
+    //"_cl_sincos(float, int CLgeneric*)",
+    //"_cl_sincos(double, int CLgeneric*)",
+
+    "_cl_sin(float)",
+    "_cl_sin(double)",
+    "_cl_sinh(float)",
+    "_cl_sinh(double)",
+    "_cl_sinpi(float)",
+    "_cl_sinpi(double)",
+
+    "_cl_sqrt(float)",
+    "_cl_sqrt(double)",
+
+    "_cl_tan(float)",
+    "_cl_tan(double)",
+    "_cl_tanh(float)",
+    "_cl_tanh(double)",
+    "_cl_tanpi(float)",
+    "_cl_tanpi(double)",
+
+    "_cl_tgamma(float)",
+    "_cl_tgamma(double)",
+
+    "_cl_trunc(float)",
+    "_cl_trunc(double)",
+
+    // HALF functions
+    "_cl_half_cos(float)",
+    "_cl_half_divide(float, float)",
+    "_cl_half_exp(float)",
+    "_cl_half_exp2(float)",
+    "_cl_half_exp10(float)",
+    "_cl_half_log(float)",
+    "_cl_half_log2(float)",
+    "_cl_half_log10(float)",
+    "_cl_half_powr(float, float)",
+    "_cl_half_recip(float)",
+    "_cl_half_rsqrt(float)",
+    "_cl_half_sin(float)",
+    "_cl_half_sqrt(float)",
+    "_cl_half_tan(float)",
+
+    // NATIVE functions
+    "_cl_native_cos(float)",
+    "_cl_native_divide(float, float)",
+    "_cl_native_exp(float)",
+    "_cl_native_exp2(float)",
+    "_cl_native_exp10(float)",
+    "_cl_native_log(float)",
+    "_cl_native_log2(float)",
+    "_cl_native_log10(float)",
+    "_cl_native_powr(float, float)",
+    "_cl_native_recip(float)",
+    "_cl_native_rsqrt(float)",
+    "_cl_native_sin(float)",
+    "_cl_native_sqrt(float)",
+    "_cl_native_tan(float)",
+};
+#endif
 
 // Makes sure that the given vectorized function variant is declared and
 // marked as used. This is necessary so that the functions referenced in
