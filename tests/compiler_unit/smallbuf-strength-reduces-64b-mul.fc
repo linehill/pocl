@@ -31,11 +31,11 @@
 # The specialized one:
 CHECK: 8-1-1-smallbuf/parallel.bc
 CHECK: define void @_pocl_kernel__ZTSZ4mainEUlN4sycl3_V17nd_itemILi1EEEE__workgroup
-CHECK: mul i32
-CHECK-NOT: mul i64
+CHECK: mul {{i32|<2 x i32|<4 x i32|<8 x i32|<16 x i32|<vscale.* x i32}}
+CHECK-NOT: mul {{i64|<2 x i64|<4 x i64|<8 x i64|<16 x i64|<vscale.* x i64}}
 
 # The generic one still suffers from the 64b mul.
 CHECK: 0-0-0/parallel.bc
 CHECK: define void @_pocl_kernel__ZTSZ4mainEUlN4sycl3_V17nd_itemILi1EEEE__workgroup
-CHECK: mul i64
-CHECK-NOT: mul i32
+CHECK: mul {{i64|<2 x i64|<4 x i64|<8 x i64|<16 x i64|<vscale.* x i64}}
+CHECK-NOT: mul {{i32|<2 x i32|<4 x i32|<8 x i32|<16 x i32|<vscale.* x i32}}
