@@ -127,6 +127,15 @@ static bool modIsNvptx(llvm::Module *Mod) {
 #endif
 }
 
+static bool modIsX86_64(llvm::Module *Mod) {
+#if LLVM_MAJOR > 20
+  return Mod->getTargetTriple().getArch() == llvm::Triple::ArchType::x86_64;
+#else
+  return Mod->getTargetTriple().compare(0, 6, "x86_64") == 0;
+#endif
+}
+
+
 // fix mismatches between calling conv. This should not happen,
 // but sometimes can, esp with SPIR(-V) input
 static void fixCallingConv(llvm::Module *Mod, std::string &Log) {
@@ -960,6 +969,13 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
   for (const auto &Func : Lib->functions()) {
     std::string MangledName = Func.getName().str();
     std::string DemangledName = demangle(MangledName);
+
+    // on x86-64 skip float2 vector variants. This causes crashes inside SLP
+    // vectorizer at least with CTS test_basic but likely more cases
+    if (modIsX86_64(Program)
+        && DemangledName.find("float vector[2]") != std::string::npos) {
+        continue;
+    }
 
     // Determine which parameters are vectors. Unfortunately, we can't just
     // check it from Func directly due to the silly calling conventions on x86
