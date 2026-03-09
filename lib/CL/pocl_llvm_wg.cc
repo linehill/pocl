@@ -108,6 +108,11 @@ static bool verifyIR() {
   return pocl_get_bool_option("POCL_LLVM_VERIFY", LLVM_VERIFY_MODULE_DEFAULT);
 }
 
+static bool inlineBuiltins() {
+  return pocl_get_bool_option("POCL_LLVM_INLINE_BUILTINS", 1);
+}
+
+
 static bool enableDebugLogs() {
   bool Enable = pocl_get_bool_option("POCL_DEBUG_LLVM_PASSES", 0);
   Enable |= pocl_is_option_set("POCL_DEBUG_LLVM_OPTS");
@@ -284,7 +289,8 @@ llvm::Error PoCLModulePassManager::build(std::string PoclPipeline,
       break;
     }
   }
-  if (AppendInlining) {
+  if (AppendInlining && inlineBuiltins()) {
+    POCL_MSG_WARN("appending builtin inline\n");
     PoclPipeline += ",mark-all-inlineable";
     PoclPipeline += ",cgscc(inline)";
   }
