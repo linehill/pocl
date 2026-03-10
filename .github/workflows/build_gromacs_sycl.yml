@@ -1,0 +1,117 @@
+---
+name: Linux CPU / GROMACS SYCL benchmark
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths-ignore:
+      - 'doc/**'
+      - 'CHANGES'
+      - 'COPYING'
+      - 'CREDITS'
+      - 'LICENSE'
+      - 'README.*'
+      - 'tools/docker/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  CCACHE_BASEDIR: "${{ github.workspace }}"
+  CCACHE_DIR: "${{ github.workspace }}/../../../ccache_storage"
+  EXAMPLES_DIR: "${{ github.workspace }}/../../../examples"
+
+jobs:
+  GROMACS:
+    name: "LLVM 20 - GROMACS benchmarks on x86_64 CPU"
+    runs-on: [GROMACS_bench]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Load Env vars
+        id: load_env
+        run: |
+          cat ${{ github.workspace }}/.github/variables.txt >> $GITHUB_ENV
+
+      - name: CMake
+        id: cmake
+        run: |
+          runCMake() {
+            BUILD_FLAGS="-O2 -march=native"
+            cmake -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_BUILD_TYPE=Release "-DCMAKE_C_FLAGS_RELEASE=$BUILD_FLAGS" "-DCMAKE_CXX_FLAGS_RELEASE=$BUILD_FLAGS" \
+            -DTESTSUITE_SOURCE_BASEDIR=${EXAMPLES_DIR}/source -DTESTSUITE_BASEDIR=${EXAMPLES_DIR}/build_gromacs_bench \
+            -DENABLE_TESTSUITES=GROMACS-ACpp -DWITH_LLVM_CONFIG=/usr/bin/llvm-config-20 \
+            "$@" -B ${{ github.workspace }}/build ${{ github.workspace }}
+          }
+
+          rm -rf ${{ github.workspace }}/build
+          mkdir ${{ github.workspace }}/build
+          mkdir -p ${EXAMPLES_DIR}/build_gromacs_bench
+
+          runCMake
+
+      - name: Build PoCL
+        id: build_pocl
+        timeout-minutes: 30
+        run: |
+          cd ${{ github.workspace }}/build && make -j$(${{ github.workspace }}/.github/scripts/get_cpus.sh)
+
+      - name: Build GROMACS
+        id: build_gromacs
+        timeout-minutes: 60
+        run: |
+          cd ${{ github.workspace }}/build/examples/GROMACS-ACpp && make -j$(${{ github.workspace }}/.github/scripts/get_cpus.sh) GROMACS-ACpp
+
+      # Download previous benchmark result from cache (if exists)
+      # make sure to store with github.ref_name but always restore with 'main' branch,
+      # this way we're always comparing to latest main
+      - name: Download previous benchmark data
+        id: download_bench
+        uses: actions/cache@v5
+        with:
+          path: benchmark_cache
+          key: gromacs-acpp-${{ runner.name }}-llvm-20-x86_64-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            gromacs-acpp-${{ runner.name }}-llvm-20-x86_64-loopvec-next
+
+      - name: Run GROMACS benchmarks
+        id: run_GROMACS
+        env:
+          POCL_CACHE_DIR: "${{ runner.temp }}/GH_POCL_CACHE"
+        timeout-minutes: 60
+        run: |
+          rm -rf ${{ env.POCL_CACHE_DIR }}
+          mkdir ${{ env.POCL_CACHE_DIR }}
+
+          rm -f ${{ github.workspace }}/../../../examples/source/GROMACS-ACpp/samples/grappa-0024-rf.json
+          rm -f ${{ github.workspace }}/../../../examples/source/GROMACS-ACpp/samples/grappa-0024-rf.log
+
+          cd ${{ github.workspace }}/build && ctest -j1 -L GROMACS-ACpp -VV
+
+      # Run `github-action-benchmark` action
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          # What benchmark tool the output.txt came from
+          tool: 'customSmallerIsBetter'
+          # Where the output from the benchmark tool is stored
+          output-file-path: ${{ github.workspace }}/../../../examples/source/GROMACS-ACpp/samples/grappa-0024-rf.json
+          # Where the previous data file is stored
+          external-data-json-path: benchmark_cache/grappa-0024-rf.json
+          # GitHub API token required for non-PR runs
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Enable Job Summary for PRs
+          summary-always: true
+          # Workflow will fail when an alert happens
+          fail-on-alert: true
+          # Threshold which determines if an alert should happen
+          alert-threshold: '120%'
+
+      # Upload the updated cache file for the next job by actions/cache

@@ -90,8 +90,8 @@ endif()
 set(ALL_TESTSUITES
     AMDSDK3.0
     ASL arrayfire clBLAS CLBlast clFFT chipStar
-    conformance CloverLeaf Glow Halide IntelSVM
-    intel-compute-samples oneapi-samples
+    conformance CloverLeaf Glow GROMACS-ACpp Halide
+    IntelSVM intel-compute-samples oneapi-samples
     simple-sycl-samples dpcpp-book-samples
     opencl-book-samples OpenCV OpenVX_CTS
     Parboil piglit polybenchGPU PyOpenCL
