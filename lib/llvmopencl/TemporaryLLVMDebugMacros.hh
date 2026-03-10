@@ -28,8 +28,11 @@
 #endif
 
 #ifdef ENABLE_DEBUG
-#define LLVM_DEBUG(X) X
-#define dbgs() std::cerr << DEBUG_TYPE << ": "
+#define LLVM_DEBUG(...)                                                        \
+  do {                                                                         \
+    dbgs() << DEBUG_TYPE << ": ";                                              \
+    __VA_ARGS__;                                                               \
+  } while (false)
 #else
 #define LLVM_DEBUG(X)
 #endif

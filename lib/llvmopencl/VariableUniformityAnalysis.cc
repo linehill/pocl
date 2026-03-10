@@ -792,22 +792,6 @@ bool VariableUniformityAnalysisResult::invalidate(
 #endif
 }
 
-static std::string getNameOrAsOperand(Value *V) {
-#if LLVM_MAJOR >= 21
-  // Before LLVM-21 this method is guarded by NDEBUG.
-  return V->getNameOrAsOperand();
-#else
-  // Copied from Value::getNameOrAsOperand().
-  if (!V->getName().empty())
-    return std::string(V->getName());
-
-  std::string BBName;
-  raw_string_ostream OS(BBName);
-  V->printAsOperand(OS, false);
-  return OS.str();
-#endif
-}
-
 void VariableUniformityAnalysisResult::dump(Function *F) {
   dbgs() << "Function: " << F->getName() << "\n";
   for (auto &BB : *F) {

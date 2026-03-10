@@ -80,6 +80,7 @@ POP_COMPILER_DIAGS
 #include <string>
 #include <thread>
 #include <vector>
+#include <charconv>
 
 #include "linker.h"
 #include "spirv_parser.hh"
@@ -493,6 +494,8 @@ static void addStage2PassesToPipeline(cl_device_id Dev,
   // NOTE: if you add a new PoCL pass here,
   // don't forget to register it in registerPassBuilderPasses
   if (!Dev->spmd) {
+    addPass(Passes, "opt-builtins");
+
     // Simplifycfg seems counter-productive to loop structure analysis,
     // as it can sink code from the body to the latch, making that
     // basic block contain divergent instructions even though it originally
@@ -752,6 +755,12 @@ int pocl_llvm_extract_kernel_spirv(
 
 #endif // ENABLE_SPIRV
 
+/// Return the threshold for the small-grid kernel specialization.
+static size_t getSmallGridSpecThreshold(cl_device_id Device) {
+  size_t Threshold = pocl_get_size_t_option("POCL_SMALL_GRID_THRESHOLD", 0);
+  return Threshold ? Threshold : Device->grid_width_specialization_limit;
+}
+
 static int
 pocl_llvm_run_pocl_passes(llvm::Module *Bitcode,
                           _cl_command_run *RunCommand, // optional
@@ -789,11 +798,11 @@ pocl_llvm_run_pocl_passes(llvm::Module *Bitcode,
     // Compile a smallgrid version or a generic one?
     if (RunCommand->force_large_grid_wg_func ||
         pocl_cmd_max_grid_dim_width(RunCommand) >=
-            Device->grid_width_specialization_limit) {
+            getSmallGridSpecThreshold(Device)) {
       WGMaxGridDimWidth = 0; // The generic / large / unlimited size one.
     } else {
       // Limited grid dimension width by the device specific limit.
-      WGMaxGridDimWidth = Device->grid_width_specialization_limit;
+      WGMaxGridDimWidth = getSmallGridSpecThreshold(Device);
     }
   } else {
     WGDynamicLocalSize = true;

@@ -36,7 +36,6 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/InstrTypes.h>
-#include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
@@ -625,15 +624,6 @@ void WorkgroupImpl::addPlaceHolder(llvm::IRBuilder<> &Builder, llvm::Value *Val,
   Builder.CreateCall(DummyIA, Val);
 }
 
-// Adds Range metadata with range [Min, Max] to the given instruction.
-static void addRangeMetadata(llvm::Instruction *Instr, size_t Min, size_t Max) {
-  MDBuilder MDB(Instr->getContext());
-  size_t BitWidth = Instr->getType()->getIntegerBitWidth();
-  MDNode *Range =
-      MDB.createRange(APInt(BitWidth, Min), APInt(BitWidth, Max + 1));
-  Instr->setMetadata(LLVMContext::MD_range, Range);
-}
-
 // Gets the best-known maximum for the local size in the given
 // \p Dimension.
 size_t WorkgroupImpl::getMaxPossibleLocalSize(unsigned Dimension) {
@@ -699,7 +689,7 @@ void WorkgroupImpl::addRangeMetadataForPCField(llvm::Instruction *Instr,
     break;
   }
   if (Max > 0) {
-    addRangeMetadata(Instr, Min, Max);
+    setRangeMetadata(Instr, Min, Max);
 #if 0
     std::cerr << "Added range [" << Min << ", " << Max << "] " << std::endl;
     std::cerr << StructFieldIndex << " " << FieldIndex << std::endl;

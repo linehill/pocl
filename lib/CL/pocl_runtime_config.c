@@ -109,6 +109,18 @@ int pocl_get_int_option(const char *key, int default_value)
   return val ? atoi (val) : default_value;
 }
 
+/* Returns an integer value for the option with the given key string. */
+POCL_EXPORT
+size_t pocl_get_size_t_option(const char *key, size_t default_value) {
+  const char *val = getenv_helper (key);
+  if (!val)
+    return default_value;
+
+  char *end = NULL;
+  unsigned long long result = strtoull (val, &end, 10);
+  return result;
+}
+
 /* Returns a boolean value for the option with the given key string. */
 int
 pocl_get_bool_option (const char *key, int default_value)

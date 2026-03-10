@@ -391,6 +391,12 @@ pocl.
  some debugging information. Currently it prints the count of live cl_* objects
  by type (buffers, events, etc).
 
+- **POCL_SMALL_GRID_THRESHOLD**
+
+  Sets a threshold for "small-grid" kernel specialization. This
+  variable is intended for internal tests and should not be used in
+  OpenCL applications.
+
 - **POCL_STARTUP_DELAY**
 
   Default 0. If set to an integer N > 0, libpocl will make a pause of N seconds
@@ -454,6 +460,23 @@ pocl.
 
               For more information, please see lttng documentation:
               http://lttng.org/docs/#doc-tracing-your-own-user-application
+
+- **POCL_UNIFORMIZE_DIVERGENT_EXITS**
+
+  When set to 1, this option enables an experimental optimization
+  which attempts to improve auto-vectorization opportunities in
+  kernels with "early-exit" idiom - a branch in the beginning of the
+  kernels which checks for out-of-bounds work-items. For example::
+
+    kernel void some_kernel(global float *data, int n) {
+      int tid = get_global_id(0);
+      if (tid >= n)
+        return;
+      process(data[tid]);
+    }
+
+  This option is meaningful when the workgroup method is loopvec and
+  defaults to 0.
 
 - **POCL_VECTORIZER_REMARKS**
 

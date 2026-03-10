@@ -52,7 +52,7 @@ endforeach()
 
 
 if(ENABLE_SPIRV)
-  generate_cuda_spir_wrapper(SPIR_WRAPPER_FILE)
+  generate_cuda_spir_wrapper(SPIR_WRAPPER_FILE spir_wrapper_target)
   list(APPEND KERNEL_SOURCES "${SPIR_WRAPPER_FILE}")
 endif()
 
@@ -124,10 +124,21 @@ set(KERNEL_BC_LIST "${KERNEL_BC_LIST}" PARENT_SCOPE)
 # a target is needed...
 add_custom_target("kernel_${LLVM_TARGET}_sm30_ptx60lt"
   DEPENDS ${KERNEL_BC_SM30_PTX60LT})
+if(ENABLE_SPIRV)
+  add_dependencies("kernel_${LLVM_TARGET}_sm30_ptx60lt" spir_wrapper_target)
+endif()
+
 add_custom_target("kernel_${LLVM_TARGET}_sm30_ptx60_63"
   DEPENDS ${KERNEL_BC_SM30_PTX60_63})
+if(ENABLE_SPIRV)
+  add_dependencies("kernel_${LLVM_TARGET}_sm30_ptx60_63" spir_wrapper_target)
+endif()
+
 add_custom_target("kernel_${LLVM_TARGET}_sm70_ptx64"
   DEPENDS ${KERNEL_BC_SM70_PTX64})
+if(ENABLE_SPIRV)
+  add_dependencies("kernel_${LLVM_TARGET}_sm70_ptx64" spir_wrapper_target)
+endif()
 
 list(APPEND KERNEL_TARGET_LIST "kernel_${LLVM_TARGET}_sm30_ptx60lt")
 list(APPEND KERNEL_TARGET_LIST "kernel_${LLVM_TARGET}_sm30_ptx60_63")
