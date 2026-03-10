@@ -27,7 +27,7 @@ env:
 
 jobs:
   GROMACS:
-    name: "LLVM 20 - GROMACS benchmarks on x86_64 CPU"
+    name: "LLVM 22 - GROMACS benchmark on x86_64 CPU"
     runs-on: [GROMACS_bench]
 
     steps:
@@ -47,7 +47,7 @@ jobs:
             cmake -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_BUILD_TYPE=Release "-DCMAKE_C_FLAGS_RELEASE=$BUILD_FLAGS" "-DCMAKE_CXX_FLAGS_RELEASE=$BUILD_FLAGS" \
             -DTESTSUITE_SOURCE_BASEDIR=${EXAMPLES_DIR}/source -DTESTSUITE_BASEDIR=${EXAMPLES_DIR}/build_gromacs_bench \
-            -DENABLE_TESTSUITES=GROMACS-ACpp -DWITH_LLVM_CONFIG=/usr/bin/llvm-config-20 \
+            -DENABLE_TESTSUITES=GROMACS-ACpp -DWITH_LLVM_CONFIG=/usr/bin/llvm-config-22 \
             "$@" -B ${{ github.workspace }}/build ${{ github.workspace }}
           }
 
@@ -77,9 +77,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: benchmark_cache
-          key: gromacs-acpp-${{ runner.name }}-llvm-20-x86_64-${{ github.ref_name }}-${{ github.run_id }}
+          key: gromacs-acpp-${{ runner.name }}-llvm-22-x86_64-${{ github.ref_name }}-${{ github.run_id }}
           restore-keys: |
-            gromacs-acpp-${{ runner.name }}-llvm-20-x86_64-loopvec-next
+            gromacs-acpp-${{ runner.name }}-llvm-22-x86_64-loopvec-next
 
       - name: Run GROMACS benchmarks
         id: run_GROMACS
