@@ -135,6 +135,13 @@ static bool modIsX86_64(llvm::Module *Mod) {
 #endif
 }
 
+static bool modIsRISCV(llvm::Module *Mod) {
+#if LLVM_MAJOR > 20
+  return Mod->getTargetTriple().getArch() == llvm::Triple::ArchType::riscv64;
+#else
+  return Mod->getTargetTriple().compare(0, 6, "riscv64") == 0;
+#endif
+}
 
 // fix mismatches between calling conv. This should not happen,
 // but sometimes can, esp with SPIR(-V) input
@@ -974,6 +981,17 @@ addVectorFunctionVariantAttributes(llvm::Module *Program,
     // vectorizer at least with CTS test_basic but likely more cases
     if (modIsX86_64(Program)
         && DemangledName.find("float vector[2]") != std::string::npos) {
+        continue;
+    }
+
+    if (modIsRISCV(Program)) {
+      if (DemangledName.find("float vector[2]") != std::string::npos)
+        continue;
+      if (DemangledName.find("float vector[3]") != std::string::npos)
+        continue;
+      if (DemangledName.find("float vector[4]") != std::string::npos)
+        continue;
+      if (DemangledName.find("double vector[2]") != std::string::npos)
         continue;
     }
 
