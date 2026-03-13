@@ -96,7 +96,7 @@ POP_COMPILER_DIAGS
 // Use a separate PM instance to run the default optimization pipeline
 // TODO: this MUST be left enabled for now; disabling causes a few tests fail
 // should be investigated
-#define SEPARATE_OPTIMIZATION_FROM_POCL_PASSES
+//#define SEPARATE_OPTIMIZATION_FROM_POCL_PASSES
 
 // use a separate instance of llvm::TargetMachine; disabling this
 // may cause test failures / random crashes / ASanitizer complaints
@@ -107,6 +107,11 @@ using namespace llvm;
 static bool verifyIR() {
   return pocl_get_bool_option("POCL_LLVM_VERIFY", LLVM_VERIFY_MODULE_DEFAULT);
 }
+
+static bool inlineBuiltins() {
+  return pocl_get_bool_option("POCL_LLVM_INLINE_BUILTINS", 1);
+}
+
 
 static bool enableDebugLogs() {
   bool Enable = pocl_get_bool_option("POCL_DEBUG_LLVM_PASSES", 0);
@@ -172,6 +177,7 @@ public:
 #ifndef PER_STAGE_TARGET_MACHINE
                     TargetMachine *TM,
 #endif
+                    bool AppendInlining,
                     cl_device_id Dev);
   void run(llvm::Module &Bitcode);
 };
@@ -182,6 +188,7 @@ llvm::Error PoCLModulePassManager::build(std::string PoclPipeline,
 #ifndef PER_STAGE_TARGET_MACHINE
                                          TargetMachine *TM,
 #endif
+                                         bool AppendInlining,
                                          cl_device_id Dev) {
 
 #ifdef PER_STAGE_TARGET_MACHINE
@@ -282,6 +289,11 @@ llvm::Error PoCLModulePassManager::build(std::string PoclPipeline,
       break;
     }
   }
+  if (AppendInlining && inlineBuiltins()) {
+    POCL_MSG_WARN("appending builtin inline\n");
+    PoclPipeline += ",mark-all-inlineable";
+    PoclPipeline += ",cgscc(inline)";
+  }
 #endif
 
   return PB.parsePassPipeline(PM, StringRef(PoclPipeline));
@@ -345,7 +357,7 @@ llvm::Error TwoStagePoCLModulePassManager::build(
 #ifndef PER_STAGE_TARGET_MACHINE
                    TMach,
 #endif
-                   Dev);
+                   false, Dev);
   if (E1)
     return E1;
 
@@ -358,7 +370,7 @@ llvm::Error TwoStagePoCLModulePassManager::build(
 #ifndef PER_STAGE_TARGET_MACHINE
                       TMach,
 #endif
-                      Dev);
+                      true, Dev);
 }
 
 void TwoStagePoCLModulePassManager::run(llvm::Module &Bitcode) {

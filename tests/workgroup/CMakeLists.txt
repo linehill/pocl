@@ -32,6 +32,7 @@ add_compile_options(${OPENCL_CFLAGS})
 add_executable("run_kernel" "run_kernel.c")
 target_link_libraries("run_kernel" ${POCLU_LINK_OPTIONS})
 
+# TODO: match this using CPU flags instead of CPU uarch
 if((LLVM_VERSION VERSION_GREATER_EQUAL 21.0) AND
     (${TESTED_CPU_UARCH} MATCHES "(broadwell|znver3)"))
   # Check the kernel emits a vector load instead of a (masked) gather.

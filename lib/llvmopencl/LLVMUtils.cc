@@ -55,6 +55,7 @@ IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include "KernelCompilerUtils.h"
 #include "LLVMUtils.h"
 #include "LoopBarriers.h"
+#include "MarkAllInlineable.hh"
 #include "MinLegalVecSize.hh"
 #include "OptimizeBuiltins.h"
 #include "OptimizeWorkItemGVars.h"
@@ -507,6 +508,8 @@ void markFunctionAlwaysInline(llvm::Function *F) {
       // would prevent the attribute from working correctly.
       if (!CI->hasFnAttr("vector-function-abi-variant"))
         CI->removeFnAttr(Attribute::NoInline);
+
+      CI->removeFnAttr(Attribute::NoBuiltin);
       CI->removeFnAttr(Attribute::OptimizeNone);
     }
   }
@@ -738,6 +741,7 @@ void registerPassBuilderPasses(llvm::PassBuilder &PB) {
   SubCFGFormation::registerWithPB(PB);
   Workgroup::registerWithPB(PB);
   PoCLCFGPrinter::registerWithPB(PB);
+  MarkAllInlineable::registerWithPB(PB);
 }
 
 void registerFunctionAnalyses(llvm::PassBuilder &PB) {

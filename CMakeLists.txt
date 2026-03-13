@@ -2575,6 +2575,11 @@ if(ENABLE_HOST_CPU_DEVICES)
     # have selected at CMake time. This affects some of the FileCheck
     # tests only.
     set(TESTED_CPU_UARCH "${SELECTED_HOST_CPU}")
+    # feature detection allows matching on wider groups of CPUs (e.g. AVX2)
+    # this creates many CMake variables, one per CPU flag,
+    # named TARGET_CPU_HAS_FEATURE_{flag}
+    include(CPUFeatureDetect)
+    genCPUFeatures(TARGET_CPU_HAS)
 endif()
 
 if(ENABLE_TESTS)

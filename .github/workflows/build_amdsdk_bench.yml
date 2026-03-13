@@ -93,7 +93,9 @@ jobs:
         with:
           path: benchmark_cache
           key: amdsdk_bench-${{ runner.name }}-llvm-${{ matrix.llvm }}-${{ matrix.device }}-${{ github.ref_name }}-${{ github.run_id }}
-          restore-keys: amdsdk_bench-${{ runner.name }}-llvm-${{ matrix.llvm }}-${{ matrix.device }}-main
+          restore-keys: |
+            amdsdk_bench-${{ runner.name }}-llvm-${{ matrix.llvm }}-${{ matrix.device }}-main
+            amdsdk_bench-${{ runner.name }}-llvm-${{ matrix.llvm }}-${{ matrix.device }}-loopvec-next
 
       - name: Run AMDSDK benchmarks
         env:
