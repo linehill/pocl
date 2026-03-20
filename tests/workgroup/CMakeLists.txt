@@ -348,6 +348,13 @@ add_test_pocl(NAME "workgroup/dynamic_wiloop_bounds"
              COMMAND "run_kernel" "dynamic_wiloop_bounds.cl" 1 4 4 4
              WORKITEM_HANDLER "loopvec")
 
+add_test_pocl(NAME "workgroup/remat_gid"
+  COMMAND "run_kernel" "remat_gid.cl" 1 128 1 1
+  LLVM_FILECHECKS "no_context_arrays.fc"
+  ONLY_FILECHECKS 1
+  WORKITEM_HANDLER "loopvec"
+  ENVIRONMENT POCL_UNIFORMIZE_DIVERGENT_EXITS=1)
+
 set(VARIANTS "loopvec;fiber")
 foreach(VARIANT ${VARIANTS})
   set(TEST_LIST "workgroup/ballot_${VARIANT}")
