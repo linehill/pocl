@@ -343,14 +343,10 @@ static bool pointsToContextArray(llvm::Value *Ptr, unsigned Depth = 0) {
 
 /// Return true if the 'Ptr' is a builtin variable safe for rematerialization.
 static bool isRematerializableBuiltinVar(llvm::Value *Ptr) {
-  // Some builtin variables are not safe to rematerialize - for example,
-  // _global_id_* variables in linear WI-loops. We could improve
-  // rematerialization of _global_id_* but we need to either 1) know the WI-loop
-  // type to be generated before hand or 2) have the WI-loop generator to be
-  // aware of new builtin variable uses.
 
+  // A builtin is safe to rematerialize if it doesn't depend on WI-loop
+  // variables.
   static const llvm::StringSet RematerializableBuiltinVars({
-      LLID_G_NAME,
       LS_G_NAME(0),
       LS_G_NAME(1),
       LS_G_NAME(2),
@@ -358,9 +354,6 @@ static bool isRematerializableBuiltinVar(llvm::Value *Ptr) {
       GROUP_ID_G_NAME(1),
       GROUP_ID_G_NAME(2),
       SG_S_NAME,
-      LID_G_NAME(0),
-      LID_G_NAME(1),
-      LID_G_NAME(2),
   });
 
   auto *GV = dyn_cast<GlobalVariable>(Ptr);
@@ -411,9 +404,6 @@ llvm::Value *WorkitemHandler::tryToRematerialize(
       return nullptr;                                                          \
   } while (0)
 
-  // Set to true if Def is a LoadInst and can be rematerialized.
-  bool CanRematLoad = false;
-
   // A call without arguments: Setup a pre-check before cloning to see if we
   // can succeed.
   if (CanDoIt == nullptr && Depth == nullptr) {
@@ -432,6 +422,11 @@ llvm::Value *WorkitemHandler::tryToRematerialize(
   if (Depth != nullptr && *Depth > 10)
     UNABLE_TO_REMAT("too deep");
 
+  // True if we are rematerializing a work-item ID definition.
+  bool HasLocalIDRef = false;
+
+  bool SkipMemoryEffectChecks = false;
+
   if (llvm::CallInst *Call = dyn_cast<CallInst>(Def)) {
     auto *Callee = Call->getCalledFunction();
     if (Callee == nullptr || (Callee->getName() != GID_BUILTIN_NAME &&
@@ -442,6 +437,17 @@ llvm::Value *WorkitemHandler::tryToRematerialize(
                               Callee->getName() != LS_BUILTIN_NAME)) {
       UNABLE_TO_REMAT("called an unsupported function");
     }
+
+    HasLocalIDRef = Callee->getName() == GID_BUILTIN_NAME ||
+                    Callee->getName() == LID_BUILTIN_NAME;
+
+    // The builtins in question don't really read, write or have side-effects
+    // logically.
+    //
+    // TODO: could get away with this check-skip by attributing the builtins
+    //       with appropriate memory(...) attributes.
+    SkipMemoryEffectChecks = true;
+
   } else if (isa<Constant>(Def) || isa<Argument>(Def)) {
     ABLE_TO_REMAT();
     // No need to clone an uniform value, we can refer to the original directly.
@@ -457,19 +463,21 @@ llvm::Value *WorkitemHandler::tryToRematerialize(
     //
     // 1) Context variable array loads.
     //
-    // 2) Some loads of builtin variables - e.g. _local_linear_id but not
-    //    _global_id_x without knowing the kind of WI-loop to be created.
+    // 2) Loads from builtin variables that stay constant.
     //
     // 3) Other loads that do not alias with the stores in the target PR or in
     //    in the way to it - e.g. loads from a global buffer witch the target PR
     //    writes into.
     auto *Ptr = LD->getPointerOperand();
-    CanRematLoad = pointsToContextArray(Ptr, *Depth);                 // (1)
+    bool CanRematLoad = pointsToContextArray(Ptr, *Depth);            // (1)
     CanRematLoad = CanRematLoad || isRematerializableBuiltinVar(Ptr); // (2)
     // TODO: (3)
 
     if (!CanRematLoad)
       UNABLE_TO_REMAT("potentially unsafe load to rematerialize");
+
+    SkipMemoryEffectChecks = true;
+
   } else if (Before && VUA && DT && VUA->isUniform(K, Def) &&
              DT->dominates(Def, Before)) {
     ABLE_TO_REMAT();
@@ -481,9 +489,10 @@ llvm::Value *WorkitemHandler::tryToRematerialize(
   if (Inst == nullptr)
     UNABLE_TO_REMAT("unsupported value type");
 
-  if (Inst->mayWriteToMemory() || Inst->mayHaveSideEffects() ||
-      (Inst->mayReadFromMemory() && !CanRematLoad))
-    UNABLE_TO_REMAT("has side-effects");
+  if (!SkipMemoryEffectChecks)
+    if (Inst->mayWriteToMemory() || Inst->mayHaveSideEffects() ||
+        Inst->mayReadFromMemory())
+      UNABLE_TO_REMAT("has side-effects");
 
   if (Depth != nullptr)
     (*Depth)++;
@@ -510,6 +519,11 @@ llvm::Value *WorkitemHandler::tryToRematerialize(
     else if (!CanDoIt)
       return nullptr;
   }
+
+  if (Copy && HasLocalIDRef)
+    if (auto *PR = regionOfBlock(Copy->getParent()))
+      PR->markLocalIDReferences();
+
   return Copy;
 }
 
@@ -1106,28 +1120,10 @@ WorkitemHandler::createContextArrayGEP(llvm::AllocaInst *CtxArrayAlloca,
   std::vector<llvm::Value *> GEPArgs;
   IRBuilder<> Builder(Before);
 
-  bool InvariantBounds =
-      hasInvariantWILoopBounds(Before->getParent()->getParent());
-
   if (!WGDynamicLocalSize)
     GEPArgs.push_back(llvm::ConstantInt::get(ST, 0));
 
-  if (WIH == WorkitemHandlerType::LOOPS && !InvariantBounds) {
-    ParallelRegion *Region = regionOfBlock(Before->getParent());
-    GEPArgs.push_back(getLinearWiIndex(Builder, M, Region, WIH));
-  } else if (WGDynamicLocalSize) {
-    if (WIH == WorkitemHandlerType::FIBER)
-      GEPArgs.push_back(getLinearWiIndex(Builder, M, nullptr, WIH));
-    else
-      GEPArgs.push_back(getLinearWIIndexInRegion(Before));
-  } else {
-    if (WIH == WorkitemHandlerType::FIBER) {
-      llvm::Value *LinearIndex = Builder.CreateLoad(ST, LocLinID);
-      GEPArgs.push_back(LinearIndex);
-    } else {
-      GEPArgs.push_back(getLinearWIIndexInRegion(Before));
-    }
-  }
+  GEPArgs.push_back(createLocalLinearID(M, BasicBlock::iterator(Before)));
 
   if (AlignPadding)
     GEPArgs.push_back(

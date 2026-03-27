@@ -991,7 +991,6 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
   bool Changed = false;
 
   Changed = handleLocalMemAllocas() || Changed;
-  Changed = handleWorkitemFunctions() || Changed;
 
 #ifdef POCL_KERNEL_COMPILER_DUMP_CFGS
   dumpCFG(F, "_before_wiloops" + DotSuffix + ".dot", nullptr,
@@ -1020,6 +1019,8 @@ bool WorkitemLoopsImpl::processFunction(Function &F) {
     LLVM_DEBUG(dbgs() << "#### after multi-region variable fixing:\n");
     LLVM_DEBUG(F.dump());
   }
+
+  Changed = handleWorkitemFunctions() || Changed;
 
   // In SG-loops, kernel level loops have to be executed separately for each
   // subgroup. In order to achieve this, we have to reset the loop iterators so
@@ -1388,19 +1389,25 @@ bool WorkitemLoopsImpl::fixMultiRegionVariables() {
 }
 
 llvm::Value *
-WorkitemLoopsImpl::getLinearWIIndexInRegion(llvm::Instruction *Instr) {
-  ParallelRegion *ParRegion = regionOfBlock(Instr->getParent());
-  if (ParRegion != nullptr) {
-    return ParRegion->getOrCreateIDLoad(LLID_G_NAME);
+WorkitemLoopsImpl::getLinearWIIndexInRegion(llvm::Instruction *Before) {
+
+  ParallelRegion *ParRegion = regionOfBlock(Before->getParent());
+  auto *F = Before->getParent()->getParent();
+  IRBuilder<> Builder(Before);
+
+  if (hasInvariantWILoopBounds(F)) {
+    // The PR executes all WIs so we can implement LLID as loop variable that is
+    // incremented by one by the innermost WI-loop structure.
+    if (ParRegion != nullptr)
+      return ParRegion->getOrCreateIDLoad(LLID_G_NAME);
+
+    return Builder.CreateLoad(ST, LLID);
   }
 
-  // LLID is not suitable for partial-WG execution because the variable is
-  // updated by incrementing by one in the innermost WI-loop causing it to be
-  // out-of-sync as some WIs are skipped.
-  assert(hasInvariantWILoopBounds(Instr->getParent()->getParent()));
-
-  IRBuilder<> Builder(Instr);
-  return Builder.CreateLoad(ST, LLID);
+  // Compute the LLID from local IDs because the PR is potentially partially
+  // executed.
+  return getLinearWiIndex(Builder, F->getParent(), ParRegion,
+                          WorkitemHandlerType::LOOPS);
 }
 
 llvm::Instruction *

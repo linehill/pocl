@@ -82,6 +82,7 @@ class Kernel;
 
     bool HasLocalIDReferences() { return RefersLocalIDs; }
 
+    void markLocalIDReferences() { RefersLocalIDs = true; }
     void markNoLocalIDReferences() { RefersLocalIDs = false; }
 
     const_iterator begin() const { return BBs_.begin(); }

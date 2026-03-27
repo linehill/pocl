@@ -210,6 +210,9 @@ llvm::Value *createBaseGlobalID(llvm::Module *M, unsigned Dim,
 llvm::Value *createGlobalID(llvm::Module *M, llvm::Value *Dim,
                             llvm::BasicBlock::iterator InsPt);
 
+llvm::Value *createLocalLinearID(llvm::Module *M,
+                                 llvm::BasicBlock::iterator InsPt);
+
 std::string getNameOrAsOperand(llvm::Value *V);
 
 /**

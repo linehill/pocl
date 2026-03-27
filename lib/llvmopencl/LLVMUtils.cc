@@ -1041,6 +1041,21 @@ bool hasCallTo(Function *F, StringRef CalleeName) {
 }
 
 /// Creates a call to a function with a function type corresponding to
+/// 'size_t(void)' in OpenCL C.
+static Value *createWorkItemFnCall(Module *M, const char *Name,
+                                   BasicBlock::iterator InsPt) {
+  assert(Name);
+  auto *RetT = SizeT(M);
+
+  FunctionType *FTy = FunctionType::get(RetT, {}, /*isVarArg=*/false);
+  auto FC = M->getOrInsertFunction(Name, FTy);
+  assert(FC.getFunctionType() == FTy && "Function type mismatch!");
+
+  IRBuilder<> B(InsPt->getParent(), InsPt);
+  return B.CreateCall(FC, {}, Name);
+}
+
+/// Creates a call to a function with a function type corresponding to
 /// 'size_t(int)' in OpenCL C.
 static Value *createWorkItemFnCall(Module *M, const char *Name, Value *ArgV,
                                    BasicBlock::iterator InsPt) {
@@ -1086,6 +1101,12 @@ llvm::Value *createGlobalID(llvm::Module *M, Value *Dim,
                             llvm::BasicBlock::iterator InsPt) {
   IRBuilder<> B(InsPt->getParent(), InsPt);
   return createWorkItemFnCall(M, GID_BUILTIN_NAME, Dim, InsPt);
+}
+
+llvm::Value *createLocalLinearID(llvm::Module *M,
+                                 llvm::BasicBlock::iterator InsPt) {
+  IRBuilder<> B(InsPt->getParent(), InsPt);
+  return createWorkItemFnCall(M, LLID_BUILTIN_NAME, InsPt);
 }
 
 /// Same as Value::getNameOrAsOperand() but available with non-debug LLVM before
