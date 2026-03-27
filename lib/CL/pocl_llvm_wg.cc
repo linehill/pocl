@@ -149,6 +149,15 @@ static TargetMachine *GetTargetMachine(const char* TTriple,
   return TM;
 }
 
+#if LLVM_MAJOR >= 21
+/// Return a flag that indicates if loop-interchange should be enabled.
+static bool getLoopInterchangeOption() {
+  // Default the flag to false for now as there are potential correctness issues
+  // with the loop-interchange. A good time to switch this to true is once
+  // https://github.com/llvm/llvm-project/pull/124911 lands.
+  return pocl_get_bool_option("POCL_LOOP_INTERCHANGE", 0);
+}
+#endif
 
 class PoCLModulePassManager {
   // Create the analysis managers.
@@ -203,6 +212,10 @@ llvm::Error PoCLModulePassManager::build(std::string PoclPipeline,
   PTO.UnifiedLTO = false;
   PTO.LoopInterleaving = PTO.SLPVectorization = PTO.LoopVectorization =
       Vectorize = EnableVectorizers;
+#if LLVM_MAJOR >= 21
+  PTO.LoopInterchange = getLoopInterchangeOption();
+#endif
+
   OptimizeLevel = OLevel;
   SizeLevel = SLevel;
 
@@ -1322,6 +1335,9 @@ void populateModulePM([[maybe_unused]] void *Passes, void *Module,
   PTO.LoopInterleaving = Vectorize;
   PTO.SLPVectorization = Vectorize;
   PTO.LoopVectorization = Vectorize;
+#if LLVM_MAJOR >= 21
+  PTO.LoopInterchange = getLoopInterchangeOption();
+#endif
 
   // Create the analysis managers.
   LoopAnalysisManager LAM;
