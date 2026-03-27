@@ -309,6 +309,17 @@ pocl.
   kernel bitcode (parallel.bc) only with some drivers).
   Defaults to 1 if CMAKE_BUILD_TYPE=Debug and 0 otherwise.
 
+- **POCL_LOOP_INTERCHANGE**
+
+  Enables loop-interchange pass on CPU device kernel compilation for
+  improving auto-vectorization opportunities. Beware, enabling this
+  option may currently cause incorrect kernel behavior due to bugs in
+  the pass.
+
+  This option is effective on LLVM-21 and later version.
+
+  Defaults to 0.
+
 - **POCL_MAX_WORK_GROUP_SIZE**
 
  Forces the maximum WG size returned by the device or kernel work group queries
