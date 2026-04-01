@@ -179,6 +179,77 @@ pocl_cpu_setup_rm_and_ftz (cl_device_id dev, cl_program prog)
   pocl_set_default_rm ();
 }
 
+size_t
+pocl_parallel_memcpy_threshold ()
+{
+  /* Threshold in MB at which to switch to parallel memcpy */
+  int option = pocl_get_int_option ("POCL_CPU_PMEMCPY_THRESHOLD_MB", 32);
+  if (option <= 0)
+    option = 32;
+  return (unsigned)option << 20;
+}
+
+unsigned
+pocl_parallel_memcpy_nthreads (cl_device_id device, unsigned num_threads)
+{
+  /* simple heuristics to determine suitable
+   * parallelism for memcpy operations:
+   *
+   * use 4 threads if NCPUs <= 16
+   * for CPUs with >16 NCPUs, use NCPUs/4
+   *
+   * can be overriden by POCL_CPU_PMEMCPY_THREADS env var
+   *
+   * limited to <1, NCPUs>
+   */
+  unsigned num_memcpy_threads = 4;
+  if (num_threads > 16)
+    {
+      num_memcpy_threads = num_threads / 4;
+    }
+  int preferred_memcpy_threads
+    = pocl_get_int_option ("POCL_CPU_PMEMCPY_THREADS", 0);
+  if (preferred_memcpy_threads > 0)
+    num_memcpy_threads = preferred_memcpy_threads;
+  if (num_memcpy_threads > num_threads)
+    num_memcpy_threads = num_threads;
+  return num_memcpy_threads;
+}
+
+void
+pocl_extract_memcpy_parameters (_cl_command_node *cmd,
+                                size_t *size,
+                                const void **src,
+                                void **dst)
+{
+  int id = cmd->device->global_mem_id;
+  switch (cmd->type)
+    {
+    case CL_COMMAND_READ_BUFFER:
+      *size = cmd->command.read.size;
+      *src = cmd->command.read.src->device_ptrs[id].mem_ptr
+             + cmd->command.read.offset;
+      *dst = cmd->command.read.dst_host_ptr;
+      break;
+    case CL_COMMAND_WRITE_BUFFER:
+      *size = cmd->command.write.size;
+      *src = cmd->command.write.src_host_ptr;
+      *dst = cmd->command.write.dst->device_ptrs[id].mem_ptr
+             + cmd->command.write.offset;
+      break;
+    case CL_COMMAND_COPY_BUFFER:
+      *size = cmd->command.copy.size;
+      *src = cmd->command.copy.src->device_ptrs[id].mem_ptr
+             + cmd->command.copy.src_offset;
+      *dst = cmd->command.copy.dst->device_ptrs[id].mem_ptr
+             + cmd->command.copy.dst_offset;
+    default:
+      *size = 0;
+      *src = NULL;
+      *dst = NULL;
+    }
+}
+
 #ifdef HAVE_LIBXSMM
 #include <libxsmm.h>
 #endif

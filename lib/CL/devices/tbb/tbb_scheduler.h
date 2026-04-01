@@ -63,6 +63,7 @@ extern "C"
 
     unsigned grain_size;
     unsigned num_tbb_threads;
+    unsigned num_memcpy_threads;
     pocl_tbb_partitioner selected_partitioner;
 
     struct TBBArena *tbb_arena;
@@ -75,7 +76,12 @@ extern "C"
 
   size_t tbb_get_num_threads (pocl_tbb_scheduler_data *SchedData);
 
-  void tbb_init_arena (pocl_tbb_scheduler_data *SchedData, int OnePerNode, int MaxThreads);
+  size_t tbb_get_num_memcpy_threads (pocl_tbb_scheduler_data *SchedData);
+
+  void tbb_init_arena (pocl_tbb_scheduler_data *SchedData,
+                       int OnePerNode,
+                       int MaxThreads,
+                       int TotalMemcpyThreads);
 
   void tbb_release_arena (pocl_tbb_scheduler_data *SchedData);
 

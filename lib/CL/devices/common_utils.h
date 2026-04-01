@@ -71,6 +71,23 @@ struct kernel_run_command
   size_t wgs_dealt;
 };
 
+typedef struct memory_copy_command
+{
+  struct memory_copy_command *prev;
+  struct memory_copy_command *next;
+
+  _cl_command_node *cmd;
+  const void *src;
+  void *dst;
+  // the size parameter of the whole copy
+  size_t size;
+  // the offset at which the next thread should start copying a chunk
+  size_t start;
+  /* each thread working on this memory_copy_command holds a reference */
+  unsigned ref_count;
+
+} memory_copy_command;
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -88,6 +105,11 @@ void free_kernel_run_command (kernel_run_command *k);
   (kernel_run_command *)pocl_aligned_malloc (HOST_CPU_CACHELINE_SIZE,         \
                                              sizeof (kernel_run_command))
 #define free_kernel_run_command(k) pocl_aligned_free (k)
+#define new_memory_copy_command()                                             \
+  (memory_copy_command *)pocl_aligned_malloc (HOST_CPU_CACHELINE_SIZE,        \
+                                              sizeof (memory_copy_command))
+#define free_memory_copy_command(k) pocl_aligned_free (k)
+
 #endif
 
 POCL_EXPORT
@@ -99,6 +121,19 @@ int pocl_cpu_supports_dbk (cl_device_id device,
                            const void *kernel_attributes);
 POCL_EXPORT
 int pocl_cpu_build_defined_builtin (cl_program program, cl_uint device_i);
+
+POCL_EXPORT
+size_t pocl_parallel_memcpy_threshold ();
+
+POCL_EXPORT
+unsigned pocl_parallel_memcpy_nthreads (cl_device_id device,
+                                        unsigned num_threads);
+
+POCL_EXPORT
+void pocl_extract_memcpy_parameters (_cl_command_node *cmd,
+                                     size_t *size,
+                                     const void **src,
+                                     void **dst);
 
 POCL_EXPORT
 int pocl_cpu_execute_dbk (cl_program program,

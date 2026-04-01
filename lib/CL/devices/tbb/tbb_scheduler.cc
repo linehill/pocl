@@ -24,6 +24,7 @@
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#include <vector>
 #endif
 
 #include <algorithm>
@@ -34,6 +35,7 @@
 // required for older versions of TBB
 #define TBB_PREVIEW_NUMA_SUPPORT 1
 
+#include <tbb/blocked_range.h>
 #include <tbb/blocked_range3d.h>
 #include <tbb/parallel_for.h>
 #include <tbb/partitioner.h>
@@ -55,6 +57,7 @@
 struct TBBArena {
   tbb::numa_node_id NumaIdx;
   tbb::task_arena Arena;
+  tbb::task_arena MemcpyArena;
 };
 
 static std::vector<tbb::numa_node_id> NumaIndexes;
@@ -66,9 +69,11 @@ size_t tbb_get_numa_nodes() {
   return NumaIndexes.size();
 }
 
-void tbb_init_arena(pocl_tbb_scheduler_data *SchedData, int OnePerNode, int MaxThreads) {
+void tbb_init_arena(pocl_tbb_scheduler_data *SchedData, int OnePerNode,
+                    int MaxThreads, int TotalMemcpyThreads) {
   TBBArena *TBBA = new TBBArena;
   SchedData->tbb_arena = TBBA;
+  unsigned MemcpyThreads = TotalMemcpyThreads;
   if (OnePerNode) {
     assert(LastInitializedNumaIndex < NumaIndexes.size());
     TBBA->NumaIdx = NumaIndexes[LastInitializedNumaIndex];
@@ -76,17 +81,36 @@ void tbb_init_arena(pocl_tbb_scheduler_data *SchedData, int OnePerNode, int MaxT
     if (MaxThreads > 0)
       Cont.max_concurrency = MaxThreads;
     TBBA->Arena.initialize(Cont);
+    ++LastInitializedNumaIndex;
+    // get MemcpyThreads per NUMA node
+    MemcpyThreads /= NumaIndexes.size();
   } else {
     TBBA->NumaIdx = UINT32_MAX;
     TBBA->Arena.initialize();
   }
-  ++LastInitializedNumaIndex;
+
+  MemcpyThreads = std::min(MemcpyThreads, (unsigned)MaxThreads);
+  auto MemcpyCont = tbb::task_arena::constraints(TBBA->NumaIdx);
+  if (MemcpyThreads > 0)
+    MemcpyCont.max_concurrency = MemcpyThreads;
+  TBBA->MemcpyArena.initialize(MemcpyCont);
+  MemcpyThreads = TBBA->MemcpyArena.max_concurrency();
+
+  POCL_MSG_PRINT_MEMORY("CPU TBB driver @ NumaNode %u: using %u threads out of "
+                        "%u for memcpy operations\n",
+                        TBBA->NumaIdx, MemcpyThreads, MaxThreads);
 }
 
 size_t tbb_get_num_threads(pocl_tbb_scheduler_data *SchedData) {
   TBBArena *TBBA = SchedData->tbb_arena;
   return TBBA->Arena.max_concurrency();
 }
+
+size_t tbb_get_num_memcpy_threads(pocl_tbb_scheduler_data *SchedData) {
+  TBBArena *TBBA = SchedData->tbb_arena;
+  return TBBA->MemcpyArena.max_concurrency();
+}
+
 /* Internal functions */
 
 /* The sole purpose of this embedded class is to provide a function object that
@@ -145,6 +169,18 @@ public:
   }
   WorkGroupScheduler(kernel_run_command *K, const pocl_tbb_scheduler_data *D)
       : RunCmd(K), SchedData(D) {}
+};
+
+class MemcpyScheduler {
+  memory_copy_command *MemCmd;
+
+public:
+  void operator()(const tbb::blocked_range<size_t> &r) const {
+    size_t Offset = r.begin();
+    size_t Size = r.end() - r.begin();
+    memcpy((char *)MemCmd->dst + Offset, (char *)MemCmd->src + Offset, Size);
+  }
+  MemcpyScheduler(memory_copy_command *K) : MemCmd(K) {}
 };
 
 static void finalizeKernelCommand(kernel_run_command *RunCmd) {
@@ -228,8 +264,8 @@ prepareKernelCommand(pocl_tbb_scheduler_data *SchedData,
   return RunCmd;
 }
 
-static void execCommand(pocl_tbb_scheduler_data *SchedData,
-                        kernel_run_command *RunCmd) {
+static void execKernelCommand(pocl_tbb_scheduler_data *SchedData,
+                              kernel_run_command *RunCmd) {
   /* Note: Grain size variation could be allowed for each dimension
    * individually. */
   if (SchedData->grain_size) {
@@ -321,6 +357,8 @@ static int runSingleCommand(pocl_tbb_scheduler_data *SchedData) {
 
   POCL_LOCK(SchedData->wq_lock_fast);
   int DoExit = 0;
+  /* Threshold in MB at which to switch to parallel memcpy */
+  size_t ParallelMemcpyThresholdBytes = pocl_parallel_memcpy_threshold();
 
 RETRY:
   DoExit = SchedData->meta_thread_shutdown_requested;
@@ -338,8 +376,36 @@ RETRY:
       RunCmd = prepareKernelCommand(SchedData, Cmd);
       if (RunCmd) {
         TBBA->Arena.execute(
-            [RunCmd, SchedData]() { execCommand(SchedData, RunCmd); });
+            [RunCmd, SchedData]() { execKernelCommand(SchedData, RunCmd); });
         finalizeKernelCommand(RunCmd);
+      }
+    } else if ((SchedData->num_memcpy_threads > 1) &&
+               (Cmd->type == CL_COMMAND_READ_BUFFER ||
+                Cmd->type == CL_COMMAND_WRITE_BUFFER ||
+                Cmd->type == CL_COMMAND_COPY_BUFFER)) {
+      size_t Size = 0;
+      const void *Src = NULL;
+      void *Dst = NULL;
+      pocl_extract_memcpy_parameters(Cmd, &Size, &Src, &Dst);
+      if (Size < ParallelMemcpyThresholdBytes)
+        TBBA->Arena.execute([Cmd]() { pocl_exec_command(Cmd); });
+      else {
+        memory_copy_command *MemCmd = new_memory_copy_command();
+        MemCmd->cmd = Cmd;
+        MemCmd->size = Size;
+        MemCmd->src = Src;
+        MemCmd->dst = Dst;
+        MemCmd->start = 0;
+        MemCmd->next = NULL;
+        MemCmd->prev = NULL;
+        pocl_update_event_running(Cmd->sync.event.event);
+        TBBA->MemcpyArena.execute([MemCmd, Size]() {
+          tbb::parallel_for(tbb::blocked_range<size_t>(0, Size, 4096),
+                            MemcpyScheduler(MemCmd), tbb::static_partitioner());
+        });
+        POCL_UPDATE_EVENT_COMPLETE_MSG(Cmd->sync.event.event,
+                                       "Parallel Memory Copy     ");
+        free_memory_copy_command(MemCmd);
       }
     } else {
       TBBA->Arena.execute([Cmd]() { pocl_exec_command(Cmd); });

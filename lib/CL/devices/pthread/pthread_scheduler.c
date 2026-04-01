@@ -66,6 +66,7 @@ struct pool_thread_data
   /* printf buffer*/
   void *printf_buffer;
   size_t thread_stack_size;
+  unsigned num_memcpy_threads;
 };
 
 typedef struct scheduler_data_
@@ -75,6 +76,7 @@ typedef struct scheduler_data_
   POCL_ALIGNAS(HOST_CPU_CACHELINE_SIZE) _cl_command_node *work_queue;
 
   unsigned num_threads;
+  unsigned num_memcpy_threads;
   unsigned printf_buf_size;
   size_t local_mem_size;
 
@@ -84,6 +86,7 @@ typedef struct scheduler_data_
   struct pool_thread_data *thread_pool;
 #ifndef ENABLE_HOST_CPU_DEVICES_OPENMP
   kernel_run_command *kernel_queue;
+  memory_copy_command *memcpy_queue;
 #endif
 
   POCL_ALIGNAS(HOST_CPU_CACHELINE_SIZE) pocl_barrier_t init_barrier;
@@ -121,6 +124,13 @@ pthread_scheduler_init (cl_device_id device)
   scheduler.printf_buf_size = device->printf_buffer_size;
   assert (device->printf_buffer_size > 0);
 
+  scheduler.num_memcpy_threads
+    = pocl_parallel_memcpy_nthreads (device, device->max_compute_units);
+
+  POCL_MSG_PRINT_MEMORY (
+    "CPU driver: using %u threads out of %u for memcpy operations\n",
+    scheduler.num_memcpy_threads, device->max_compute_units);
+
   /* safety margin - aligning pointers later (in kernel arg setup)
    * may require more local memory than actual local mem size.
    * TODO fix this */
@@ -129,6 +139,10 @@ pthread_scheduler_init (cl_device_id device)
   POCL_INIT_BARRIER (scheduler.init_barrier, num_worker_threads + 1);
 
   scheduler.worker_out_of_memory = 0;
+#ifndef ENABLE_HOST_CPU_DEVICES_OPENMP
+  scheduler.kernel_queue = NULL;
+  scheduler.memcpy_queue = NULL;
+#endif
 
   for (i = 0; i < num_worker_threads; ++i)
     {
@@ -198,6 +212,15 @@ pthread_scheduler_push_kernel (kernel_run_command *run_cmd)
 {
   POCL_LOCK (scheduler.wq_lock_fast);
   DL_APPEND (scheduler.kernel_queue, run_cmd);
+  POCL_BROADCAST_COND (scheduler.wake_pool);
+  POCL_UNLOCK (scheduler.wq_lock_fast);
+}
+
+static void
+pthread_scheduler_push_memcpy (memory_copy_command *mem_cmd)
+{
+  POCL_LOCK (scheduler.wq_lock_fast);
+  DL_APPEND (scheduler.memcpy_queue, mem_cmd);
   POCL_BROADCAST_COND (scheduler.wake_pool);
   POCL_UNLOCK (scheduler.wq_lock_fast);
 }
@@ -601,10 +624,13 @@ pthread_scheduler_get_work (thread_data *td)
 {
   _cl_command_node *cmd = NULL;
   kernel_run_command *run_cmd = NULL;
+  memory_copy_command *mem_cmd = NULL;
 
   /* execute kernel if available */
   POCL_LOCK (scheduler.wq_lock_fast);
   int do_exit = 0;
+  /* Threshold at which to switch from single-threaded to parallel memcpy */
+  size_t parallel_memcpy_threshold_bytes = pocl_parallel_memcpy_threshold ();
 
 RETRY:
   do_exit = scheduler.thread_pool_shutdown_requested;
@@ -625,6 +651,37 @@ RETRY:
           POCL_UNLOCK (scheduler.wq_lock_fast);
           finalize_kernel_command (td, run_cmd);
           POCL_LOCK (scheduler.wq_lock_fast);
+        }
+    }
+
+  /* execute parallel memcpy if available */
+  mem_cmd = scheduler.memcpy_queue;
+  if (mem_cmd)
+    {
+      size_t offset = mem_cmd->start;
+      assert (offset < mem_cmd->size);
+      size_t per_thr_size = mem_cmd->size / td->num_memcpy_threads;
+      /* last thread copies everything remaining, and removes cmd from queue */
+      if (mem_cmd->size - offset < 2 * per_thr_size)
+        {
+          per_thr_size = mem_cmd->size - offset;
+          DL_DELETE (scheduler.memcpy_queue, mem_cmd);
+        }
+      /* update mem_cmd before unlocking */
+      mem_cmd->start += per_thr_size;
+      POCL_UNLOCK (scheduler.wq_lock_fast);
+
+      memcpy (mem_cmd->dst + offset, mem_cmd->src + offset, per_thr_size);
+
+      POCL_LOCK (scheduler.wq_lock_fast);
+      if (--mem_cmd->ref_count == 0)
+        {
+          POCL_UNLOCK (scheduler.wq_lock_fast);
+          POCL_UPDATE_EVENT_COMPLETE_MSG (mem_cmd->cmd->sync.event.event,
+                                          "Parallel Memory Copy     ");
+
+          POCL_LOCK (scheduler.wq_lock_fast);
+          free_memory_copy_command (mem_cmd);
         }
     }
 #endif
@@ -667,6 +724,52 @@ RETRY:
 #endif
             }
         }
+
+      else if ((td->num_memcpy_threads > 1)
+               && (cmd->type == CL_COMMAND_READ_BUFFER
+                   || cmd->type == CL_COMMAND_WRITE_BUFFER
+                   || cmd->type == CL_COMMAND_COPY_BUFFER))
+        {
+          size_t size = 0;
+          const void *src = NULL;
+          void *dst = NULL;
+          pocl_extract_memcpy_parameters (cmd, &size, &src, &dst);
+
+          if (size < parallel_memcpy_threshold_bytes)
+            pocl_exec_command (cmd);
+          else
+#ifdef ENABLE_HOST_CPU_DEVICES_OPENMP
+            {
+              pocl_update_event_running (cmd->sync.event.event);
+              size_t per_thr_size = size / td->num_memcpy_threads;
+#pragma omp parallel for schedule(static, 1)
+              for (unsigned i = 0; i < td->num_memcpy_threads; ++i)
+                {
+                  size_t offset = i * per_thr_size;
+                  /* last thread copies everything remaining */
+                  if (size - offset < 2 * per_thr_size)
+                    per_thr_size = size - offset;
+                  memcpy (dst + offset, src + offset, per_thr_size);
+                }
+              POCL_UPDATE_EVENT_COMPLETE_MSG (cmd->sync.event.event,
+                                              "Parallel Memory Copy     ");
+            }
+#else
+            {
+              memory_copy_command *m = new_memory_copy_command ();
+              m->cmd = cmd;
+              m->size = size;
+              m->src = src;
+              m->dst = dst;
+              m->start = 0;
+              m->next = NULL;
+              m->prev = NULL;
+              m->ref_count = td->num_memcpy_threads;
+              pocl_update_event_running (cmd->sync.event.event);
+              pthread_scheduler_push_memcpy (m);
+            }
+#endif
+        }
       else
         {
           pocl_exec_command (cmd);
@@ -698,6 +801,7 @@ pocl_pthread_driver_thread (void *p)
   assert (td);
 
   td->num_threads = scheduler.num_threads;
+  td->num_memcpy_threads = scheduler.num_memcpy_threads;
   td->printf_buffer = pocl_aligned_malloc (MAX_EXTENDED_ALIGNMENT,
                                            scheduler.printf_buf_size);
 

@@ -127,8 +127,11 @@ cl_int pocl_tbb_init(unsigned j, cl_device_id device, const char *parameters) {
     max_threads = pocl_get_int_option ("POCL_MAX_COMPUTE_UNITS", -1);
   if (max_threads <= 0)
     max_threads = -1;
+  unsigned total_memcpy_threads
+    = pocl_parallel_memcpy_nthreads (device, device->max_compute_units);
 
-  tbb_init_arena (dd, one_device_per_numa_node, max_threads);
+  tbb_init_arena (dd, one_device_per_numa_node, max_threads,
+                  total_memcpy_threads);
   device->max_compute_units = tbb_get_num_threads (dd);
 
   /* subdevices not supported ATM */
@@ -180,6 +183,7 @@ tbb_scheduler_init (cl_device_id device)
                        + device->max_parameter_size * MAX_EXTENDED_ALIGNMENT;
 
   dd->num_tbb_threads = tbb_get_num_threads (dd);
+  dd->num_memcpy_threads = tbb_get_num_memcpy_threads (dd);
 
   /* alloc local memory for all threads making sure the memory for each thread
    * is aligned. */
