@@ -108,13 +108,6 @@ class Kernel;
       BBs_.insert(pos, first, last);
     }
 
-    /* BarrierBlock *getEntryBarrier(); */
-    ParallelRegion *replicate(llvm::ValueToValueMapTy &map,
-                              const llvm::Twine &suffix);
-    void remap(llvm::ValueToValueMapTy &map);
-    void purge();
-    void chainAfter(ParallelRegion *region);
-    void insertPrologue(unsigned x, unsigned y, unsigned z);
     static void insertLocalIdInit(llvm::BasicBlock* entry,
                                   unsigned x,
                                   unsigned y,
@@ -124,8 +117,6 @@ class Kernel;
     void setEntryBBIndex(std::size_t index) { entryIndex_ = index; }
     void setExitBBIndex(std::size_t index) { exitIndex_ = index; }
     void SetExitBB(llvm::BasicBlock *block);
-    void AddBlockBefore(llvm::BasicBlock *block, llvm::BasicBlock *before);
-    void AddBlockAfter(llvm::BasicBlock *block, llvm::BasicBlock *after);
 
     llvm::BasicBlock* exitBB() { return at(exitIndex_); }
     llvm::BasicBlock* entryBB() { return at(entryIndex_); }
@@ -155,8 +146,6 @@ class Kernel;
     Create(const llvm::SmallPtrSet<llvm::BasicBlock *, 8> &BBs,
            llvm::BasicBlock *Entry, llvm::BasicBlock *Exit, bool isSGRegion);
 
-    static void GenerateTempNames(llvm::BasicBlock *bb);
-
     llvm::Instruction *getOrCreateIDLoad(std::string IDGlobalName,
                                          llvm::Instruction *Before = nullptr);
 
@@ -165,6 +154,8 @@ class Kernel;
     int getID() const { return pRegionId; }
 
     static int getNextID() { return idGen; }
+
+    static void resetRegionIDs() { idGen = 0; }
 
     bool verify(bool AbortOnFailure = false);
 
