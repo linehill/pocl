@@ -160,14 +160,12 @@ protected:
   llvm::Value *sg_localg_y;
   llvm::Value *sg_localg_z;
 
-  // Testing these for new approach:
   llvm::Value *Y_LowerLimit;
   llvm::Value *Y_UpperLimit;
-  //
 
   llvm::Value *sg_current_llid;
 
-  llvm::Value *LocLinID;
+  llvm::Value *LocalLinearId;
 
   // Points to the global size computation instructions in the entry
   // block of the currently handled kernel.

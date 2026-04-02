@@ -35,6 +35,14 @@ POP_COMPILER_DIAGS
 #include "ParallelRegion.h"
 #include "VariableUniformityAnalysisResult.hh"
 
+// Barrier pairing for a parallel region.
+struct BarrierPairing {
+    // Entry barrier of parallel region.
+    llvm::BasicBlock *EntryBB;
+    // Exit barriers of parallel region.
+    std::vector<llvm::BasicBlock *> ExitBBs;
+};
+
 namespace pocl {
 
   class Kernel : public llvm::Function {
@@ -62,8 +70,7 @@ namespace pocl {
     /// barrier. { A : [B,C], D : [E]}, means that parallel regions bounded by
     /// A->B, A->C, D->E will be formed.
     void getRegionBarrierMapping(
-        std::map<llvm::BasicBlock *, std::vector<llvm::BasicBlock *>>
-            &BarrierMapping);
+        std::vector<BarrierPairing> &BarrierPairing);
 
     static bool isKernel(const llvm::Function &F);
 

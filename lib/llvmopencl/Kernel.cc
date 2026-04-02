@@ -68,10 +68,9 @@ using namespace pocl;
 static void addPredecessors(SmallVectorImpl<BasicBlock *> &V, BasicBlock *BB);
 
 void Kernel::getRegionBarrierMapping(
-    std::map<llvm::BasicBlock *, std::vector<llvm::BasicBlock *>>
-        &BarrierMapping) {
+  std::vector<BarrierPairing> &BarrierPairs) {
 
-  // Collect barrier blocks here.
+  // Collect all relevant barrier blocks here.
   SmallVector<llvm::BasicBlock *, 4> BarrierBlocks;
 
   for (iterator i = begin(), e = end(); i != e; ++i) {
@@ -122,7 +121,8 @@ void Kernel::getRegionBarrierMapping(
       }
     }
 
-    BarrierMapping[BarrEntry] = BarrierExits;
+    BarrierPairing BP{BarrEntry, BarrierExits};
+    BarrierPairs.push_back(BP);
   }
 }
 
@@ -534,18 +534,16 @@ void Kernel::getParallelRegions(
     llvm::LoopInfo &LI, ParallelRegion::ParallelRegionVector *ParallelRegions,
     VariableUniformityAnalysisResult &VUA) {
 
-  SmallVector<BasicBlock *, 4> RegionExitBlocks;
+  std::vector<BarrierPairing> BarrierPairs;
 
-  std::map<llvm::BasicBlock *, std::vector<llvm::BasicBlock *>> BarrierMap;
+  // Find the boundaries (entry and exit barriers) of the parallel regions.
+  getRegionBarrierMapping(BarrierPairs);
 
-  // Get barrier mapping.
-  getRegionBarrierMapping(BarrierMap);
+  for (const auto &region : BarrierPairs) {
 
-  for (const auto &region : BarrierMap) {
+    llvm::BasicBlock *entryBarrier = region.EntryBB;
 
-    llvm::BasicBlock *entryBarrier = region.first;
-
-    const std::vector<llvm::BasicBlock *> &exitBarriers = region.second;
+    const std::vector<llvm::BasicBlock *> &exitBarriers = region.ExitBBs;
 
     for (llvm::BasicBlock *exitBarrier : exitBarriers) {
 
