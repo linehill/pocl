@@ -29,6 +29,7 @@ IGNORE_COMPILER_WARNING("-Wmaybe-uninitialized")
 POP_COMPILER_DIAGS
 IGNORE_COMPILER_WARNING("-Wunused-parameter")
 #include <llvm/ADT/StringSet.h>
+#include <llvm/Analysis/CFG.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/Dominators.h>
@@ -318,16 +319,18 @@ ParallelRegion *WorkitemHandler::regionOfBlock(llvm::BasicBlock *BB) {
   return nullptr;
 }
 
-/// Returns true if the pointer 'Ptr' is derived from a context array.
-static bool pointsToContextArray(llvm::Value *Ptr, unsigned Depth = 0) {
+/// If 'Ptr' is derived from a context array return its AllocaInst
+///
+/// Otherwise, return nullptr;
+static AllocaInst *pointsToContextArray(llvm::Value *Ptr, unsigned Depth = 0) {
   if (Depth++ > 10)
-    return false;
+    return nullptr;
 
   if (auto *AI = dyn_cast<AllocaInst>(Ptr)) {
     // FIXME: this might bite back. Right now, we distinguish context arrays
     // from other allocas as the other allocas are pushed out of the entry block
     // by the barrier canonicalization!
-    return AI->getParent()->isEntryBlock();
+    return AI->getParent()->isEntryBlock() ? AI : nullptr;
   }
 
   if (auto *GEP = dyn_cast<GetElementPtrInst>(Ptr))
@@ -338,7 +341,117 @@ static bool pointsToContextArray(llvm::Value *Ptr, unsigned Depth = 0) {
 
   // TODO: casts between private and generic address spaces.
 
-  return false;
+  return nullptr;
+}
+
+/// Find all basic blocks which features context save stores on the given
+/// pointer.
+static void getContextSaveBlocks(Instruction *PtrI,
+                                 SmallPtrSetImpl<Instruction *> &Visited,
+                                 SmallPtrSetImpl<BasicBlock *> &StoreBlocks) {
+
+  // The implementation assumes that any writes to the context array is
+  // performed via StoreInsts.
+
+  if (Visited.contains(PtrI))
+    return;
+  Visited.insert(PtrI);
+
+  if (auto *ST = dyn_cast<StoreInst>(PtrI)) {
+    // Note: assuming here the PtrI is used as a pointer operand.
+    StoreBlocks.insert(ST->getParent());
+  }
+
+  if (auto *LD = dyn_cast<LoadInst>(PtrI))
+    return; // A context restore.
+
+  for (auto &Use : PtrI->uses()) {
+    if (auto *I = dyn_cast<Instruction>(Use.getUser()))
+      getContextSaveBlocks(I, Visited, StoreBlocks);
+  }
+}
+
+std::vector<BasicBlock *> getAllReachableBlocks(BasicBlock *From,
+                                                BasicBlock *To) {
+  std::vector<BasicBlock *> Result;
+  if (From == To) {
+    Result.push_back(From);
+    return Result;
+  }
+
+  auto *F = From->getParent();
+  for (auto &BB : *F)
+    if (isPotentiallyReachable(From, &BB) && isPotentiallyReachable(&BB, To))
+      Result.push_back(&BB);
+
+  return Result;
+}
+
+/// Return if the 'LD' is a context restore and can be rematerialized at
+/// 'RematInsertPoint'.
+///
+/// E.g. we can't rematerialize a context restore if there is a context-save in
+/// way. Consider a following case:
+///
+///   parallel_region_1:
+///     %t0 = ctx-restore(var1, %some.wi_context)
+///     ctx-save(%some_val, %some.wi_context)
+///
+///   parallel_region_2:  ; The control flows from parallel_region_1.
+///     use(%t0)
+///
+/// If we rematerialize %t0 in parallel_region_2 block , the ctx-save will
+/// overwrite the snapshot of %some.wi_context variable.
+static bool canRematerializeContextRestore(LoadInst *LD,
+                                           Instruction *RematInsertPoint,
+                                           unsigned Depth = 0) {
+  auto *Ptr = LD->getPointerOperand();
+  auto *CtxAI = pointsToContextArray(Ptr, Depth);
+  if (!CtxAI)
+    return false;
+
+  // Collect all BB that are in all possible paths from the LD to
+  // RematInsertPoint and check if there is a context save in any of the blocks.
+  // If not the context-restore can be rematerialized.
+
+  SmallPtrSet<Instruction *, 8> VisitedInsts;
+  SmallPtrSet<BasicBlock *, 8> CtxSaveBlocks;
+  getContextSaveBlocks(CtxAI, VisitedInsts, CtxSaveBlocks);
+
+  // It's suspicious if there are no stores to a context array but there is a
+  // context save for it. Maybe getContextSaveBlocks() missed a store?
+  //
+  // A situtation like this appeared in alloca_removal1_llvm-ir-checks case.
+  if (CtxSaveBlocks.empty()) {
+    LLVM_DEBUG("A context array doesn't have context saves?");
+    return false; // Being safe here.
+  }
+
+  auto ReachableBBs =
+      getAllReachableBlocks(LD->getParent(), RematInsertPoint->getParent());
+
+  assert(ReachableBBs.size() > 0 &&
+         "Rematerialization position is unreachable!");
+
+  for (auto *BB : ReachableBBs) {
+    // Note: this may give false negatives in cases the context saves are in
+    // the same block as the LD and/or the RematInsertPoint and nowhere else.
+    //
+    // * BB == LD->getParent(): All context saves might be positioned before the
+    //   LD so it should be OK to rematerialize.
+    //
+    // * BB == RematInsertPoint(): RematInsertPoint might be positioned before
+    //   all the context saves so it should be OK to rematerialize as long as
+    //   the BB is not part of a k-loop.
+
+    if (CtxSaveBlocks.contains(BB)) {
+      LLVM_DEBUG(dbgs() << "Can't rematerialize: a context"
+                           " restore may cross a context save.\n");
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /// Return true if the 'Ptr' is a builtin variable safe for rematerialization.
@@ -461,15 +574,18 @@ llvm::Value *WorkitemHandler::tryToRematerialize(
   } else if (auto *LD = dyn_cast<LoadInst>(Def)) {
     // Check the load can cross a barrier - that includes but not limited to:
     //
-    // 1) Context variable array loads.
+    // 1) Context variable array loads if they don't cross a store to the
+    // variable.
     //
     // 2) Loads from builtin variables that stay constant.
     //
     // 3) Other loads that do not alias with the stores in the target PR or in
     //    in the way to it - e.g. loads from a global buffer witch the target PR
     //    writes into.
+
     auto *Ptr = LD->getPointerOperand();
-    bool CanRematLoad = pointsToContextArray(Ptr, *Depth);            // (1)
+    bool CanRematLoad =
+        canRematerializeContextRestore(LD, Before, *Depth);           // (1)
     CanRematLoad = CanRematLoad || isRematerializableBuiltinVar(Ptr); // (2)
     // TODO: (3)
 

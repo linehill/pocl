@@ -1007,7 +1007,8 @@ Function *WorkgroupImpl::createWrapper(Function *F,
   SmallVector<Value *, 8> FuncArgs;
   Function::arg_iterator ai = L->arg_begin();
   for (unsigned i = 0, e = F->arg_size(); i != e; ++i) {
-
+    if (F->getArg(i)->hasName())
+      ai->setName(F->getArg(i)->getName());
     FuncArgs.push_back(&*ai);
     ++ai;
   }
@@ -1517,6 +1518,9 @@ void WorkgroupImpl::createDefaultWorkgroupLauncher(llvm::Function *F) {
   for (Function::arg_iterator ii = F->arg_begin(), ee = F->arg_end(); ii != ee;
        ++ii) {
 
+    Twine ArgName = ii->hasName() ? Twine(ii->getName())
+                                  : Twine("kernel_arg_").concat(Twine(i));
+
     if (i == F->arg_size() - 4)
       break;
 
@@ -1546,11 +1550,9 @@ void WorkgroupImpl::createDefaultWorkgroupLauncher(llvm::Function *F) {
       Type *ArgElementType = I8Ty;
       Value *ElementCount = LocalArgByteSize;
 
-      Arg = new llvm::AllocaInst(ArgElementType, ParamType->getAddressSpace(),
-                                 ElementCount,
-                                 llvm::Align(
-                                 MAX_EXTENDED_ALIGNMENT),
-                                 "local_arg", Block);
+      Arg = new llvm::AllocaInst(
+          ArgElementType, ParamType->getAddressSpace(), ElementCount,
+          llvm::Align(MAX_EXTENDED_ALIGNMENT), Twine("local_").concat(ArgName), Block);
     } else {
       if (ii->hasByValAttr()) {
 
@@ -1573,14 +1575,17 @@ void WorkgroupImpl::createDefaultWorkgroupLauncher(llvm::Function *F) {
           uint64_t ArgTypeSize = DL.getTypeStoreSize(BVType);
           Value *Src = Builder.CreatePointerCast(Pointer, ArgType);
           unsigned AddrSp = DL.getAllocaAddrSpace();
-          AllocaInst *AI = new AllocaInst(BVType, AddrSp, nullptr, ArgAlign);
+
+          AllocaInst *AI =
+              new AllocaInst(BVType, AddrSp, nullptr, ArgAlign, ArgName);
           Builder.Insert(AI);
           Builder.CreateMemCpy(AI, Align(1), Src, Align(1), ArgTypeSize);
           Arg = AI;
         }
       } else {
         Arg = Builder.CreateAlignedLoad(ArgType, Pointer,
-                                        DL.getPrefTypeAlign(ArgType));
+                                        DL.getPrefTypeAlign(ArgType),
+                                        ArgName);
       }
     }
 
