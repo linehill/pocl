@@ -263,7 +263,7 @@ void FiberImpl::initializeLocalIds(BasicBlock *Entry, IRBuilder<> *Builder) {
       Builder->CreateStore(llvm::ConstantInt::getNullValue(ST), GvXyz);
   }
 
-  Builder->CreateStore(ConstantInt::get(ST, 0), LocLinID);
+  Builder->CreateStore(ConstantInt::get(ST, 0), LocalLinearId);
 }
 
 /// Generates LLVM IR for calculating the size of workgroup.
@@ -335,7 +335,7 @@ void FiberImpl::handleBarrierReached(llvm::IRBuilder<> *Builder,
         Builder->CreateGEP(NextJumpIndices->getAllocatedType(), NextJumpIndices,
                            {LinearID}, "exit_block_ptr");
   } else {
-    llvm::Value *LinearIndex = Builder->CreateLoad(ST, LocLinID);
+    llvm::Value *LinearIndex = Builder->CreateLoad(ST, LocalLinearId);
     llvm::Value *Zero = llvm::ConstantInt::get(ST, 0);
     // llvm::Value *LinearID = getLinearWiIndex(*Builder, M, nullptr, WIH);
     NextBlockPtr =
@@ -561,7 +561,7 @@ void FiberImpl::generateDispatcherBody(llvm::IRBuilder<> *EntryBlockBuilder) {
   llvm::Value *LinearWI = DBuilder.CreateCall(SchedFunc, {WGStateAlloc});
   LinearWI->setName("next_linear_wi");
 
-  DBuilder.CreateStore(LinearWI, LocLinID);
+  DBuilder.CreateStore(LinearWI, LocalLinearId);
 
   // 'Unlinearize' the WI id.
   // X

@@ -968,6 +968,7 @@ void WorkitemLoopsImpl::releaseParallelRegions() {
     delete P;
   }
   OriginalParallelRegions.clear();
+  pocl::ParallelRegion::resetRegionIDs();
 }
 
 bool WorkitemLoopsImpl::processFunction(Function &F) {

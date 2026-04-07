@@ -150,8 +150,7 @@ void WorkitemHandler::initialize(Kernel *K_, WorkitemHandlerType TheWIH) {
                          M->getOrInsertGlobal(GOFFS_G_NAME(1), ST),
                          M->getOrInsertGlobal(GOFFS_G_NAME(2), ST)};
 
-  // Local linear ID for fiber.
-  LocLinID = M->getOrInsertGlobal(LLID_G_NAME, ST);
+  LocalLinearId = M->getOrInsertGlobal(LLID_G_NAME, ST);
 
   GlobalIdOrigins = {0, 0, 0};
   GlobalSizes = {0, 0, 0};

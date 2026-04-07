@@ -75,135 +75,6 @@ ParallelRegion::ParallelRegion(int forcedRegionId)
     pRegionId = idGen++;
 }
 
-/**
- * Ensure all variables are named so they will be replicated and renamed
- * correctly.
- */
-void ParallelRegion::GenerateTempNames(llvm::BasicBlock *BB) {
-  for (llvm::Instruction &Instr : *BB) {
-
-    if (Instr.hasName() || !Instr.isUsedOutsideOfBlock(BB))
-      continue;
-    int TempCounter = 0;
-    std::string TempName = "";
-    do {
-      std::ostringstream Name;
-      Name << ".pocl_temp." << TempCounter;
-      ++TempCounter;
-      TempName = Name.str();
-    } while (BB->getParent()->getValueSymbolTable()->lookup(TempName) != NULL);
-    Instr.setName(TempName);
-  }
-}
-
-void ParallelRegion::remap(ValueToValueMapTy &Map) {
-  for (iterator i = begin(), e = end(); i != e; ++i) {
-    LLVM_DEBUG(dbgs() << "### block before remap: \n");
-    LLVM_DEBUG((*i)->dump());
-
-    for (BasicBlock::iterator ii = (*i)->begin(), ee = (*i)->end();
-         ii != ee; ++ii)
-      RemapInstruction(&*ii, Map,
-                       RF_IgnoreMissingLocals | RF_NoModuleLevelChanges);
-
-    LLVM_DEBUG(dbgs() << "### block after remap: \n");
-    LLVM_DEBUG((*i)->dump());
-  }
-}
-
-void ParallelRegion::chainAfter(ParallelRegion *Region) {
-  /* If we are replicating a conditional barrier region, the last block can be
-     an unreachable block to mark the impossible path. Skip it and choose the
-     correct branch instead.
-
-     TODO: why have the unreachable block there the first place? Could we just
-     not add it and fix the branch? */
-  BasicBlock *Tail = Region->exitBB();
-  auto Term = Tail->getTerminator();
-  if (isa<UnreachableInst>(Term)) {
-    Tail = Region->at(Region->size() - 2);
-    Term = Tail->getTerminator();
-  }
-#ifdef LLVM_BUILD_MODE_DEBUG
-    if (Term->getNumSuccessors() != 1) {
-      std::cout << "!!! trying to chain region" << std::endl;
-      this->dumpNames();
-      std::cout << "!!! after region" << std::endl;
-      Region->dumpNames();
-      Term->getParent()->dump();
-
-      assert (Term->getNumSuccessors() == 1);
-    }
-#endif
-
-    BasicBlock *Successor = Term->getSuccessor(0);
-    Function *F = Successor->getParent();
-
-  for (iterator i = begin(), e = end(); i != e; ++i)
-    F->insert(Tail->getIterator(), *i);
-
-  Term->setSuccessor(0, entryBB());
-
-  Term = exitBB()->getTerminator();
-  assert(Term->getNumSuccessors() == 1);
-  Term->setSuccessor(0, Successor);
-}
-
-/**
- * Removes known dead side exits from parallel regions.
- *
- * These occur with conditional barriers. The head of the path
- * leading to the conditional barrier is shared by two PRs. The
- * first work-item defines which path is taken (by definition the
- * barrier is taken by all or none of the work-items). The blocks
- * in the branches are in different regions which can contain branches
- * to blocks that are in known non-taken path. This method replaces
- * the targets of such branches with undefined BBs so they will be cleaned
- * up by the optimizer.
- */
-void
-ParallelRegion::purge()
-{
-  SmallVector<BasicBlock *, 4> NewBlocks;
-
-  // Go through all the BBs in the region and check their branch
-  // targets, looking for destinations that are outside the region.
-  // Only the last block in the PR can now contain such branches.
-  for (iterator i = begin(), e = end(); i != e; ++i) {
-
-    // Exit block has a successor out of the region.
-    if (*i == exitBB())
-      continue;
-    LLVM_DEBUG(dbgs() << "### block before purge: \n");
-    LLVM_DEBUG((*i)->dump());
-
-    auto Terminator = (*i)->getTerminator();
-    for (unsigned ii = 0, ee = Terminator->getNumSuccessors(); ii != ee; ++ii) {
-      BasicBlock *Successor = Terminator->getSuccessor(ii);
-      if (count(begin(), end(), Successor) == 0) {
-        // This successor is not on the parallel region, purge.
-        LLVM_DEBUG(dbgs() << "purging a branch to a block "
-                          << Successor->getName().str()
-                          << " outside the region\n");
-
-        BasicBlock *Unreachable = BasicBlock::Create(
-            (*i)->getContext(), (*i)->getName() + ".unreachable",
-            (*i)->getParent(), back());
-        new UnreachableInst(Unreachable->getContext(), Unreachable);
-        Terminator->setSuccessor(ii, Unreachable);
-        NewBlocks.push_back(Unreachable);
-      }
-    }
-    LLVM_DEBUG(dbgs() << "### block after purge: \n");
-    LLVM_DEBUG((*i)->dump());
-  }
-
-  // Add the new "unreachable" blocks to the
-  // region. We cannot do in the loop as it
-  // corrupts iterators.
-  insert(end(), NewBlocks.begin(), NewBlocks.end());
-}
-
 void
 ParallelRegion::insertLocalIdInit(llvm::BasicBlock* Entry,
                                   unsigned X, unsigned Y, unsigned Z) {
@@ -223,15 +94,6 @@ ParallelRegion::insertLocalIdInit(llvm::BasicBlock* Entry,
   GlobalVariable *GVZ = M->getGlobalVariable(LID_G_NAME(2));
   if (GVZ != NULL)
     Builder.CreateStore(ConstantInt::get(SizeT(M), Z), GVZ);
-}
-
-void
-ParallelRegion::insertPrologue(unsigned x,
-                               unsigned y,
-                               unsigned z)
-{
-  BasicBlock *entry = entryBB();
-  ParallelRegion::insertLocalIdInit(entry, x, y, z);
 }
 
 void
@@ -480,51 +342,6 @@ void ParallelRegion::addParallelLoopMetadata(
       ii->setMetadata(PARALLEL_MD_NAME, NewMD);
     }
   }
-}
-
-/**
- * Inserts a new basic block to the region, before an old basic block in
- * the region.
- *
- * Assumes the inserted block to be before the other block in control
- * flow, that is, there should be direct CFG edge from the block to the
- * other.
- */
-void ParallelRegion::AddBlockBefore(llvm::BasicBlock *Block,
-                                    llvm::BasicBlock *Before) {
-  llvm::BasicBlock *OldExit = exitBB();
-  ParallelRegion::iterator BeforePos = find(begin(), end(), Before);
-  ParallelRegion::iterator OldExitPos = find(begin(), end(), OldExit);
-  assert(BeforePos != end());
-
-  /* The old exit node might is now pushed further, at most one position.
-     Whether this is the case, depends if the node was inserted before or
-     after that node in the vector. That is, if indexof(before) <
-     indexof(oldExit). */
-  if (BeforePos < OldExitPos)
-    ++exitIndex_;
-
-  insert(BeforePos, Block);
-  /* The entryIndex_ should be still correct. In case the 'before' block
-     was an old entry node, the new one replaces it as an entry node at
-     the same index and the old one gets pushed forward. */
-}
-
-void ParallelRegion::AddBlockAfter(llvm::BasicBlock *Block,
-                                   llvm::BasicBlock *After) {
-  llvm::BasicBlock *OldExit = exitBB();
-  ParallelRegion::iterator AfterPos = find(begin(), end(), After);
-  ParallelRegion::iterator OldExitPos = find(begin(), end(), OldExit);
-  assert(AfterPos != end());
-
-  /* The old exit node might be pushed further, at most one position.
-     Whether this is the case, depends if the node was inserted before or
-     after that node in the vector. That is, if indexof(before) <
-     indexof(oldExit). */
-  if (AfterPos < OldExitPos)
-    ++exitIndex_;
-  AfterPos++;
-  insert(AfterPos, Block);
 }
 
 bool ParallelRegion::hasBlock(llvm::BasicBlock *Block) {
