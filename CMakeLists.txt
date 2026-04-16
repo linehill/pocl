@@ -2184,7 +2184,7 @@ if (ENABLE_LEVEL0)
     message(WARNING "Level Zero might run into symbol conflicts when using dynamic LLVM libraries, consider using -DSTATIC_LLVM=ON")
   endif()
 
-  if((NOT LLVM_SPIRV) AND (NOT HAVE_LLVM_SPIRV_LIB))
+  if((NOT HAVE_LLVM_SPIRV) AND (NOT HAVE_LLVM_SPIRV_LIB))
     if(NOT LLVM_HAS_SPIRV_TARGET)
       message(FATAL_ERROR "Level Zero requires LLVM SPIRV backend or llvm-spirv translator (either an executable or libLLVMSPIRV library)")
     else()
